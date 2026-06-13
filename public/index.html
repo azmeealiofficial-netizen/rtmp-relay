@@ -154,6 +154,22 @@
     .fr-btn:hover{opacity:.85}
     .footer{padding:12px 0;border-top:1px solid var(--bdr);text-align:center;margin-top:16px}
     .footer-text{color:var(--bdr2);font-size:10px}
+
+    /* Feed comms (message the reporter) */
+    .feed-comms{padding:6px 10px;border-top:1px solid var(--bdr);display:flex;flex-direction:column;gap:6px}
+    .fcm-hdr{font-size:8px;color:var(--t3);font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+    .fcm-chips{display:flex;flex-wrap:wrap;gap:4px}
+    .fcm-chip{font-size:9px;padding:4px 7px;background:var(--bg);color:var(--t2);border:1px solid var(--bdr);border-radius:5px;cursor:pointer;font-family:inherit;line-height:1}
+    .fcm-chip:hover{background:var(--card2);color:var(--t1);border-color:var(--bdr2)}
+    .fcm-row{display:flex;gap:4px}
+    .fcm-input{flex:1;font-size:10px;padding:6px 8px;background:var(--bg);border:1px solid var(--bdr);border-radius:5px;color:var(--t1);font-family:inherit;outline:none}
+    .fcm-input:focus{border-color:var(--bdr2)}
+    .fcm-send{background:var(--amb);color:#000;border:none;border-radius:5px;padding:6px 10px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit}
+    .fcm-status{font-size:9px;padding:5px 8px;border-radius:5px;display:none;align-items:center;gap:6px;line-height:1.3}
+    .fcm-status.on{display:flex}
+    .fcm-status.pending{background:#f59e0b14;color:var(--amb)}
+    .fcm-status.yes{background:#22c55e14;color:var(--grn)}
+    .fcm-status.ignore{background:#ef444414;color:var(--red)}
   </style>
 </head>
 <body>
@@ -476,6 +492,14 @@
     // === FIELD REPORTERS (VDO.Ninja WebRTC) ===
     const VDO_ROOM = 'vxdlive';
     const VDO_PASS = 'vxd2026';
+    const COMMS_PRESETS = [
+      { label: 'Front of crowd',  text: 'Move to the front of the crowd' },
+      { label: 'Wide shot',       text: 'Step back — get a wider shot' },
+      { label: 'Front cam',       text: 'Switch to the front camera', action: 'front-cam' },
+      { label: 'Restart (front)', text: 'End and restart with the front camera', action: 'restart-front' },
+      { label: 'Speak up',        text: 'Audio is low — please speak up' },
+      { label: 'Wrap 30s',        text: 'Wrap up in 30 seconds' }
+    ];
     let reporters = JSON.parse(localStorage.getItem('vxd_reporters')||'[]');
 
     function renderReporters(){
@@ -512,6 +536,17 @@
               <button class="fc-btn" onclick="dirCmd('${r.id}','zoom','-0.1')" title="Zoom Out">−</button>
               <button class="fc-btn" id="mic-${r.id}" onclick="toggleMicBtn('${r.id}')" title="Mute/Unmute Mic">🎤</button>
               <button class="fc-btn" id="cam-${r.id}" onclick="toggleCamBtn('${r.id}')" title="Camera On/Off">📷</button>
+            </div>
+            <div class="feed-comms">
+              <span class="fcm-hdr">Message reporter</span>
+              <div class="fcm-chips">
+                ${COMMS_PRESETS.map(p=>`<button class="fcm-chip" onclick="commsSend('${r.id}',\`${p.text}\`,'${p.action||''}')">${p.label}</button>`).join('')}
+              </div>
+              <div class="fcm-row">
+                <input class="fcm-input" id="cmsg-${r.id}" type="text" placeholder="Type a message…" onkeydown="if(event.key==='Enter')commsSendInput('${r.id}')">
+                <button class="fcm-send" onclick="commsSendInput('${r.id}')">Send</button>
+              </div>
+              <div class="fcm-status" id="cmst-${r.id}"></div>
             </div>
             <div class="feed-urls">
               <div class="feed-url-row">
@@ -603,6 +638,51 @@
       }
       await dirCmd(id, 'camera', 'toggle');
     }
+
+    // === REPORTER MESSAGES ===
+    async function commsSend(id, text, action) {
+      text = (text || '').trim();
+      if (!text) return;
+      try {
+        await fetch('/api/msg/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, text, action: action || '' })
+        });
+        paintComms(id, { status: 'pending', text });
+      } catch (e) {}
+    }
+    function commsSendInput(id) {
+      const el = document.getElementById('cmsg-' + id);
+      if (!el) return;
+      const v = el.value;
+      el.value = '';
+      commsSend(id, v, '');
+    }
+    function commsAgo(ts) {
+      const sec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+      return sec < 60 ? sec + 's ago' : Math.round(sec / 60) + 'm ago';
+    }
+    function paintComms(id, m) {
+      const el = document.getElementById('cmst-' + id);
+      if (!el) return;
+      if (!m) { el.className = 'fcm-status'; return; }
+      const label = { pending: 'Sent · awaiting reply', yes: 'Accepted', ignore: 'Ignored' }[m.status];
+      const tick  = { pending: '⏳', yes: '✓', ignore: '✕' }[m.status];
+      const when  = m.respAt ? ' · ' + commsAgo(m.respAt) : '';
+      el.className = 'fcm-status on ' + m.status;
+      el.innerHTML = '<span>' + tick + '</span><span>' + label + ' · "' + (m.text || '').slice(0, 32) + '"' + when + '</span>';
+    }
+    async function pollComms() {
+      for (const r of reporters) {
+        try {
+          const res = await fetch('/api/msg/status?id=' + encodeURIComponent(r.id));
+          const j = await res.json();
+          paintComms(r.id, j.msg);
+        } catch (e) {}
+      }
+    }
+    setInterval(pollComms, 2000);
 
     renderReporters();
 
