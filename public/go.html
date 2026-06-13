@@ -73,6 +73,28 @@
     .ended-text{font-size:16px;font-weight:700;margin-bottom:4px}
     .ended-sub{font-size:12px;color:#666;margin-bottom:20px}
     .restart-btn{padding:10px 24px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+
+    /* Control-room message prompt */
+    #vxd-prompt{position:absolute;left:14px;right:14px;bottom:16px;z-index:9999;
+      background:#1c2026;border:1px solid rgba(245,158,11,.55);border-radius:14px;
+      padding:14px;transform:translateY(180%);transition:transform .28s ease;
+      box-shadow:0 8px 28px rgba(0,0,0,.5);pointer-events:auto}
+    #vxd-prompt.show{transform:translateY(0)}
+    #vxd-prompt .vxd-from{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;
+      letter-spacing:1px;color:#f59e0b;margin-bottom:8px}
+    #vxd-prompt .vxd-text{color:#fff;font-size:18px;line-height:1.4;margin:0 0 14px;
+      font-family:'MvEamaan','Inter',sans-serif}
+    #vxd-prompt .vxd-btns{display:flex;gap:10px}
+    #vxd-prompt button{flex:1;border:none;border-radius:10px;padding:14px;cursor:pointer;
+      font-size:22px;line-height:1;color:#fff;font-family:inherit}
+    #vxd-yes{background:#16a34a}
+    #vxd-yes:active{background:#15803d;transform:scale(.97)}
+    #vxd-no{background:#3a2020;color:#f09595;border:1px solid rgba(239,68,68,.5)!important}
+    #vxd-no:active{background:#4a2626;transform:scale(.97)}
+    #vxd-toast{position:absolute;left:50%;top:16px;transform:translate(-50%,-180%);z-index:9999;
+      background:rgba(0,0,0,.82);color:#fff;font-size:13px;font-weight:600;padding:8px 16px;
+      border-radius:999px;transition:transform .25s ease;pointer-events:none}
+    #vxd-toast.show{transform:translate(-50%,0)}
   </style>
 </head>
 <body>
@@ -129,6 +151,16 @@
       <div class="ended-sub" id="endedDuration">Duration: 00:00</div>
       <button class="restart-btn" onclick="restart()">Go Live Again</button>
     </div>
+
+    <div id="vxd-prompt" role="alertdialog" aria-live="assertive">
+      <div class="vxd-from"><span>📡</span><span>FROM CONTROL ROOM</span></div>
+      <p class="vxd-text" id="vxd-text"></p>
+      <div class="vxd-btns">
+        <button id="vxd-yes" aria-label="Accept">✓</button>
+        <button id="vxd-no" aria-label="Ignore">✕</button>
+      </div>
+    </div>
+    <div id="vxd-toast"></div>
   </div>
 
   <script>
@@ -160,14 +192,16 @@
     // Default to back camera
     setCam('back');
 
+    function buildVdoUrl() {
+      return `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${selectedCam}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
+    }
+
     function startLive() {
       const frame = document.getElementById('vdoFrame');
       const idle = document.getElementById('idleScreen');
       const overlay = document.getElementById('liveOverlay');
 
-      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${selectedCam}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
-
-      frame.src = vdoUrl;
+      frame.src = buildVdoUrl();
       frame.style.display = 'block';
 
       setTimeout(() => {
@@ -175,6 +209,16 @@
         overlay.classList.add('active');
         startTimer();
       }, 2500);
+    }
+
+    // Reconnect the push with a specific camera (used by the "Restart (front)" message)
+    function restartPushWithCam(which) {
+      setCam(which === 'front' ? 'front' : 'back');
+      const frame = document.getElementById('vdoFrame');
+      const overlay = document.getElementById('liveOverlay');
+      if (overlay.classList.contains('active')) {
+        frame.src = buildVdoUrl();   // reloads the VDO.Ninja push with the new camera
+      }
     }
 
     function endLive() {
@@ -217,6 +261,73 @@
     }
     requestWakeLock();
     try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) {}
+
+    // === CONTROL-ROOM MESSAGES ===
+    function applyCommsAction(action) {
+      try {
+        if (action === 'front-cam' || action === 'restart-front') {
+          restartPushWithCam('front');
+        }
+      } catch (e) { console.warn('comms action failed', e); }
+    }
+
+    (function () {
+      const prompt = document.getElementById('vxd-prompt');
+      const textEl = document.getElementById('vxd-text');
+      const toast  = document.getElementById('vxd-toast');
+      let current = null;
+      const handled = new Set();
+
+      function showToast(msg) {
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2200);
+      }
+      function show(m) {
+        current = m;
+        textEl.textContent = m.text;
+        prompt.classList.add('show');
+        try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch (e) {}
+      }
+      function hide() { prompt.classList.remove('show'); current = null; }
+
+      async function reply(response) {
+        if (!current) return;
+        const m = current;
+        handled.add(m.msgId);
+        hide();
+        try {
+          await fetch('/api/msg/ack', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: streamId, msgId: m.msgId, response })
+          });
+        } catch (e) {}
+        if (response === 'yes') {
+          showToast('Got it ✓');
+          if (m.action) applyCommsAction(m.action);
+        }
+      }
+
+      document.getElementById('vxd-yes').onclick = () => reply('yes');
+      document.getElementById('vxd-no').onclick  = () => reply('ignore');
+
+      async function poll() {
+        try {
+          const r = await fetch('/api/msg/poll?id=' + encodeURIComponent(streamId));
+          const j = await r.json();
+          const m = j.msg;
+          if (m && m.status === 'pending'
+                && !handled.has(m.msgId)
+                && (Date.now() - m.sentAt) < 120000
+                && (!current || current.msgId !== m.msgId)) {
+            show(m);
+          }
+        } catch (e) {}
+      }
+      setInterval(poll, 2000);
+      poll();
+    })();
   </script>
 </body>
 </html>
