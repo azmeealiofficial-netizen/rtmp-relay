@@ -508,8 +508,8 @@
               <iframe id="rvid-${r.id}" src="${viewUrl}" allow="autoplay;camera;microphone" style="width:100%;height:100%;border:none;background:#000"></iframe>
             </div>
             <div class="feed-controls">
-              <button class="fc-btn" onclick="dirCmd('${r.id}','zoom',0.1)" title="Zoom In">+</button>
-              <button class="fc-btn" onclick="dirCmd('${r.id}','zoom',-0.1)" title="Zoom Out">−</button>
+              <button class="fc-btn" onclick="dirCmd('${r.id}','zoom','0.1')" title="Zoom In">+</button>
+              <button class="fc-btn" onclick="dirCmd('${r.id}','zoom','-0.1')" title="Zoom Out">−</button>
               <button class="fc-btn" onclick="dirCmd('${r.id}','mic','toggle')" title="Mute/Unmute Mic">🎤</button>
               <button class="fc-btn" onclick="dirCmd('${r.id}','camera','toggle')" title="Camera On/Off">📷</button>
             </div>
@@ -563,17 +563,13 @@
 
     function copyFr(btn,text){navigator.clipboard.writeText(text);btn.textContent='✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2000);}
 
-    // VDO.Ninja Director API - send commands to reporters remotely
+    // VDO.Ninja HTTP API - send commands to reporters remotely
     async function dirCmd(streamId, action, value) {
       try {
-        const apiUrl = `https://api.vdo.ninja/${VDO_PASS}`;
-        const data = { action: action, value: value, target: streamId };
-        await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-      } catch(e) { console.error('Director command failed:', e); }
+        // Simple HTTP GET API: https://api.vdo.ninja/API_KEY/action/value
+        const url = `https://api.vdo.ninja/${VDO_PASS}/${action}/${value}`;
+        await fetch(url, { mode: 'no-cors' });
+      } catch(e) { console.error('API command failed:', e); }
     }
 
     renderReporters();
