@@ -40,6 +40,7 @@
     .conn-status.off .conn-dot{background:var(--red)}
     .gear{background:var(--card2);border:1px solid var(--bdr);border-radius:6px;padding:6px 10px;color:var(--t3);font-size:14px;cursor:pointer;transition:all .15s;text-decoration:none}
     .gear:hover{background:var(--bdr);color:var(--t1)}
+    .topbar-logos{display:flex;align-items:center;gap:8px}
 
     /* Quick actions */
     .quick-bar{display:flex;gap:6px;margin-bottom:20px}
@@ -154,14 +155,14 @@
     <div class="topbar">
       <div class="topbar-left">
         <div class="logo"><span class="logo-v">V</span><span class="logo-x">x</span><span class="logo-d">D</span></div>
-        <div class="topbar-nav">
-          <a href="/" class="act">Control</a>
-          <a href="/relay">Relay</a>
-          <a href="/team">Team</a>
-        </div>
       </div>
       <div class="topbar-right">
         <div id="connStatus" class="conn-status off"><span class="conn-dot"></span>OFFLINE</div>
+        <div class="topbar-logos">
+          <img src="img/voice.png" alt="VOICE" style="height:28px;object-fit:contain">
+          <span style="color:#555;font-size:12px;font-weight:300">✕</span>
+          <img src="img/dhuvas.png" alt="DHUVAS" style="height:28px;object-fit:contain">
+        </div>
       </div>
     </div>
 
