@@ -486,7 +486,8 @@
       // Main area feed cards
       const grid=document.getElementById('reporterFeeds');
       grid.innerHTML=reporters.map(r=>{
-        const viewUrl=`https://vdo.ninja/?view=${r.id}&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&autostart`;
+        const viewUrl=`https://vdo.ninja/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}`;
+        const vmixViewUrl=`https://vdo.ninja/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}`;
         const brandedUrl=`${window.location.origin}/go?id=${r.id}&name=${encodeURIComponent(r.name)}`;
         return `
           <div class="feed-card" id="rcard-${r.id}">
@@ -513,15 +514,8 @@
               <div class="feed-url-row">
                 <span class="feed-url-label">vMix INPUT (Web Browser → 1920x1080)</span>
                 <div class="feed-url-box">
-                  <span class="feed-url-text">${viewUrl}</span>
-                  <button class="copy-btn" onclick="copyUrl(this,\`${viewUrl}\`)">Copy</button>
-                </div>
-              </div>
-              <div class="feed-url-row">
-                <span class="feed-url-label">VDO.NINJA DIRECT VIEW (open in browser)</span>
-                <div class="feed-url-box">
-                  <span class="feed-url-text">${viewUrl}</span>
-                  <button class="copy-btn" onclick="window.open(\`${viewUrl}\`,'_blank')">Open</button>
+                  <span class="feed-url-text">${vmixViewUrl}</span>
+                  <button class="copy-btn" onclick="copyUrl(this,\`${vmixViewUrl}\`)">Copy</button>
                 </div>
               </div>
             </div>
