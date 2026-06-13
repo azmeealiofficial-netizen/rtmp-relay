@@ -229,6 +229,8 @@
       }catch(e){}
     }
 
+    let feedFailCount={};
+
     async function pollFeeds(){
       const newLive={};
       await Promise.all(FEEDS.map(async f=>{
@@ -236,9 +238,17 @@
           const r=await fetch(`/hls/${f.key}.m3u8`,{cache:'no-store'});
           if(r.ok){
             const t=await r.text();
-            if(t.includes('.ts'))newLive[f.key]=true;
+            if(t.includes('.ts')){
+              newLive[f.key]=true;
+              feedFailCount[f.key]=0;
+            }
           }
         }catch(e){}
+        // Only mark offline after 3 consecutive failures
+        if(!newLive[f.key]&&liveFeeds[f.key]){
+          feedFailCount[f.key]=(feedFailCount[f.key]||0)+1;
+          if(feedFailCount[f.key]<3)newLive[f.key]=true; // keep alive
+        }
       }));
       const changed=JSON.stringify(newLive)!==JSON.stringify(liveFeeds);
       liveFeeds=newLive;
