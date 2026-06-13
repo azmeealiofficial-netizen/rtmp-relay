@@ -241,20 +241,19 @@
     }
 
     async function pollFeeds(){
-      try{
-        const r=await fetch('/api/relay-stats');if(!r.ok)throw 0;
-        const t=await r.text();
-        const d=new DOMParser().parseFromString(t,'text/xml');
-        const streams=d.querySelectorAll('stream');
-        const newLive={};
-        streams.forEach(st=>{
-          const name=st.querySelector('name');
-          if(name)newLive[name.textContent]=true;
-        });
-        const changed=JSON.stringify(newLive)!==JSON.stringify(liveFeeds);
-        liveFeeds=newLive;
-        if(changed)renderFeeds();
-      }catch(e){}
+      const newLive={};
+      await Promise.all(FEEDS.map(async f=>{
+        try{
+          const r=await fetch(`/hls/${f.key}.m3u8`,{cache:'no-store'});
+          if(r.ok){
+            const t=await r.text();
+            if(t.includes('.ts'))newLive[f.key]=true;
+          }
+        }catch(e){}
+      }));
+      const changed=JSON.stringify(newLive)!==JSON.stringify(liveFeeds);
+      liveFeeds=newLive;
+      if(changed)renderFeeds();
     }
 
     function renderFeeds(){
