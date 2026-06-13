@@ -136,6 +136,10 @@
     .tc-btn:hover{opacity:.85}
     .tc-go{background:var(--grn)}
     .tc-stop{background:var(--red)}
+    .tc-both{background:var(--blu)}
+    .tc-tabs{display:flex;gap:2px;margin-bottom:8px;background:var(--bg);border-radius:5px;padding:2px}
+    .tc-tab{flex:1;border:none;border-radius:4px;padding:6px;font-size:11px;font-weight:700;cursor:pointer;color:var(--t3);background:transparent;font-family:inherit;transition:all .15s}
+    .tc-tab.act{background:var(--card2);color:var(--t1)}
   </style>
 </head>
 <body>
@@ -181,6 +185,10 @@
 
       <div class="sec-hdr"><span class="sec-title">Live Ticker</span></div>
       <div class="ticker-ctrl">
+        <div class="tc-tabs">
+          <button class="tc-tab act" id="tabVoice" onclick="switchTab('voice')">VOICE</button>
+          <button class="tc-tab" id="tabDhuvas" onclick="switchTab('dhuvas')">DHUVAS</button>
+        </div>
         <div class="tc-row">
           <select id="tkDir" class="tc-select" onchange="updateTicker()">
             <option value="rtl">ދިވެހި (RTL)</option>
@@ -209,8 +217,10 @@
           </select>
         </div>
         <div class="tc-row">
-          <button class="tc-btn tc-go" onclick="showTicker()">SHOW TICKER</button>
+          <button class="tc-btn tc-go" onclick="showTicker()">SHOW</button>
           <button class="tc-btn tc-stop" onclick="hideTicker()">HIDE</button>
+          <button class="tc-btn tc-both" onclick="showBothTickers()">BOTH SHOW</button>
+          <button class="tc-btn tc-stop" onclick="hideBothTickers()">BOTH HIDE</button>
         </div>
       </div>
     </div>
@@ -443,8 +453,30 @@
     function showErr(m){const e=document.getElementById('errBox');if(m){e.innerHTML=m;e.style.display='block';}else e.style.display='none';}
     function copyUrl(btn,text){navigator.clipboard.writeText(text);btn.textContent='✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2000);}
 
-    async function updateTicker(){
-      const data={
+    let activeTab = 'voice';
+
+    function switchTab(tab){
+      activeTab = tab;
+      document.getElementById('tabVoice').className = 'tc-tab' + (tab==='voice'?' act':'');
+      document.getElementById('tabDhuvas').className = 'tc-tab' + (tab==='dhuvas'?' act':'');
+      loadTicker(tab);
+    }
+
+    async function loadTicker(id){
+      try{
+        const r=await fetch('/api/ticker/'+id);
+        const d=await r.json();
+        document.getElementById('tkLabel').value=(d.label==='ބްރޭކިންގ')?'':d.label;
+        document.getElementById('tkText').value=d.text||'';
+        document.getElementById('tkMode').value=d.mode||'scroll';
+        document.getElementById('tkSpeed').value=d.speed||15;
+        document.getElementById('tkDir').value=d.direction||'rtl';
+        document.getElementById('tkColor').value=d.labelColor||'#ef4444';
+      }catch(e){}
+    }
+
+    function getTickerData(){
+      return {
         label:document.getElementById('tkLabel').value||'ބްރޭކިންގ',
         text:document.getElementById('tkText').value,
         mode:document.getElementById('tkMode').value,
@@ -452,35 +484,40 @@
         direction:document.getElementById('tkDir').value,
         labelColor:document.getElementById('tkColor').value
       };
-      await fetch('/api/ticker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    }
+
+    async function updateTicker(){
+      await fetch('/api/ticker/'+activeTab,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(getTickerData())});
     }
 
     async function showTicker(){
-      const data={
-        visible:true,
-        label:document.getElementById('tkLabel').value||'ބްރޭކިންގ',
-        text:document.getElementById('tkText').value,
-        mode:document.getElementById('tkMode').value,
-        speed:parseInt(document.getElementById('tkSpeed').value),
-        direction:document.getElementById('tkDir').value,
-        labelColor:document.getElementById('tkColor').value
-      };
-      await fetch('/api/ticker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+      const data=getTickerData();
+      data.visible=true;
+      await fetch('/api/ticker/'+activeTab,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
     }
 
     async function hideTicker(){
-      await fetch('/api/ticker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visible:false})});
+      await fetch('/api/ticker/'+activeTab,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visible:false})});
     }
 
-    // Load current ticker state
-    fetch('/api/ticker').then(r=>r.json()).then(d=>{
-      if(d.label)document.getElementById('tkLabel').value=d.label==='ބްރޭކިންގ'?'':d.label;
-      if(d.text)document.getElementById('tkText').value=d.text;
-      if(d.mode)document.getElementById('tkMode').value=d.mode;
-      if(d.speed)document.getElementById('tkSpeed').value=d.speed;
-      if(d.direction)document.getElementById('tkDir').value=d.direction;
-      if(d.labelColor)document.getElementById('tkColor').value=d.labelColor;
-    }).catch(()=>{});
+    async function showBothTickers(){
+      const data=getTickerData();
+      data.visible=true;
+      await Promise.all([
+        fetch('/api/ticker/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),
+        fetch('/api/ticker/dhuvas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+      ]);
+    }
+
+    async function hideBothTickers(){
+      await Promise.all([
+        fetch('/api/ticker/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visible:false})}),
+        fetch('/api/ticker/dhuvas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visible:false})})
+      ]);
+    }
+
+    // Load initial ticker state
+    loadTicker('voice');
 
     render();
     renderFeeds();
