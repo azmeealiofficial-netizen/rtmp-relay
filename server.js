@@ -6,7 +6,7 @@ const PORT = 8080;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-let vmixProxyUrl = '';
+let vmixProxyUrl = 'https://vmix.vxd.news';
 
 // vMix URL management
 app.post('/api/set-vmix-url', (req, res) => {
