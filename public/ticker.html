@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="dv">
+<head>
+<meta charset="UTF-8">
+<style>
+  @font-face {
+    font-family: 'MVWaheed';
+    src: url('fonts/MVWaheed.otf') format('opentype');
+  }
+  @font-face {
+    font-family: 'MvEamaan';
+    src: url('fonts/Mv_Eamaan_XP.otf') format('opentype');
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: transparent; overflow: hidden; width: 1920px; height: 1080px; }
+
+  .ticker-wrap {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: linear-gradient(180deg, #0d0d1aee 0%, #0a0a12f5 100%);
+    border-top: 3px solid #ef4444;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    direction: rtl;
+    transition: opacity 0.5s ease;
+  }
+
+  .ticker-label {
+    background: #ef4444;
+    color: #fff;
+    font-family: 'MVWaheed', 'Segoe UI', Arial, sans-serif;
+    font-size: 24px;
+    font-weight: 700;
+    padding: 0 24px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    z-index: 2;
+    position: relative;
+    direction: rtl;
+  }
+
+  .ticker-label::after {
+    content: '';
+    position: absolute;
+    left: -28px;
+    top: 0;
+    width: 0;
+    height: 0;
+    border-top: 32px solid transparent;
+    border-bottom: 32px solid transparent;
+    border-right: 28px solid #ef4444;
+  }
+
+  .ticker-content {
+    flex: 1;
+    overflow: hidden;
+    padding-right: 36px;
+    direction: rtl;
+  }
+
+  .ticker-text {
+    display: inline-block;
+    white-space: nowrap;
+    font-family: 'MvEamaan', 'Segoe UI', Arial, sans-serif;
+    font-size: 26px;
+    color: #ffffff;
+    line-height: 64px;
+    animation: scroll-rtl linear infinite;
+    padding-right: 100%;
+  }
+
+  @keyframes scroll-rtl {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(100%); }
+  }
+
+  .ticker-wrap.hidden { opacity: 0; pointer-events: none; }
+
+  .ticker-text.static {
+    animation: none;
+    padding-right: 0;
+    text-align: center;
+    width: 100%;
+  }
+
+  /* English/LTR mode */
+  .ticker-wrap.ltr {
+    direction: ltr;
+  }
+  .ticker-wrap.ltr .ticker-label {
+    direction: ltr;
+  }
+  .ticker-wrap.ltr .ticker-label::after {
+    left: auto;
+    right: -28px;
+    border-right: none;
+    border-left: 28px solid #ef4444;
+  }
+  .ticker-wrap.ltr .ticker-content {
+    direction: ltr;
+    padding-right: 0;
+    padding-left: 36px;
+  }
+  .ticker-wrap.ltr .ticker-text {
+    padding-right: 0;
+    padding-left: 100%;
+    animation-name: scroll-ltr;
+  }
+  @keyframes scroll-ltr {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+  }
+</style>
+</head>
+<body>
+  <div class="ticker-wrap hidden" id="tickerWrap">
+    <div class="ticker-label" id="tickerLabel">ބްރޭކިންގ</div>
+    <div class="ticker-content">
+      <span class="ticker-text" id="tickerText"></span>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = window.location.origin + '/api/ticker';
+    let current = {};
+
+    async function pollTicker() {
+      try {
+        const r = await fetch(API_URL + '?t=' + Date.now());
+        if (!r.ok) return;
+        const data = await r.json();
+        const key = JSON.stringify(data);
+        if (key === JSON.stringify(current)) return;
+        current = data;
+
+        const wrap = document.getElementById('tickerWrap');
+        const label = document.getElementById('tickerLabel');
+        const text = document.getElementById('tickerText');
+
+        // Show/hide
+        wrap.className = 'ticker-wrap' + (data.visible ? '' : ' hidden') + (data.direction === 'ltr' ? ' ltr' : '');
+
+        // Label (heading - MVWaheed)
+        label.textContent = data.label || 'ބްރޭކިންގ';
+
+        // Text (sub heading - MvEamaan)
+        text.textContent = data.text || '';
+
+        // Scroll or static
+        if (data.mode === 'static') {
+          text.className = 'ticker-text static';
+        } else {
+          text.className = 'ticker-text';
+          const speed = data.speed || 15;
+          const duration = Math.max(8, data.text.length / speed * 10);
+          text.style.animationDuration = duration + 's';
+        }
+
+        // Custom colors
+        if (data.labelColor) label.style.background = data.labelColor;
+        if (data.labelColor) {
+          const after = document.querySelector('.ticker-label::after');
+        }
+      } catch (e) {}
+    }
+
+    pollTicker();
+    setInterval(pollTicker, 1000);
+  </script>
+</body>
+</html>
