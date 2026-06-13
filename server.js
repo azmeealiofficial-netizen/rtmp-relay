@@ -118,6 +118,7 @@ app.get('/team', (req, res) => res.sendFile(path.join(__dirname, 'public', 'team
 app.get('/relay', (req, res) => res.sendFile(path.join(__dirname, 'public', 'relay.html')));
 app.get('/settings', (req, res) => res.sendFile(path.join(__dirname, 'public', 'settings.html')));
 app.get('/ticker', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ticker.html')));
+app.get('/go', (req, res) => res.sendFile(path.join(__dirname, 'public', 'go.html')));
 
 app.listen(PORT, () => {
   console.log(`VxD Relay running on port ${PORT}`);
