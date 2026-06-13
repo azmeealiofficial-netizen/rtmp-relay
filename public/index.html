@@ -4,142 +4,192 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>VxD Control</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Inter',system-ui,sans-serif;background:#0a0a0f;color:#e5e5e5;min-height:100vh;-webkit-tap-highlight-color:transparent}
-    :root{--card:#141420;--bdr:#2a2a3a;--t1:#e5e5e5;--t2:#888;--red:#dc2626;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b}
-    .ctr{max-width:480px;margin:0 auto;padding:16px}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
-    .hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #1a1a2a}
-    .hdr-logo{font-size:20px;font-weight:900;letter-spacing:-0.5px}
-    .hdr-logo .l{color:#666;font-size:12px;font-weight:400;margin-left:8px}
-    .hdr-r{display:flex;align-items:center;gap:10px}
-    .st{display:flex;align-items:center;gap:6px}
-    .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
-    .dot.on{background:var(--grn);box-shadow:0 0 8px var(--grn)}.dot.off{background:var(--red)}
-    .st-l{font-size:11px;font-weight:600}
-    .gear{background:none;border:none;color:#666;font-size:18px;cursor:pointer;padding:4px}
-    .gear:hover{color:#aaa}
-    .err-b{background:#2d1215;border:1px solid #ef444444;border-radius:8px;padding:10px 14px;color:#fca5a5;font-size:12px;margin-bottom:16px}
-    .nav{display:flex;gap:4px;margin-bottom:16px}
-    .nav a{flex:1;text-align:center;padding:8px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;color:#888;background:var(--card);border:1px solid var(--bdr)}
-    .nav a.act{color:#fff;background:var(--blu);border-color:var(--blu)}
-    .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
-    .stat{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:10px;text-align:center}
-    .stat-l{color:var(--t2);font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:3px}
-    .stat-v{font-size:20px;font-weight:800}
-    .stat-v.g{color:var(--grn)}.stat-v.w{color:var(--amb)}.stat-v.b{color:var(--red)}
-    .stat-u{font-size:11px;font-weight:400;color:var(--t2)}
-    .sh{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-    .st-t{color:#888;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
-    .sb{display:flex;gap:6px}
-    .sm{border:none;border-radius:5px;padding:4px 12px;font-size:10px;font-weight:700;cursor:pointer;color:#fff;font-family:inherit}
-    .sm.g{background:var(--grn)}.sm.r{background:var(--red)}
-    .stms{display:flex;flex-direction:column;gap:5px;margin-bottom:16px}
-    .stm{border-radius:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--bdr)}
-    .stm.on{background:linear-gradient(135deg,#0a2e1a,#0d3320);border-color:#22c55e44}.stm.off{background:var(--card)}
-    .stm-i{display:flex;align-items:center;gap:8px}
-    .stm-n{font-size:13px;font-weight:600}
-    .ltag{background:#22c55e22;color:var(--grn);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;letter-spacing:1px}
-    .stm-b{border:none;border-radius:6px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;color:#fff;font-family:inherit}
-    .stm-b.go{background:var(--grn)}.stm-b.no{background:var(--red)}
-    .inps{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:16px}
-    .inp{border:1px solid var(--bdr);border-radius:10px;padding:9px;text-align:center;position:relative;background:var(--card)}
-    .inp.pgm{background:linear-gradient(135deg,#7f1d1d,#991b1b);border-color:var(--red)}
-    .inp.prv{background:linear-gradient(135deg,#78350f,#92400e);border-color:var(--amb)}
-    .inp-bd{position:absolute;top:4px;right:5px;font-size:7px;font-weight:800;padding:1px 4px;border-radius:3px;letter-spacing:1px;color:#fff}
-    .inp-bd.pgm{background:var(--red)}.inp-bd.prv{background:var(--amb);color:#000}
-    .inp-t{font-size:10px;font-weight:700;margin-bottom:5px;min-height:26px;display:flex;align-items:center;justify-content:center;word-break:break-word;color:var(--t1)}
-    .inp-bs{display:flex;gap:3px}
-    .inp-b{flex:1;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 0;font-size:9px;font-weight:600;cursor:pointer;font-family:inherit;color:#ccc;background:rgba(255,255,255,0.08)}
-    .inp-b.cut{background:var(--red);color:#fff;border:none}
-    .trs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:16px}
-    .tr{border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;color:#fff;font-family:inherit;letter-spacing:1px}
-    .tr.c{background:var(--red)}.tr.f{background:var(--blu)}.tr.t{background:#333}
-    .ovs{display:flex;flex-direction:column;gap:5px;margin-bottom:16px}
-    .ov{border:1px solid var(--bdr);border-radius:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;background:var(--card)}
-    .ov.on{background:linear-gradient(135deg,#1e3a5f,#1e40af);border-color:#3b82f644}
-    .ov-n{font-size:13px;font-weight:600}
-    .tog{width:38px;height:20px;border-radius:10px;position:relative;transition:background .2s}
-    .tog.on{background:var(--blu)}.tog.off{background:#555}
-    .tog-t{width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;transition:left .2s}
-    .tog-t.on{left:20px}.tog-t.off{left:2px}
+    body{font-family:'Inter',system-ui,sans-serif;background:#09090b;color:#e4e4e7;min-height:100vh;-webkit-tap-highlight-color:transparent}
+    :root{--bg:#09090b;--card:#18181b;--card2:#1f1f23;--bdr:#27272a;--bdr2:#3f3f46;--t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;--red:#ef4444;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b;--radius:8px}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 
-    /* Relay feed cards */
-    .feed-card{background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:8px}
-    .feed-card.live{border-color:#22c55e33;background:linear-gradient(135deg,#0a1a14,#0d2818)}
-    .feed-hdr{padding:10px 14px;display:flex;justify-content:space-between;align-items:center}
-    .feed-info{display:flex;align-items:center;gap:8px}
+    /* Layout */
+    .shell{display:grid;grid-template-columns:1fr;min-height:100vh}
+    @media(min-width:1024px){
+      .shell{grid-template-columns:320px 1fr;grid-template-rows:auto 1fr}
+      .topbar{grid-column:1/-1}
+      .sidebar{border-right:1px solid var(--bdr);overflow-y:auto;padding:20px}
+      .main{overflow-y:auto;padding:24px 32px}
+    }
+    @media(max-width:1023px){
+      .sidebar,.main{padding:12px 16px}
+    }
+
+    /* Topbar */
+    .topbar{background:var(--card);border-bottom:1px solid var(--bdr);padding:12px 24px;display:flex;justify-content:space-between;align-items:center}
+    .topbar-left{display:flex;align-items:center;gap:16px}
+    .logo{font-size:22px;font-weight:900;letter-spacing:-1px}
+    .logo-v{color:var(--red)}.logo-x{color:var(--amb)}.logo-d{color:var(--grn)}
+    .topbar-nav{display:flex;gap:2px;background:var(--bg);border-radius:6px;padding:2px}
+    .topbar-nav a{padding:6px 16px;border-radius:4px;font-size:12px;font-weight:600;text-decoration:none;color:var(--t3);transition:all .15s}
+    .topbar-nav a.act{background:var(--card2);color:var(--t1)}
+    .topbar-nav a:hover:not(.act){color:var(--t2)}
+    .topbar-right{display:flex;align-items:center;gap:12px}
+    .conn-status{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:.3px}
+    .conn-status.on{background:#22c55e12;color:var(--grn);border:1px solid #22c55e25}
+    .conn-status.off{background:#ef444412;color:var(--red);border:1px solid #ef444425}
+    .conn-dot{width:6px;height:6px;border-radius:50%}
+    .conn-status.on .conn-dot{background:var(--grn);box-shadow:0 0 6px var(--grn)}
+    .conn-status.off .conn-dot{background:var(--red)}
+    .gear{background:var(--card2);border:1px solid var(--bdr);border-radius:6px;padding:6px 10px;color:var(--t3);font-size:14px;cursor:pointer;transition:all .15s;text-decoration:none}
+    .gear:hover{background:var(--bdr);color:var(--t1)}
+
+    /* Alert */
+    .alert{background:#451a0320;border:1px solid #ef444430;border-radius:var(--radius);padding:10px 16px;color:#fca5a5;font-size:12px;margin-bottom:16px}
+    .alert a{color:#fca5a5;text-decoration:underline}
+
+    /* Stats row */
+    .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px}
+    .stat-card{background:var(--card);border:1px solid var(--bdr);border-radius:var(--radius);padding:14px;text-align:center}
+    .stat-label{color:var(--t3);font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px}
+    .stat-val{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+    .stat-val.g{color:var(--grn)}.stat-val.w{color:var(--amb)}.stat-val.r{color:var(--red)}
+    .stat-unit{font-size:12px;color:var(--t3);font-weight:400}
+
+    /* Section headers */
+    .sec-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+    .sec-title{color:var(--t3);font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+    .sec-actions{display:flex;gap:4px}
+    .sec-btn{border:none;border-radius:4px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;color:#fff;font-family:inherit;transition:opacity .15s}
+    .sec-btn:hover{opacity:.85}
+    .sec-btn.g{background:var(--grn)}.sec-btn.r{background:var(--red)}
+
+    /* Stream list */
+    .stream-list{display:flex;flex-direction:column;gap:4px;margin-bottom:20px}
+    .stream-item{border-radius:var(--radius);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--bdr);background:var(--card);transition:all .2s}
+    .stream-item.on{background:linear-gradient(135deg,#052e16,#14532d);border-color:#22c55e30}
+    .stream-left{display:flex;align-items:center;gap:8px}
+    .stream-dot{width:7px;height:7px;border-radius:50%}
+    .stream-dot.on{background:var(--grn);box-shadow:0 0 6px var(--grn)}.stream-dot.off{background:var(--bdr2)}
+    .stream-name{font-size:13px;font-weight:600}
+    .stream-live{background:#22c55e15;color:var(--grn);font-size:9px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:1.5px;margin-left:6px}
+    .stream-btn{border:none;border-radius:5px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;color:#fff;font-family:inherit;transition:all .15s}
+    .stream-btn:hover{opacity:.85}
+    .stream-btn.go{background:var(--grn)}.stream-btn.no{background:var(--red)}
+
+    /* Input grid */
+    .input-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:20px}
+    @media(max-width:1023px){.input-grid{grid-template-columns:repeat(3,1fr)}}
+    .input-card{border:1px solid var(--bdr);border-radius:var(--radius);padding:10px 8px;text-align:center;position:relative;background:var(--card);transition:all .15s}
+    .input-card.pgm{background:linear-gradient(135deg,#7f1d1d,#991b1b);border-color:var(--red)}
+    .input-card.prv{background:linear-gradient(135deg,#78350f,#92400e);border-color:var(--amb)}
+    .input-badge{position:absolute;top:4px;right:5px;font-size:7px;font-weight:800;padding:1px 5px;border-radius:3px;letter-spacing:1px;color:#fff}
+    .input-badge.pgm{background:var(--red)}.input-badge.prv{background:var(--amb);color:#000}
+    .input-title{font-size:10px;font-weight:600;margin-bottom:6px;min-height:24px;display:flex;align-items:center;justify-content:center;word-break:break-word;color:var(--t1)}
+    .input-btns{display:flex;gap:3px}
+    .input-btn{flex:1;border:1px solid #ffffff12;border-radius:4px;padding:4px 0;font-size:9px;font-weight:600;cursor:pointer;font-family:inherit;color:#ccc;background:#ffffff0a;transition:all .1s}
+    .input-btn:hover{background:#ffffff15}
+    .input-btn.cut{background:var(--red);color:#fff;border:none}
+    .input-btn.cut:hover{background:#dc2626}
+
+    /* Transitions */
+    .trans-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:20px}
+    .trans-btn{border:none;border-radius:var(--radius);padding:12px;font-size:14px;font-weight:800;cursor:pointer;color:#fff;font-family:inherit;letter-spacing:.5px;transition:all .15s}
+    .trans-btn:hover{opacity:.85}
+    .trans-btn.c{background:var(--red)}.trans-btn.f{background:var(--blu)}.trans-btn.t{background:var(--bdr2)}
+
+    /* Overlays */
+    .overlay-list{display:flex;flex-direction:column;gap:4px;margin-bottom:20px}
+    .overlay-item{border:1px solid var(--bdr);border-radius:var(--radius);padding:12px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;background:var(--card);transition:all .2s}
+    .overlay-item.on{background:linear-gradient(135deg,#1e3a5f,#1e40af);border-color:#3b82f640}
+    .overlay-item:hover{border-color:var(--bdr2)}
+    .overlay-name{font-size:13px;font-weight:600}
+    .toggle{width:36px;height:20px;border-radius:10px;position:relative;transition:background .2s}
+    .toggle.on{background:var(--blu)}.toggle.off{background:var(--bdr2)}
+    .toggle-knob{width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;transition:left .2s}
+    .toggle-knob.on{left:18px}.toggle-knob.off{left:2px}
+
+    /* Feed cards */
+    .feeds-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    @media(max-width:1023px){.feeds-grid{grid-template-columns:1fr}}
+    .feed-card{background:var(--card);border:1px solid var(--bdr);border-radius:var(--radius);overflow:hidden;animation:fadeIn .3s ease;transition:all .2s}
+    .feed-card.live{border-color:#22c55e25;background:linear-gradient(180deg,#0a1a14 0%,var(--card) 100%)}
+    .feed-header{padding:10px 14px;display:flex;justify-content:space-between;align-items:center}
+    .feed-left{display:flex;align-items:center;gap:8px}
     .feed-name{font-size:13px;font-weight:700}
-    .feed-key{font-size:10px;color:#555}
-    .live-badge{background:#22c55e18;border:1px solid #22c55e33;color:var(--grn);font-size:9px;font-weight:800;padding:3px 8px;border-radius:4px;letter-spacing:1.5px;animation:pulse 2s infinite}
-    .off-badge{color:#555;font-size:9px;font-weight:700;letter-spacing:1px}
-    .feed-preview{background:#000;width:100%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center}
-    .feed-preview video{width:100%;height:100%;object-fit:contain;background:#000}
-    .feed-preview-off{color:#333;font-size:11px}
-    .feed-urls{padding:8px 14px}
-    .url-row{margin-bottom:6px}
-    .url-row:last-child{margin-bottom:0}
-    .url-label{font-size:9px;color:#555;font-weight:600;letter-spacing:.5px;margin-bottom:3px}
-    .url-box{display:flex;align-items:center;gap:4px;background:#0a0a12;border-radius:5px;padding:6px 8px;border:1px solid #1a1a2a}
-    .url-text{flex:1;font-size:10px;color:#777;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace}
-    .copy-btn{background:#333;color:#fff;border:none;border-radius:3px;padding:3px 8px;font-size:9px;font-weight:600;cursor:pointer;min-width:40px;font-family:inherit}
-    .copy-btn.ok{background:var(--grn)}
+    .feed-key{font-size:10px;color:var(--t3);margin-left:4px}
+    .feed-badge{font-size:9px;font-weight:800;padding:3px 8px;border-radius:3px;letter-spacing:1.5px}
+    .feed-badge.live{background:#22c55e12;border:1px solid #22c55e30;color:var(--grn);animation:pulse 2s infinite}
+    .feed-badge.off{background:var(--card2);color:var(--t3)}
+    .feed-video{background:#000;width:100%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center}
+    .feed-video video{width:100%;height:100%;object-fit:contain;background:#000}
+    .feed-offline{color:#333;font-size:11px;font-weight:500}
+    .feed-urls{padding:8px 12px;display:flex;flex-direction:column;gap:5px}
+    .feed-url-row{display:flex;flex-direction:column;gap:2px}
+    .feed-url-label{font-size:9px;color:var(--t3);font-weight:600;letter-spacing:.5px}
+    .feed-url-box{display:flex;align-items:center;gap:4px;background:var(--bg);border-radius:4px;padding:5px 8px;border:1px solid var(--bdr)}
+    .feed-url-text{flex:1;font-size:10px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'SF Mono',SFMono-Regular,ui-monospace,monospace}
+    .copy-btn{background:var(--card2);color:var(--t2);border:1px solid var(--bdr);border-radius:3px;padding:2px 8px;font-size:9px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+    .copy-btn:hover{background:var(--bdr);color:var(--t1)}
+    .copy-btn.ok{background:var(--grn);color:#fff;border-color:var(--grn)}
 
-    .ftr{text-align:center;padding:12px 0;border-top:1px solid #1a1a2a}
-    .ftr-t{color:#444;font-size:10px}
+    /* Footer */
+    .footer{padding:16px 0;border-top:1px solid var(--bdr);text-align:center;margin-top:20px}
+    .footer-text{color:var(--bdr2);font-size:10px}
   </style>
 </head>
 <body>
-  <div class="ctr">
-    <div class="hdr">
-      <div class="hdr-logo"><span style="color:var(--red)">V</span><span style="color:var(--amb)">x</span><span style="color:var(--grn)">D</span><span class="l">Control</span></div>
-      <div class="hdr-r">
-        <div class="st"><span id="sDot" class="dot off"></span><span id="sTxt" class="st-l" style="color:var(--red)">OFFLINE</span></div>
-        <button class="gear" onclick="location.href='/settings'" title="Settings">⚙</button>
+  <div class="shell">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="logo"><span class="logo-v">V</span><span class="logo-x">x</span><span class="logo-d">D</span></div>
+        <div class="topbar-nav">
+          <a href="/" class="act">Control</a>
+          <a href="/relay">Relay</a>
+          <a href="/team">Team</a>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div id="connStatus" class="conn-status off"><span class="conn-dot"></span>OFFLINE</div>
+        <a href="/settings" class="gear" title="Settings">⚙</a>
       </div>
     </div>
 
-    <div class="nav">
-      <a href="/" class="act">Control</a>
-      <a href="/relay">Relay</a>
-      <a href="/team">Team</a>
+    <div class="sidebar">
+      <div id="errBox" class="alert" style="display:none"></div>
+
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-label">FPS</div><div id="xFps" class="stat-val g">—</div></div>
+        <div class="stat-card"><div class="stat-label">Streams</div><div id="xStr" class="stat-val g">0<span class="stat-unit">/5</span></div></div>
+        <div class="stat-card"><div class="stat-label">Status</div><div id="xAir" class="stat-val w">OFF</div></div>
+      </div>
+
+      <div class="sec-hdr"><span class="sec-title">Streams</span><div class="sec-actions"><button class="sec-btn g" onclick="cmd('StartStreaming')">START ALL</button><button class="sec-btn r" onclick="cmd('StopStreaming')">STOP ALL</button></div></div>
+      <div id="stList" class="stream-list"></div>
+
+      <div class="sec-hdr"><span class="sec-title">Sources</span></div>
+      <div id="inGrid" class="input-grid"></div>
+
+      <div class="trans-row">
+        <button class="trans-btn c" onclick="cmd('Cut')">CUT</button>
+        <button class="trans-btn f" onclick="cmd('Fade','Duration=500')">FADE</button>
+        <button class="trans-btn t" onclick="cmd('FadeToBlack')">FTB</button>
+      </div>
+
+      <div class="sec-hdr"><span class="sec-title">Overlays</span></div>
+      <div id="ovList" class="overlay-list"></div>
     </div>
 
-    <div id="errBox" class="err-b" style="display:none"></div>
-
-    <div class="stats">
-      <div class="stat"><div class="stat-l">FPS</div><div id="xFps" class="stat-v g">—</div></div>
-      <div class="stat"><div class="stat-l">Streams</div><div id="xStr" class="stat-v g">0<span class="stat-u">/5</span></div></div>
-      <div class="stat"><div class="stat-l">Status</div><div id="xAir" class="stat-v w">OFF</div></div>
+    <div class="main">
+      <div class="sec-hdr"><span class="sec-title">Live Feeds</span></div>
+      <div id="feedList" class="feeds-grid"></div>
+      <div class="footer"><span class="footer-text" id="fTxt">VxD Broadcast Control</span></div>
     </div>
-
-    <div class="sh"><h3 class="st-t">Streams</h3><div class="sb"><button class="sm g" onclick="cmd('StartStreaming')">START ALL</button><button class="sm r" onclick="cmd('StopStreaming')">STOP ALL</button></div></div>
-    <div id="stList" class="stms"></div>
-
-    <div class="sh"><h3 class="st-t">Sources</h3></div>
-    <div id="inGrid" class="inps"></div>
-
-    <div class="trs">
-      <button class="tr c" onclick="cmd('Cut')">CUT</button>
-      <button class="tr f" onclick="cmd('Fade','Duration=500')">FADE</button>
-      <button class="tr t" onclick="cmd('FadeToBlack')">FTB</button>
-    </div>
-
-    <div class="sh"><h3 class="st-t">Overlays</h3></div>
-    <div id="ovList" class="ovs"></div>
-
-    <div class="sh"><h3 class="st-t">Live Feeds</h3></div>
-    <div id="feedList"></div>
-
-    <div class="ftr"><div id="fTxt" class="ftr-t">VxD Broadcast Control</div></div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
   <script>
-    const RTMP_HOST = 'acela.proxy.rlwy.net:15678';
-    const HLS_HOST = window.location.origin;
+    const RTMP_HOST='acela.proxy.rlwy.net:15678';
+    const HLS_HOST=window.location.origin;
     const SN=['VOICE Facebook','Dhuvas Facebook','VOICE YouTube','Dhuvas TikTok','VOICE TikTok'];
     const ON=['OV1 — VOICE Logo','OV2 — VOICE Lower Third','OV3 — Dhuvas Logo','OV4 — Dhuvas Lower Third'];
     const FEEDS=[
@@ -153,7 +203,6 @@
     let liveFeeds={};
     let s={connected:false,active:null,preview:null,inputs:[],overlays:{1:false,2:false,3:false,4:false},streams:[false,false,false,false,false],fps:'—',isLive:false};
 
-    // Init — no login, go straight to controls
     checkUrl();
 
     function checkUrl(){
@@ -161,22 +210,18 @@
         if(d.url){startPolling();}
         else{showErr('vMix not connected. Go to <a href="/settings" style="color:#fca5a5">Settings</a> to set ngrok URL.');}
       }).catch(()=>{showErr('vMix not connected. Go to <a href="/settings" style="color:#fca5a5">Settings</a> to set ngrok URL.');});
-      // Always start feed polling regardless of vMix connection
       pollFeeds();
       feedPoll=setInterval(pollFeeds,5000);
     }
 
-    function startPolling(){
-      pollStatus();
-      poll=setInterval(pollStatus,3000);
-    }
+    function startPolling(){pollStatus();poll=setInterval(pollStatus,3000);}
 
     async function cmd(f,p=''){try{await fetch(`/api/vmix-cmd?Function=${f}${p?'&'+p:''}`);setTimeout(pollStatus,500);}catch(e){}}
 
     async function pollStatus(){
       try{
         const r=await fetch('/api/vmix');if(!r.ok)throw 0;
-        const t=await r.text();parseXML(t);showErr('');
+        parseXML(await r.text());showErr('');
       }catch(e){s.connected=false;render();showErr('Cannot reach vMix. Check ngrok in <a href="/settings" style="color:#fca5a5">Settings</a>.');}
     }
 
@@ -206,7 +251,6 @@
           const name=st.querySelector('name');
           if(name)newLive[name.textContent]=true;
         });
-        // Check if feeds changed
         const changed=JSON.stringify(newLive)!==JSON.stringify(liveFeeds);
         liveFeeds=newLive;
         if(changed)renderFeeds();
@@ -221,29 +265,30 @@
         const hlsUrl=`${HLS_HOST}/hls/${f.key}.m3u8`;
         return `
           <div class="feed-card ${isLive?'live':''}">
-            <div class="feed-hdr">
-              <div class="feed-info">
-                <span class="dot ${isLive?'on':'off'}"></span>
-                <div><span class="feed-name">${f.name}</span> <span class="feed-key">/${f.key}</span></div>
+            <div class="feed-header">
+              <div class="feed-left">
+                <span class="stream-dot ${isLive?'on':'off'}"></span>
+                <span class="feed-name">${f.name}</span>
+                <span class="feed-key">/${f.key}</span>
               </div>
-              ${isLive?'<span class="live-badge">● LIVE</span>':'<span class="off-badge">OFFLINE</span>'}
+              <span class="feed-badge ${isLive?'live':'off'}">${isLive?'● LIVE':'OFFLINE'}</span>
             </div>
-            <div class="feed-preview" id="preview-${f.key}">
-              ${isLive?`<video id="vid-${f.key}" muted autoplay playsinline></video>`:'<span class="feed-preview-off">No feed</span>'}
+            <div class="feed-video" id="preview-${f.key}">
+              ${isLive?`<video id="vid-${f.key}" muted autoplay playsinline></video>`:'<span class="feed-offline">No feed</span>'}
             </div>
             <div class="feed-urls">
-              <div class="url-row">
-                <div class="url-label">RTMP PUSH (give to source)</div>
-                <div class="url-box">
-                  <span class="url-text">${rtmpUrl}</span>
-                  <button class="copy-btn" onclick="copyUrl(this,'${rtmpUrl}')">COPY</button>
+              <div class="feed-url-row">
+                <span class="feed-url-label">RTMP PUSH (give to source)</span>
+                <div class="feed-url-box">
+                  <span class="feed-url-text">${rtmpUrl}</span>
+                  <button class="copy-btn" onclick="copyUrl(this,'${rtmpUrl}')">Copy</button>
                 </div>
               </div>
-              <div class="url-row">
-                <div class="url-label">vMix PULL (HLS)</div>
-                <div class="url-box">
-                  <span class="url-text">${hlsUrl}</span>
-                  <button class="copy-btn" onclick="copyUrl(this,'${hlsUrl}')">COPY</button>
+              <div class="feed-url-row">
+                <span class="feed-url-label">vMix PULL (HLS)</span>
+                <div class="feed-url-box">
+                  <span class="feed-url-text">${hlsUrl}</span>
+                  <button class="copy-btn" onclick="copyUrl(this,'${hlsUrl}')">Copy</button>
                 </div>
               </div>
             </div>
@@ -251,7 +296,6 @@
         `;
       }).join('');
 
-      // Attach HLS players to live feeds
       FEEDS.forEach(f=>{
         if(liveFeeds[f.key]){
           const vid=document.getElementById('vid-'+f.key);
@@ -269,43 +313,50 @@
             }
           }
         }else{
-          // Cleanup player if feed went offline
           if(hlsPlayers[f.key]){hlsPlayers[f.key].destroy();delete hlsPlayers[f.key];}
         }
       });
     }
 
     function render(){
-      document.getElementById('sDot').className='dot '+(s.connected?'on':'off');
-      document.getElementById('sTxt').style.color=s.connected?'var(--grn)':'var(--red)';
-      document.getElementById('sTxt').textContent=s.connected?'CONNECTED':'OFFLINE';
-      const fE=document.getElementById('xFps');fE.textContent=s.fps;
-      const fN=parseFloat(s.fps);fE.className='stat-v '+(fN>=24?'g':fN>=20?'w':'b');
-      const ac=s.streams.filter(Boolean).length;
-      document.getElementById('xStr').innerHTML=ac+'<span class="stat-u">/5</span>';
-      const air=document.getElementById('xAir');air.textContent=ac>0?'ON AIR':'OFF';air.className='stat-v '+(ac>0?'g':'w');
+      const cs=document.getElementById('connStatus');
+      cs.className='conn-status '+(s.connected?'on':'off');
+      cs.innerHTML='<span class="conn-dot"></span>'+(s.connected?'CONNECTED':'OFFLINE');
 
-      document.getElementById('stList').innerHTML=SN.map((n,i)=>{const o=s.streams[i];return`<div class="stm ${o?'on':'off'}"><div class="stm-i"><span class="dot ${o?'on':'off'}"></span><span class="stm-n">${n}</span>${o?'<span class="ltag">LIVE</span>':''}</div><button class="stm-b ${o?'no':'go'}" onclick="togS(${i})">${o?'STOP':'START'}</button></div>`;}).join('');
+      const fE=document.getElementById('xFps');fE.textContent=s.fps;
+      const fN=parseFloat(s.fps);fE.className='stat-val '+(fN>=24?'g':fN>=20?'w':'r');
+
+      const ac=s.streams.filter(Boolean).length;
+      document.getElementById('xStr').innerHTML=ac+'<span class="stat-unit">/5</span>';
+      const air=document.getElementById('xAir');air.textContent=ac>0?'ON AIR':'OFF';air.className='stat-val '+(ac>0?'g':'w');
+
+      document.getElementById('stList').innerHTML=SN.map((n,i)=>{
+        const o=s.streams[i];
+        return`<div class="stream-item ${o?'on':''}"><div class="stream-left"><span class="stream-dot ${o?'on':'off'}"></span><span class="stream-name">${n}</span>${o?'<span class="stream-live">LIVE</span>':''}</div><button class="stream-btn ${o?'no':'go'}" onclick="togS(${i})">${o?'STOP':'START'}</button></div>`;
+      }).join('');
 
       const inp=s.inputs.length>0?s.inputs:[1,2,3,4,5,6,7,8].map(n=>({number:String(n),title:'Input '+n}));
       document.getElementById('inGrid').innerHTML=inp.map(i=>{
         const isA=String(s.active)===String(i.number),isP=String(s.preview)===String(i.number);
-        let c='inp';if(isA)c+=' pgm';else if(isP)c+=' prv';
-        let b='';if(isA)b='<div class="inp-bd pgm">PGM</div>';else if(isP)b='<div class="inp-bd prv">PRV</div>';
+        let c='input-card';if(isA)c+=' pgm';else if(isP)c+=' prv';
+        let b='';if(isA)b='<div class="input-badge pgm">PGM</div>';else if(isP)b='<div class="input-badge prv">PRV</div>';
         let t=i.title;if(t.length>16)t=t.substring(0,14)+'…';
-        return`<div class="${c}">${b}<div class="inp-t">${t}</div><div class="inp-bs"><button class="inp-b" onclick="cmd('PreviewInput','Input=${i.number}')">PRV</button><button class="inp-b cut" onclick="cmd('Cut','Input=${i.number}')">CUT</button></div></div>`;
+        return`<div class="${c}">${b}<div class="input-title">${t}</div><div class="input-btns"><button class="input-btn" onclick="cmd('PreviewInput','Input=${i.number}')">PRV</button><button class="input-btn cut" onclick="cmd('Cut','Input=${i.number}')">CUT</button></div></div>`;
       }).join('');
 
-      document.getElementById('ovList').innerHTML=ON.map((n,i)=>{const num=i+1,o=s.overlays[num];return`<div class="ov ${o?'on':''}" onclick="togO(${num})"><span class="ov-n">${n}</span><div class="tog ${o?'on':'off'}"><div class="tog-t ${o?'on':'off'}"></div></div></div>`;}).join('');
+      document.getElementById('ovList').innerHTML=ON.map((n,i)=>{
+        const num=i+1,o=s.overlays[num];
+        return`<div class="overlay-item ${o?'on':''}" onclick="togO(${num})"><span class="overlay-name">${n}</span><div class="toggle ${o?'on':'off'}"><div class="toggle-knob ${o?'on':'off'}"></div></div></div>`;
+      }).join('');
+
       document.getElementById('fTxt').textContent='VxD Control • '+new Date().toLocaleTimeString();
     }
 
     function togS(i){cmd(s.streams[i]?'StopStreaming':'StartStreaming','Value='+i);s.streams[i]=!s.streams[i];render();}
     function togO(n){cmd(s.overlays[n]?'OverlayInput'+n+'Off':'OverlayInput'+n+'In');s.overlays[n]=!s.overlays[n];render();}
     function showErr(m){const e=document.getElementById('errBox');if(m){e.innerHTML=m;e.style.display='block';}else e.style.display='none';}
-    function copyUrl(btn,text){navigator.clipboard.writeText(text);btn.textContent='✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent='COPY';btn.classList.remove('ok');},2000);}
+    function copyUrl(btn,text){navigator.clipboard.writeText(text);btn.textContent='✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2000);}
 
-    // Initial render
     render();
     renderFeeds();
   </script>
