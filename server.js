@@ -50,7 +50,7 @@ app.get('/api/vmix-cmd', async (req, res) => {
 // Get NGINX-RTMP stats
 app.get('/api/relay-stats', async (req, res) => {
   try {
-    const response = await fetch('http://127.0.0.1:8080/stat.xml');
+    const response = await fetch('http://127.0.0.1:8888/stat.xml');
     const text = await response.text();
     res.set('Content-Type', 'text/xml');
     res.send(text);
@@ -62,7 +62,7 @@ app.get('/api/relay-stats', async (req, res) => {
 // Serve HLS from nginx
 app.get('/hls/:file', async (req, res) => {
   try {
-    const response = await fetch(`http://127.0.0.1:8080/hls/${req.params.file}`);
+    const response = await fetch(`http://127.0.0.1:8888/hls/${req.params.file}`);
     if (!response.ok) throw new Error('Not found');
     const buffer = await response.arrayBuffer();
     const ext = req.params.file.split('.').pop();
