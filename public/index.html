@@ -6,6 +6,8 @@
   <title>VxD Control</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
+    @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
+    @font-face{font-family:'MvEamaan';src:url('fonts/Mv_Eamaan_XP.otf') format('opentype')}
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:'Inter',system-ui,sans-serif;background:#09090b;color:#e4e4e7;min-height:100vh;-webkit-tap-highlight-color:transparent}
     :root{--bg:#09090b;--card:#18181b;--card2:#1f1f23;--bdr:#27272a;--bdr2:#3f3f46;--t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;--red:#ef4444;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b;--radius:8px}
@@ -14,10 +16,10 @@
 
     .shell{display:grid;grid-template-columns:1fr;min-height:100vh}
     @media(min-width:1024px){
-      .shell{grid-template-columns:1fr 2fr;grid-template-rows:auto 1fr}
+      .shell{grid-template-columns:380px 1fr;grid-template-rows:auto 1fr}
       .topbar{grid-column:1/-1}
-      .sidebar{border-right:1px solid var(--bdr);overflow-y:auto;padding:16px}
-      .main{overflow-y:auto;padding:16px 20px}
+      .sidebar{border-right:1px solid var(--bdr);overflow-y:auto;padding:20px}
+      .main{overflow-y:auto;padding:20px 24px}
     }
     @media(max-width:1023px){.sidebar,.main{padding:12px 16px}}
 
@@ -42,67 +44,68 @@
     .alert{background:#451a0320;border:1px solid #ef444430;border-radius:var(--radius);padding:10px 14px;color:#fca5a5;font-size:12px;margin-bottom:12px}
     .alert a{color:#fca5a5;text-decoration:underline}
 
-    .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px}
-    .stat-card{background:var(--card);border:1px solid var(--bdr);border-radius:var(--radius);padding:10px;text-align:center}
-    .stat-label{color:var(--t3);font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:2px}
-    .stat-val{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
-    .stat-val.g{color:var(--grn)}.stat-val.w{color:var(--amb)}.stat-val.r{color:var(--red)}
-    .stat-unit{font-size:11px;color:var(--t3);font-weight:400}
+    /* Quick actions */
+    .quick-bar{display:flex;gap:6px;margin-bottom:20px}
+    .q-btn{flex:1;border:none;border-radius:var(--radius);padding:14px 8px;font-size:13px;font-weight:800;cursor:pointer;color:#fff;font-family:inherit;letter-spacing:.5px;transition:all .15s}
+    .q-btn:hover{opacity:.85}
+    .q-btn.c{background:var(--red)}.q-btn.f{background:var(--blu)}.q-btn.t{background:var(--bdr2)}
 
-    .sec-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    /* Section */
+    .sec-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
     .sec-title{color:var(--t3);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
-    .sec-actions{display:flex;gap:4px}
-    .sec-btn{border:none;border-radius:4px;padding:3px 8px;font-size:9px;font-weight:700;cursor:pointer;color:#fff;font-family:inherit;transition:opacity .15s}
-    .sec-btn:hover{opacity:.85}
-    .sec-btn.g{background:var(--grn)}.sec-btn.r{background:var(--red)}
 
-    .stream-list{display:flex;flex-direction:column;gap:3px;margin-bottom:14px}
-    .stream-item{border-radius:6px;padding:8px 10px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--bdr);background:var(--card);transition:all .2s}
-    .stream-item.on{background:linear-gradient(135deg,#052e16,#14532d);border-color:#22c55e30}
-    .stream-left{display:flex;align-items:center;gap:6px}
-    .stream-dot{width:6px;height:6px;border-radius:50%}
-    .stream-dot.on{background:var(--grn);box-shadow:0 0 6px var(--grn)}.stream-dot.off{background:var(--bdr2)}
-    .stream-name{font-size:12px;font-weight:600}
-    .stream-live{background:#22c55e15;color:var(--grn);font-size:8px;font-weight:800;padding:2px 6px;border-radius:3px;letter-spacing:1.5px;margin-left:4px}
-    .stream-btn{border:none;border-radius:4px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;color:#fff;font-family:inherit;transition:all .15s}
-    .stream-btn:hover{opacity:.85}
-    .stream-btn.go{background:var(--grn)}.stream-btn.no{background:var(--red)}
+    /* Ticker panel */
+    .tk-panel{background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:16px;margin-bottom:20px}
+    .tk-tabs{display:flex;gap:2px;margin-bottom:14px;background:var(--bg);border-radius:8px;padding:3px}
+    .tk-tab{flex:1;border:none;border-radius:6px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;color:var(--t3);background:transparent;font-family:inherit;transition:all .15s}
+    .tk-tab.act{background:var(--card2);color:var(--t1)}
+    .tk-tab:hover:not(.act){color:var(--t2)}
 
-    .input-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin-bottom:14px}
-    @media(max-width:1023px){.input-grid{grid-template-columns:repeat(3,1fr)}}
-    .input-card{border:1px solid var(--bdr);border-radius:6px;padding:8px 6px;text-align:center;position:relative;background:var(--card);transition:all .15s}
-    .input-card.pgm{background:linear-gradient(135deg,#7f1d1d,#991b1b);border-color:var(--red)}
-    .input-card.prv{background:linear-gradient(135deg,#78350f,#92400e);border-color:var(--amb)}
-    .input-badge{position:absolute;top:3px;right:4px;font-size:7px;font-weight:800;padding:1px 4px;border-radius:3px;letter-spacing:1px;color:#fff}
-    .input-badge.pgm{background:var(--red)}.input-badge.prv{background:var(--amb);color:#000}
-    .input-title{font-size:9px;font-weight:600;margin-bottom:4px;min-height:20px;display:flex;align-items:center;justify-content:center;word-break:break-word;color:var(--t1)}
-    .input-btns{display:flex;gap:2px}
-    .input-btn{flex:1;border:1px solid #ffffff12;border-radius:3px;padding:3px 0;font-size:8px;font-weight:600;cursor:pointer;font-family:inherit;color:#ccc;background:#ffffff0a;transition:all .1s}
-    .input-btn:hover{background:#ffffff15}
-    .input-btn.cut{background:var(--red);color:#fff;border:none}
+    .tk-preview{background:#111;border-radius:8px;overflow:hidden;margin-bottom:14px;position:relative;height:80px;display:flex;align-items:flex-end}
+    .tk-preview-stripe{height:4px;position:absolute;top:0;left:0;right:0}
+    .tk-preview-bar{width:100%;height:52px;display:flex;align-items:center}
+    .tk-preview-label{color:#fff;font-family:'MVWaheed',sans-serif;font-size:16px;padding:0 14px;height:100%;display:flex;align-items:center;white-space:nowrap;min-width:90px;justify-content:center}
+    .tk-preview-body{flex:1;height:100%;display:flex;align-items:center;padding:0 14px;overflow:hidden;background:#1a1a2e}
+    .tk-preview-text{color:#fff;font-family:'MvEamaan',sans-serif;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl}
+    .tk-preview-off{color:#444;font-size:11px;font-family:inherit}
+    .tk-preview.rtl .tk-preview-bar{direction:rtl}
+    .tk-preview.rtl .tk-preview-body{border-left:3px solid var(--amb)}
+    .tk-preview.ltr .tk-preview-bar{direction:ltr}
+    .tk-preview.ltr .tk-preview-body{border-right:3px solid var(--amb)}
+    .tk-preview.ltr .tk-preview-text{direction:ltr;font-family:'Inter',sans-serif}
+    .tk-preview.ltr .tk-preview-label{font-family:'Inter',sans-serif;font-weight:800;font-size:13px}
 
-    .trans-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin-bottom:14px}
-    .trans-btn{border:none;border-radius:6px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;color:#fff;font-family:inherit;letter-spacing:.5px;transition:all .15s}
-    .trans-btn:hover{opacity:.85}
-    .trans-btn.c{background:var(--red)}.trans-btn.f{background:var(--blu)}.trans-btn.t{background:var(--bdr2)}
+    .tk-row{display:flex;gap:6px;margin-bottom:10px}
+    .tk-row:last-child{margin-bottom:0}
+    .tk-label-text{font-size:11px;color:var(--t3);font-weight:600;margin-bottom:4px}
+    .tk-input{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;color:var(--t1);font-size:14px;font-family:'MVWaheed','MvEamaan','Inter',sans-serif;outline:none;direction:auto}
+    .tk-input:focus{border-color:var(--bdr2)}
+    .tk-input::placeholder{color:var(--t3);font-family:'MvEamaan','Inter',sans-serif;font-size:13px}
+    .tk-textarea{width:100%;padding:12px 14px;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;color:var(--t1);font-size:18px;font-family:'MvEamaan','Inter',sans-serif;outline:none;resize:none;line-height:1.5;direction:auto;min-height:80px}
+    .tk-textarea:focus{border-color:var(--bdr2)}
+    .tk-textarea::placeholder{color:var(--t3);font-size:14px}
+    .tk-select{padding:8px 10px;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;color:var(--t1);font-size:12px;font-family:inherit;outline:none;cursor:pointer;flex:1}
+    .tk-colors{display:flex;gap:4px;margin-bottom:10px}
+    .tk-color{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:all .15s}
+    .tk-color.act{border-color:#fff;transform:scale(1.15)}
+    .tk-color:hover{transform:scale(1.1)}
+    .tk-actions{display:flex;gap:6px}
+    .tk-btn{flex:1;border:none;border-radius:8px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;color:#fff;font-family:inherit;transition:all .15s;letter-spacing:.3px}
+    .tk-btn:hover{opacity:.85}
+    .tk-btn.show{background:var(--grn)}
+    .tk-btn.hide{background:var(--red)}
+    .tk-btn.both-show{background:var(--blu)}
+    .tk-btn.both-hide{background:#52525b}
 
-    .overlay-list{display:flex;flex-direction:column;gap:3px;margin-bottom:14px}
-    .overlay-item{border:1px solid var(--bdr);border-radius:6px;padding:8px 10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;background:var(--card);transition:all .2s}
-    .overlay-item.on{background:linear-gradient(135deg,#1e3a5f,#1e40af);border-color:#3b82f640}
-    .overlay-item:hover{border-color:var(--bdr2)}
-    .overlay-name{font-size:12px;font-weight:600}
-    .toggle{width:32px;height:18px;border-radius:9px;position:relative;transition:background .2s}
-    .toggle.on{background:var(--blu)}.toggle.off{background:var(--bdr2)}
-    .toggle-knob{width:14px;height:14px;border-radius:50%;background:#fff;position:absolute;top:2px;transition:left .2s}
-    .toggle-knob.on{left:16px}.toggle-knob.off{left:2px}
-
-    /* Feed grid — 3 columns */
+    /* Feed grid */
     .feeds-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-    @media(max-width:1023px){.feeds-grid{grid-template-columns:1fr}}
+    @media(max-width:1023px){.feeds-grid{grid-template-columns:1fr 1fr}}
     .feed-card{background:var(--card);border:1px solid var(--bdr);border-radius:var(--radius);overflow:hidden;animation:fadeIn .3s ease;transition:all .2s}
     .feed-card.live{border-color:#22c55e25;background:linear-gradient(180deg,#0a1a14 0%,var(--card) 100%)}
     .feed-header{padding:6px 10px;display:flex;justify-content:space-between;align-items:center}
     .feed-left{display:flex;align-items:center;gap:6px}
+    .stream-dot{width:6px;height:6px;border-radius:50%}
+    .stream-dot.on{background:var(--grn);box-shadow:0 0 6px var(--grn)}.stream-dot.off{background:var(--bdr2)}
     .feed-name{font-size:12px;font-weight:700}
     .feed-key{font-size:9px;color:var(--t3);margin-left:2px}
     .feed-badge{font-size:8px;font-weight:800;padding:2px 6px;border-radius:3px;letter-spacing:1.5px}
@@ -119,27 +122,8 @@
     .copy-btn{background:var(--card2);color:var(--t2);border:1px solid var(--bdr);border-radius:3px;padding:2px 6px;font-size:8px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
     .copy-btn:hover{background:var(--bdr);color:var(--t1)}
     .copy-btn.ok{background:var(--grn);color:#fff;border-color:var(--grn)}
-
     .footer{padding:12px 0;border-top:1px solid var(--bdr);text-align:center;margin-top:16px}
     .footer-text{color:var(--bdr2);font-size:10px}
-
-    /* Ticker controls */
-    .ticker-ctrl{background:var(--card);border:1px solid var(--bdr);border-radius:var(--radius);padding:10px;margin-bottom:14px}
-    .tc-row{display:flex;gap:4px;margin-bottom:6px}
-    .tc-row:last-child{margin-bottom:0}
-    .tc-input,.tc-textarea,.tc-select{width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--bdr);border-radius:5px;color:var(--t1);font-size:12px;font-family:inherit;outline:none;margin-bottom:6px}
-    .tc-textarea{resize:none;font-size:13px;line-height:1.4}
-    .tc-select{padding:6px 8px;font-size:11px;cursor:pointer;flex:1}
-    .tc-input:focus,.tc-textarea:focus{border-color:var(--bdr2)}
-    .tc-input::placeholder,.tc-textarea::placeholder{color:var(--t3)}
-    .tc-btn{flex:1;border:none;border-radius:5px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;color:#fff;font-family:inherit;transition:all .15s}
-    .tc-btn:hover{opacity:.85}
-    .tc-go{background:var(--grn)}
-    .tc-stop{background:var(--red)}
-    .tc-both{background:var(--blu)}
-    .tc-tabs{display:flex;gap:2px;margin-bottom:8px;background:var(--bg);border-radius:5px;padding:2px}
-    .tc-tab{flex:1;border:none;border-radius:4px;padding:6px;font-size:11px;font-weight:700;cursor:pointer;color:var(--t3);background:transparent;font-family:inherit;transition:all .15s}
-    .tc-tab.act{background:var(--card2);color:var(--t1)}
   </style>
 </head>
 <body>
@@ -162,65 +146,88 @@
     <div class="sidebar">
       <div id="errBox" class="alert" style="display:none"></div>
 
-      <div class="stats-row">
-        <div class="stat-card"><div class="stat-label">FPS</div><div id="xFps" class="stat-val g">—</div></div>
-        <div class="stat-card"><div class="stat-label">Streams</div><div id="xStr" class="stat-val g">0<span class="stat-unit">/3</span></div></div>
-        <div class="stat-card"><div class="stat-label">Status</div><div id="xAir" class="stat-val w">OFF</div></div>
+      <div class="quick-bar">
+        <button class="q-btn c" onclick="cmd('Cut')">CUT</button>
+        <button class="q-btn f" onclick="cmd('Fade','Duration=500')">FADE</button>
+        <button class="q-btn t" onclick="cmd('FadeToBlack')">FTB</button>
       </div>
-
-      <div class="sec-hdr"><span class="sec-title">Streams</span><div class="sec-actions"><button class="sec-btn g" onclick="cmd('StartStreaming')">START ALL</button><button class="sec-btn r" onclick="cmd('StopStreaming')">STOP ALL</button></div></div>
-      <div id="stList" class="stream-list"></div>
-
-      <div class="sec-hdr"><span class="sec-title">Sources</span></div>
-      <div id="inGrid" class="input-grid"></div>
-
-      <div class="trans-row">
-        <button class="trans-btn c" onclick="cmd('Cut')">CUT</button>
-        <button class="trans-btn f" onclick="cmd('Fade','Duration=500')">FADE</button>
-        <button class="trans-btn t" onclick="cmd('FadeToBlack')">FTB</button>
-      </div>
-
-      <div class="sec-hdr"><span class="sec-title">Overlays</span></div>
-      <div id="ovList" class="overlay-list"></div>
 
       <div class="sec-hdr"><span class="sec-title">Live Ticker</span></div>
-      <div class="ticker-ctrl">
-        <div class="tc-tabs">
-          <button class="tc-tab act" id="tabVoice" onclick="switchTab('voice')">VOICE</button>
-          <button class="tc-tab" id="tabDhuvas" onclick="switchTab('dhuvas')">DHUVAS</button>
+      <div class="tk-panel">
+        <div class="tk-tabs">
+          <button class="tk-tab act" id="tabVoice" onclick="switchTab('voice')">VOICE</button>
+          <button class="tk-tab" id="tabDhuvas" onclick="switchTab('dhuvas')">DHUVAS</button>
         </div>
-        <div class="tc-row">
-          <select id="tkDir" class="tc-select" onchange="updateTicker()">
-            <option value="rtl">ދިވެހި (RTL)</option>
-            <option value="ltr">English (LTR)</option>
-          </select>
-          <select id="tkMode" class="tc-select" onchange="updateTicker()">
-            <option value="scroll">Scroll</option>
-            <option value="static">Static</option>
-          </select>
+
+        <div class="tk-preview rtl" id="tkPreview">
+          <div class="tk-preview-stripe" id="tkPStripe" style="background:linear-gradient(90deg,#ef4444 30%,#f59e0b 100%)"></div>
+          <div class="tk-preview-bar">
+            <div class="tk-preview-label" id="tkPLabel" style="background:#ef4444">ބްރޭކިންގ</div>
+            <div class="tk-preview-body">
+              <span class="tk-preview-text" id="tkPText"><span class="tk-preview-off">Preview will appear here</span></span>
+            </div>
+          </div>
         </div>
-        <input type="text" id="tkLabel" class="tc-input" placeholder="Label — ބްރޭކިންގ" dir="auto" onchange="updateTicker()">
-        <textarea id="tkText" class="tc-textarea" placeholder="Ticker text — ޓިކަރ ޓެކްސްޓް" dir="auto" rows="2" onchange="updateTicker()"></textarea>
-        <div class="tc-row">
-          <select id="tkColor" class="tc-select" onchange="updateTicker()">
-            <option value="#ef4444">Red</option>
-            <option value="#3b82f6">Blue</option>
-            <option value="#22c55e">Green</option>
-            <option value="#f59e0b">Amber</option>
-            <option value="#8b5cf6">Purple</option>
-            <option value="#06b6d4">Cyan</option>
-          </select>
-          <select id="tkSpeed" class="tc-select" onchange="updateTicker()">
-            <option value="10">Slow</option>
-            <option value="15" selected>Normal</option>
-            <option value="25">Fast</option>
-          </select>
+
+        <div style="margin-bottom:10px">
+          <div class="tk-label-text">DIRECTION</div>
+          <div class="tk-row">
+            <button class="tk-tab act" id="dirRtl" onclick="setDir('rtl')" style="flex:1;font-family:'MvEamaan',sans-serif">ދިވެހި</button>
+            <button class="tk-tab" id="dirLtr" onclick="setDir('ltr')" style="flex:1">English</button>
+          </div>
         </div>
-        <div class="tc-row">
-          <button class="tc-btn tc-go" onclick="showTicker()">SHOW</button>
-          <button class="tc-btn tc-stop" onclick="hideTicker()">HIDE</button>
-          <button class="tc-btn tc-both" onclick="showBothTickers()">BOTH SHOW</button>
-          <button class="tc-btn tc-stop" onclick="hideBothTickers()">BOTH HIDE</button>
+
+        <div style="margin-bottom:10px">
+          <div class="tk-label-text">LABEL (MVWaheed)</div>
+          <input type="text" id="tkLabel" class="tk-input" placeholder="ބްރޭކިންގ" dir="auto" oninput="livePreview()">
+        </div>
+
+        <div style="margin-bottom:10px">
+          <div class="tk-label-text">TICKER TEXT (MvEamaan)</div>
+          <textarea id="tkText" class="tk-textarea" placeholder="ޓިކަރ ޓެކްސްޓް ލިޔުއްވާ..." dir="auto" rows="3" oninput="livePreview()"></textarea>
+        </div>
+
+        <div style="margin-bottom:10px">
+          <div class="tk-label-text">COLOR</div>
+          <div class="tk-colors">
+            <div class="tk-color act" style="background:#ef4444" onclick="setColor('#ef4444',this)"></div>
+            <div class="tk-color" style="background:#3b82f6" onclick="setColor('#3b82f6',this)"></div>
+            <div class="tk-color" style="background:#22c55e" onclick="setColor('#22c55e',this)"></div>
+            <div class="tk-color" style="background:#f59e0b" onclick="setColor('#f59e0b',this)"></div>
+            <div class="tk-color" style="background:#8b5cf6" onclick="setColor('#8b5cf6',this)"></div>
+            <div class="tk-color" style="background:#06b6d4" onclick="setColor('#06b6d4',this)"></div>
+            <div class="tk-color" style="background:#ec4899" onclick="setColor('#ec4899',this)"></div>
+            <div class="tk-color" style="background:#ffffff" onclick="setColor('#ffffff',this)"></div>
+          </div>
+        </div>
+
+        <div class="tk-row" style="margin-bottom:12px">
+          <div style="flex:1">
+            <div class="tk-label-text">MODE</div>
+            <select id="tkMode" class="tk-select" onchange="livePreview()">
+              <option value="scroll">Scroll</option>
+              <option value="static">Static</option>
+            </select>
+          </div>
+          <div style="flex:1">
+            <div class="tk-label-text">SPEED</div>
+            <select id="tkSpeed" class="tk-select">
+              <option value="8">Very Slow</option>
+              <option value="12">Slow</option>
+              <option value="15" selected>Normal</option>
+              <option value="20">Fast</option>
+              <option value="30">Very Fast</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="tk-actions">
+          <button class="tk-btn show" onclick="showTicker()">SHOW</button>
+          <button class="tk-btn hide" onclick="hideTicker()">HIDE</button>
+        </div>
+        <div class="tk-actions" style="margin-top:6px">
+          <button class="tk-btn both-show" onclick="showBothTickers()">BOTH SHOW</button>
+          <button class="tk-btn both-hide" onclick="hideBothTickers()">BOTH HIDE</button>
         </div>
       </div>
     </div>
@@ -236,8 +243,6 @@
   <script>
     const RTMP_HOST='acela.proxy.rlwy.net:15678';
     const HLS_HOST=window.location.origin;
-    const SN=['VOICE Facebook','Dhuvas Facebook','VOICE YouTube'];
-    const ON=['OV1 — VOICE Logo','OV2 — VOICE Lower Third','OV3 — Dhuvas Logo','OV4 — Dhuvas Lower Third'];
     const FEEDS=[
       {key:'phone1',name:'Phone 1'},
       {key:'phone2',name:'Phone 2'},
@@ -249,15 +254,18 @@
     let poll=null,feedPoll=null;
     let hlsPlayers={};
     let liveFeeds={};
-    let s={connected:false,active:null,preview:null,inputs:[],overlays:{1:false,2:false,3:false,4:false},streams:[false,false,false],fps:'—',isLive:false};
+    let s={connected:false};
+    let activeTab='voice';
+    let tkDir='rtl';
+    let tkColor='#ef4444';
 
     checkUrl();
 
     function checkUrl(){
       fetch('/api/get-vmix-url').then(r=>r.json()).then(d=>{
         if(d.url){startPolling();}
-        else{showErr('vMix not connected. Go to <a href="/settings" style="color:#fca5a5">Settings</a> to set ngrok URL.');}
-      }).catch(()=>{showErr('vMix not connected. Go to <a href="/settings" style="color:#fca5a5">Settings</a> to set ngrok URL.');});
+        else{showErr('vMix not connected. Go to <a href="/settings" style="color:#fca5a5">Settings</a>.');}
+      }).catch(()=>{showErr('vMix not connected.');});
       pollFeeds();
       feedPoll=setInterval(pollFeeds,5000);
     }
@@ -269,196 +277,22 @@
     async function pollStatus(){
       try{
         const r=await fetch('/api/vmix');if(!r.ok)throw 0;
-        parseXML(await r.text());showErr('');
-      }catch(e){s.connected=false;render();showErr('Cannot reach vMix. Check ngrok in <a href="/settings" style="color:#fca5a5">Settings</a>.');}
-    }
-
-    function parseXML(x){
-      try{
-        const d=new DOMParser().parseFromString(x,'text/xml'),v=d.querySelector('vmix');if(!v)return;
-        s.inputs=Array.from(d.querySelectorAll('inputs > input')).map((n,i)=>({number:n.getAttribute('number')||String(i+1),title:n.getAttribute('title')||'Input '+(i+1)}));
-        const a=v.querySelector('active'),p=v.querySelector('preview');
-        s.active=a?a.textContent:null;s.preview=p?p.textContent:null;
-        s.overlays={1:false,2:false,3:false,4:false};
-        d.querySelectorAll('overlays > overlay').forEach(n=>{const num=parseInt(n.getAttribute('number'));if(n.textContent&&n.textContent.trim()!=='')s.overlays[num]=true;});
-        // Parse individual stream states
-        s.streams=[false,false,false];
-        const streaming=d.querySelectorAll('streaming');
-        if(streaming.length>0){
-          // vMix XML has individual stream elements or a single streaming tag
-          const st=v.querySelector('streaming');
-          if(st)s.streams[0]=st.textContent==='True';
-        }
-        // Check for stream2 and stream3
-        const st2=v.querySelector('stream2');if(st2)s.streams[1]=st2.textContent==='True';
-        const st3=v.querySelector('stream3');if(st3)s.streams[2]=st3.textContent==='True';
-        s.isLive=s.streams.some(Boolean);
-        const f=v.querySelector('fps');s.fps=f?parseFloat(f.textContent).toFixed(1):'—';
-        s.connected=true;render();
-      }catch(e){}
-    }
-
-    let feedFailCount={};
-    let feedsRendered=false;
-
-    async function pollFeeds(){
-      const newLive={};
-      await Promise.all(FEEDS.map(async f=>{
-        try{
-          const r=await fetch(`/hls/${f.key}.m3u8`,{cache:'no-store'});
-          if(r.ok){
-            const t=await r.text();
-            if(t.includes('.ts')){
-              newLive[f.key]=true;
-              feedFailCount[f.key]=0;
-            }
-          }
-        }catch(e){}
-        if(!newLive[f.key]&&liveFeeds[f.key]){
-          feedFailCount[f.key]=(feedFailCount[f.key]||0)+1;
-          if(feedFailCount[f.key]<3)newLive[f.key]=true;
-        }
-      }));
-      const oldLive=liveFeeds;
-      liveFeeds=newLive;
-      if(!feedsRendered){renderFeeds();feedsRendered=true;}
-      else{updateFeedStatus(oldLive);}
-    }
-
-    function renderFeeds(){
-      const el=document.getElementById('feedList');
-      el.innerHTML=FEEDS.map(f=>{
-        const isLive=!!liveFeeds[f.key];
-        const rtmpUrl=`rtmp://${RTMP_HOST}/live/${f.key}`;
-        const hlsUrl=`${HLS_HOST}/hls/${f.key}.m3u8`;
-        return `
-          <div class="feed-card ${isLive?'live':''}" id="card-${f.key}">
-            <div class="feed-header">
-              <div class="feed-left">
-                <span class="stream-dot ${isLive?'on':'off'}" id="dot-${f.key}"></span>
-                <span class="feed-name">${f.name}</span>
-                <span class="feed-key">/${f.key}</span>
-              </div>
-              <span class="feed-badge ${isLive?'live':'off'}" id="badge-${f.key}">${isLive?'● LIVE':'OFFLINE'}</span>
-            </div>
-            <div class="feed-video" id="preview-${f.key}">
-              <video id="vid-${f.key}" muted autoplay playsinline style="display:${isLive?'block':'none'}"></video>
-              <span class="feed-offline" id="offline-${f.key}" style="display:${isLive?'none':'block'}">No feed</span>
-            </div>
-            <div class="feed-urls">
-              <div class="feed-url-row">
-                <span class="feed-url-label">RTMP PUSH</span>
-                <div class="feed-url-box">
-                  <span class="feed-url-text">${rtmpUrl}</span>
-                  <button class="copy-btn" onclick="copyUrl(this,'${rtmpUrl}')">Copy</button>
-                </div>
-              </div>
-              <div class="feed-url-row">
-                <span class="feed-url-label">vMix PULL</span>
-                <div class="feed-url-box">
-                  <span class="feed-url-text">${hlsUrl}</span>
-                  <button class="copy-btn" onclick="copyUrl(this,'${hlsUrl}')">Copy</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
-      attachPlayers();
-    }
-
-    function updateFeedStatus(oldLive){
-      FEEDS.forEach(f=>{
-        const isLive=!!liveFeeds[f.key];
-        const wasLive=!!oldLive[f.key];
-        // Update badges without rebuilding DOM
-        const card=document.getElementById('card-'+f.key);
-        const dot=document.getElementById('dot-'+f.key);
-        const badge=document.getElementById('badge-'+f.key);
-        const vid=document.getElementById('vid-'+f.key);
-        const offline=document.getElementById('offline-'+f.key);
-        if(card){card.className='feed-card '+(isLive?'live':'');}
-        if(dot){dot.className='stream-dot '+(isLive?'on':'off');}
-        if(badge){badge.className='feed-badge '+(isLive?'live':'off');badge.textContent=isLive?'● LIVE':'OFFLINE';}
-        if(isLive&&!wasLive){
-          // Just went live — show video, hide offline, attach player
-          if(vid){vid.style.display='block';}
-          if(offline){offline.style.display='none';}
-          attachPlayer(f.key);
-        }else if(!isLive&&wasLive){
-          // Just went offline — hide video, show offline, destroy player
-          if(vid){vid.style.display='none';}
-          if(offline){offline.style.display='block';}
-          if(hlsPlayers[f.key]){hlsPlayers[f.key].destroy();delete hlsPlayers[f.key];}
-        }
-      });
-    }
-
-    function attachPlayers(){
-      FEEDS.forEach(f=>{if(liveFeeds[f.key])attachPlayer(f.key);});
-    }
-
-    function attachPlayer(key){
-      const vid=document.getElementById('vid-'+key);
-      if(!vid||hlsPlayers[key])return;
-      const hlsUrl=`${HLS_HOST}/hls/${key}.m3u8`;
-      if(Hls.isSupported()){
-        const hls=new Hls({liveSyncDuration:2,liveMaxLatencyDuration:5,maxBufferLength:3,maxMaxBufferLength:5,startLevel:-1,capLevelToPlayerSize:true});
-        hls.loadSource(hlsUrl);
-        hls.attachMedia(vid);
-        hls.on(Hls.Events.MANIFEST_PARSED,()=>{vid.play().catch(()=>{});});
-        hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal){hls.destroy();delete hlsPlayers[key];}});
-        hlsPlayers[key]=hls;
-      }else if(vid.canPlayType('application/vnd.apple.mpegurl')){
-        vid.src=hlsUrl;vid.play().catch(()=>{});
-      }
+        s.connected=true;render();showErr('');
+      }catch(e){s.connected=false;render();}
     }
 
     function render(){
       const cs=document.getElementById('connStatus');
       cs.className='conn-status '+(s.connected?'on':'off');
       cs.innerHTML='<span class="conn-dot"></span>'+(s.connected?'CONNECTED':'OFFLINE');
-
-      const fE=document.getElementById('xFps');fE.textContent=s.fps;
-      const fN=parseFloat(s.fps);fE.className='stat-val '+(fN>=24?'g':fN>=20?'w':'r');
-
-      const ac=s.streams.filter(Boolean).length;
-      document.getElementById('xStr').innerHTML=ac+'<span class="stat-unit">/3</span>';
-      const air=document.getElementById('xAir');air.textContent=ac>0?'ON AIR':'OFF';air.className='stat-val '+(ac>0?'g':'w');
-
-      document.getElementById('stList').innerHTML=SN.map((n,i)=>{
-        const o=s.streams[i];
-        return`<div class="stream-item ${o?'on':''}"><div class="stream-left"><span class="stream-dot ${o?'on':'off'}"></span><span class="stream-name">${n}</span>${o?'<span class="stream-live">LIVE</span>':''}</div><button class="stream-btn ${o?'no':'go'}" onclick="togS(${i})">${o?'STOP':'START'}</button></div>`;
-      }).join('');
-
-      const inp=s.inputs.length>0?s.inputs:[1,2,3,4,5,6,7,8].map(n=>({number:String(n),title:'Input '+n}));
-      document.getElementById('inGrid').innerHTML=inp.map(i=>{
-        const isA=String(s.active)===String(i.number),isP=String(s.preview)===String(i.number);
-        let c='input-card';if(isA)c+=' pgm';else if(isP)c+=' prv';
-        let b='';if(isA)b='<div class="input-badge pgm">PGM</div>';else if(isP)b='<div class="input-badge prv">PRV</div>';
-        let t=i.title;if(t.length>16)t=t.substring(0,14)+'…';
-        return`<div class="${c}">${b}<div class="input-title">${t}</div><div class="input-btns"><button class="input-btn" onclick="cmd('PreviewInput','Input=${i.number}')">PRV</button><button class="input-btn cut" onclick="cmd('Cut','Input=${i.number}')">CUT</button></div></div>`;
-      }).join('');
-
-      document.getElementById('ovList').innerHTML=ON.map((n,i)=>{
-        const num=i+1,o=s.overlays[num];
-        return`<div class="overlay-item ${o?'on':''}" onclick="togO(${num})"><span class="overlay-name">${n}</span><div class="toggle ${o?'on':'off'}"><div class="toggle-knob ${o?'on':'off'}"></div></div></div>`;
-      }).join('');
-
       document.getElementById('fTxt').textContent='VxD Control • '+new Date().toLocaleTimeString();
     }
 
-    function togS(i){cmd(s.streams[i]?'StopStreaming':'StartStreaming','Value='+i);s.streams[i]=!s.streams[i];render();}
-    function togO(n){cmd(s.overlays[n]?'OverlayInput'+n+'Off':'OverlayInput'+n+'In');s.overlays[n]=!s.overlays[n];render();}
-    function showErr(m){const e=document.getElementById('errBox');if(m){e.innerHTML=m;e.style.display='block';}else e.style.display='none';}
-    function copyUrl(btn,text){navigator.clipboard.writeText(text);btn.textContent='✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2000);}
-
-    let activeTab = 'voice';
-
+    // === TICKER ===
     function switchTab(tab){
-      activeTab = tab;
-      document.getElementById('tabVoice').className = 'tc-tab' + (tab==='voice'?' act':'');
-      document.getElementById('tabDhuvas').className = 'tc-tab' + (tab==='dhuvas'?' act':'');
+      activeTab=tab;
+      document.getElementById('tabVoice').className='tk-tab'+(tab==='voice'?' act':'');
+      document.getElementById('tabDhuvas').className='tk-tab'+(tab==='dhuvas'?' act':'');
       loadTicker(tab);
     }
 
@@ -470,9 +304,46 @@
         document.getElementById('tkText').value=d.text||'';
         document.getElementById('tkMode').value=d.mode||'scroll';
         document.getElementById('tkSpeed').value=d.speed||15;
-        document.getElementById('tkDir').value=d.direction||'rtl';
-        document.getElementById('tkColor').value=d.labelColor||'#ef4444';
+        tkDir=d.direction||'rtl';
+        tkColor=d.labelColor||'#ef4444';
+        document.getElementById('dirRtl').className='tk-tab'+(tkDir==='rtl'?' act':'');
+        document.getElementById('dirLtr').className='tk-tab'+(tkDir==='ltr'?' act':'');
+        document.querySelectorAll('.tk-color').forEach(c=>{c.className='tk-color'+(c.style.background===tkColor?' act':'');});
+        livePreview();
       }catch(e){}
+    }
+
+    function setDir(d){
+      tkDir=d;
+      document.getElementById('dirRtl').className='tk-tab'+(d==='rtl'?' act':'');
+      document.getElementById('dirLtr').className='tk-tab'+(d==='ltr'?' act':'');
+      livePreview();
+    }
+
+    function setColor(c,el){
+      tkColor=c;
+      document.querySelectorAll('.tk-color').forEach(e=>e.className='tk-color');
+      if(el)el.className='tk-color act';
+      livePreview();
+    }
+
+    function livePreview(){
+      const label=document.getElementById('tkLabel').value||'ބްރޭކިންގ';
+      const text=document.getElementById('tkText').value;
+      const prev=document.getElementById('tkPreview');
+      const pLabel=document.getElementById('tkPLabel');
+      const pText=document.getElementById('tkPText');
+      const pStripe=document.getElementById('tkPStripe');
+
+      prev.className='tk-preview '+(tkDir==='ltr'?'ltr':'rtl');
+      pLabel.textContent=label;
+      pLabel.style.background=tkColor;
+      pText.innerHTML=text||'<span class="tk-preview-off">Preview will appear here</span>';
+      if(tkDir==='ltr'){
+        pStripe.style.background=`linear-gradient(270deg,${tkColor} 30%,#f59e0b 100%)`;
+      }else{
+        pStripe.style.background=`linear-gradient(90deg,${tkColor} 30%,#f59e0b 100%)`;
+      }
     }
 
     function getTickerData(){
@@ -481,43 +352,95 @@
         text:document.getElementById('tkText').value,
         mode:document.getElementById('tkMode').value,
         speed:parseInt(document.getElementById('tkSpeed').value),
-        direction:document.getElementById('tkDir').value,
-        labelColor:document.getElementById('tkColor').value
+        direction:tkDir,
+        labelColor:tkColor
       };
     }
 
-    async function updateTicker(){
-      await fetch('/api/ticker/'+activeTab,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(getTickerData())});
-    }
-
     async function showTicker(){
-      const data=getTickerData();
-      data.visible=true;
+      const data=getTickerData();data.visible=true;
       await fetch('/api/ticker/'+activeTab,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
     }
-
     async function hideTicker(){
       await fetch('/api/ticker/'+activeTab,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visible:false})});
     }
-
     async function showBothTickers(){
-      const data=getTickerData();
-      data.visible=true;
+      const data=getTickerData();data.visible=true;
       await Promise.all([
         fetch('/api/ticker/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),
         fetch('/api/ticker/dhuvas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
       ]);
     }
-
     async function hideBothTickers(){
+      const h={visible:false};
       await Promise.all([
-        fetch('/api/ticker/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visible:false})}),
-        fetch('/api/ticker/dhuvas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visible:false})})
+        fetch('/api/ticker/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(h)}),
+        fetch('/api/ticker/dhuvas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(h)})
       ]);
     }
 
-    // Load initial ticker state
     loadTicker('voice');
+
+    // === FEEDS ===
+    let feedFailCount={};
+    let feedsRendered=false;
+
+    async function pollFeeds(){
+      const newLive={};
+      await Promise.all(FEEDS.map(async f=>{
+        try{
+          const r=await fetch(`/hls/${f.key}.m3u8`,{cache:'no-store'});
+          if(r.ok){const t=await r.text();if(t.includes('.ts')){newLive[f.key]=true;feedFailCount[f.key]=0;}}
+        }catch(e){}
+        if(!newLive[f.key]&&liveFeeds[f.key]){
+          feedFailCount[f.key]=(feedFailCount[f.key]||0)+1;
+          if(feedFailCount[f.key]<3)newLive[f.key]=true;
+        }
+      }));
+      const oldLive=liveFeeds;liveFeeds=newLive;
+      if(!feedsRendered){renderFeeds();feedsRendered=true;}
+      else{updateFeedStatus(oldLive);}
+    }
+
+    function renderFeeds(){
+      document.getElementById('feedList').innerHTML=FEEDS.map(f=>{
+        const isLive=!!liveFeeds[f.key];
+        const rtmpUrl=`rtmp://${RTMP_HOST}/live/${f.key}`;
+        const hlsUrl=`${HLS_HOST}/hls/${f.key}.m3u8`;
+        return `<div class="feed-card ${isLive?'live':''}" id="card-${f.key}"><div class="feed-header"><div class="feed-left"><span class="stream-dot ${isLive?'on':'off'}" id="dot-${f.key}"></span><span class="feed-name">${f.name}</span><span class="feed-key">/${f.key}</span></div><span class="feed-badge ${isLive?'live':'off'}" id="badge-${f.key}">${isLive?'● LIVE':'OFFLINE'}</span></div><div class="feed-video" id="preview-${f.key}"><video id="vid-${f.key}" muted autoplay playsinline style="display:${isLive?'block':'none'}"></video><span class="feed-offline" id="offline-${f.key}" style="display:${isLive?'none':'block'}">No feed</span></div><div class="feed-urls"><div class="feed-url-row"><span class="feed-url-label">RTMP PUSH</span><div class="feed-url-box"><span class="feed-url-text">${rtmpUrl}</span><button class="copy-btn" onclick="copyUrl(this,'${rtmpUrl}')">Copy</button></div></div><div class="feed-url-row"><span class="feed-url-label">vMix PULL</span><div class="feed-url-box"><span class="feed-url-text">${hlsUrl}</span><button class="copy-btn" onclick="copyUrl(this,'${hlsUrl}')">Copy</button></div></div></div></div>`;
+      }).join('');
+      attachPlayers();
+    }
+
+    function updateFeedStatus(oldLive){
+      FEEDS.forEach(f=>{
+        const isLive=!!liveFeeds[f.key],wasLive=!!oldLive[f.key];
+        const card=document.getElementById('card-'+f.key),dot=document.getElementById('dot-'+f.key),badge=document.getElementById('badge-'+f.key),vid=document.getElementById('vid-'+f.key),offline=document.getElementById('offline-'+f.key);
+        if(card)card.className='feed-card '+(isLive?'live':'');
+        if(dot)dot.className='stream-dot '+(isLive?'on':'off');
+        if(badge){badge.className='feed-badge '+(isLive?'live':'off');badge.textContent=isLive?'● LIVE':'OFFLINE';}
+        if(isLive&&!wasLive){if(vid)vid.style.display='block';if(offline)offline.style.display='none';attachPlayer(f.key);}
+        else if(!isLive&&wasLive){if(vid)vid.style.display='none';if(offline)offline.style.display='block';if(hlsPlayers[f.key]){hlsPlayers[f.key].destroy();delete hlsPlayers[f.key];}}
+      });
+    }
+
+    function attachPlayers(){FEEDS.forEach(f=>{if(liveFeeds[f.key])attachPlayer(f.key);});}
+
+    function attachPlayer(key){
+      const vid=document.getElementById('vid-'+key);
+      if(!vid||hlsPlayers[key])return;
+      const hlsUrl=`${HLS_HOST}/hls/${key}.m3u8`;
+      if(Hls.isSupported()){
+        const hls=new Hls({liveSyncDuration:2,liveMaxLatencyDuration:5,maxBufferLength:3,maxMaxBufferLength:5,startLevel:-1,capLevelToPlayerSize:true});
+        hls.loadSource(hlsUrl);hls.attachMedia(vid);
+        hls.on(Hls.Events.MANIFEST_PARSED,()=>{vid.play().catch(()=>{});});
+        hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal){hls.destroy();delete hlsPlayers[key];}});
+        hlsPlayers[key]=hls;
+      }else if(vid.canPlayType('application/vnd.apple.mpegurl')){vid.src=hlsUrl;vid.play().catch(()=>{});}
+    }
+
+    function showErr(m){const e=document.getElementById('errBox');if(m){e.innerHTML=m;e.style.display='block';}else e.style.display='none';}
+    function copyUrl(btn,text){navigator.clipboard.writeText(text);btn.textContent='✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2000);}
 
     render();
     renderFeeds();
