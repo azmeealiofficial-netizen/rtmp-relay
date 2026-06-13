@@ -1,0 +1,9 @@
+{
+  "name": "rtmp-relay",
+  "version": "2.0.0",
+  "description": "VxD RTMP Relay + Control Panel",
+  "main": "server.js",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
