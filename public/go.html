@@ -2,144 +2,228 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>VxD Live Reporter</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="screen-orientation" content="landscape">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>VxD Live</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#09090b;color:#e4e4e7;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+    html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Inter',system-ui,-apple-system,sans-serif;color:#fff;touch-action:manipulation}
 
-    .container{max-width:420px;width:100%;text-align:center}
-    .logo{font-size:36px;font-weight:900;letter-spacing:-2px;margin-bottom:8px}
-    .logo-v{color:#ef4444}.logo-x{color:#f59e0b}.logo-d{color:#22c55e}
-    .subtitle{color:#71717a;font-size:13px;margin-bottom:32px}
-    .reporter-name{font-size:20px;font-weight:700;color:#fafafa;margin-bottom:6px}
-    .reporter-badge{display:inline-block;background:#3b82f615;border:1px solid #3b82f630;color:#3b82f6;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;letter-spacing:.5px;margin-bottom:32px}
+    /* Force landscape hint */
+    .rotate-msg{display:none;position:fixed;inset:0;background:#000;z-index:9999;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-size:16px;gap:12px}
+    @media(orientation:portrait){.rotate-msg{display:flex}}
 
-    .preview-box{background:#111;border-radius:16px;overflow:hidden;margin-bottom:24px;aspect-ratio:16/9;position:relative;border:1px solid #27272a}
-    .preview-box video{width:100%;height:100%;object-fit:cover}
-    .preview-box iframe{width:100%;height:100%;border:none}
-    .preview-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#555;font-size:13px;gap:8px}
-    .preview-placeholder.hidden{display:none}
-    .cam-icon{font-size:40px;opacity:.3}
+    .app{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000}
 
-    .go-btn{width:100%;padding:16px;border:none;border-radius:12px;font-size:16px;font-weight:800;cursor:pointer;color:#fff;font-family:inherit;letter-spacing:.5px;transition:all .2s}
-    .go-btn.start{background:#22c55e}
-    .go-btn.start:hover{background:#16a34a}
-    .go-btn.stop{background:#ef4444}
-    .go-btn.stop:hover{background:#dc2626}
-    .go-btn:disabled{background:#333;color:#666;cursor:not-allowed}
+    /* VDO.Ninja iframe fills everything */
+    .vdo-frame{position:absolute;inset:0;width:100%;height:100%;border:none;z-index:1;display:none}
 
-    .status{margin-top:16px;font-size:12px;color:#71717a}
-    .status.live{color:#22c55e;font-weight:700}
-    .status.error{color:#ef4444}
+    /* Idle screen before going live */
+    .idle{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a0a0f 0%,#111118 50%,#0d0d14 100%)}
+    .idle.hidden{display:none}
 
-    .tips{margin-top:32px;text-align:left;background:#18181b;border:1px solid #27272a;border-radius:12px;padding:16px}
-    .tips-title{font-size:12px;font-weight:700;color:#a1a1aa;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
-    .tip{font-size:12px;color:#71717a;line-height:1.6;margin-bottom:4px}
-    .tip:last-child{margin-bottom:0}
-    .tip-num{color:#a1a1aa;font-weight:700}
+    .brand{display:flex;align-items:center;gap:16px;margin-bottom:8px}
+    .brand img{height:48px;object-fit:contain}
+    .brand-x{color:#555;font-size:20px;font-weight:300}
+    .reporter-name{font-size:22px;font-weight:700;color:#fafafa;margin-bottom:4px;text-align:center}
+    .reporter-tag{font-size:11px;color:#FF6B1A;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:40px}
 
-    .footer{margin-top:24px;color:#333;font-size:10px}
+    .go-btn{
+      width:140px;height:140px;border-radius:50%;border:4px solid #22c55e;
+      background:radial-gradient(circle,#22c55e 0%,#16a34a 100%);
+      color:#fff;font-size:18px;font-weight:800;cursor:pointer;
+      font-family:inherit;letter-spacing:1px;
+      box-shadow:0 0 40px #22c55e44,0 0 80px #22c55e22;
+      transition:all .2s;display:flex;align-items:center;justify-content:center;
+    }
+    .go-btn:hover{transform:scale(1.05);box-shadow:0 0 60px #22c55e66}
+    .go-btn:active{transform:scale(0.95)}
+
+    .idle-tips{position:absolute;bottom:20px;left:0;right:0;text-align:center;color:#444;font-size:11px}
+
+    /* Live overlay controls */
+    .live-overlay{position:absolute;inset:0;z-index:20;display:none;pointer-events:none}
+    .live-overlay.active{display:block}
+
+    .live-top{position:absolute;top:0;left:0;right:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(180deg,rgba(0,0,0,.7) 0%,transparent 100%);pointer-events:auto}
+    .live-badge-bar{display:flex;align-items:center;gap:10px}
+    .live-dot{width:10px;height:10px;border-radius:50%;background:#ef4444;animation:pulse-dot 1.5s infinite}
+    @keyframes pulse-dot{0%,100%{opacity:1;box-shadow:0 0 8px #ef4444}50%{opacity:.5;box-shadow:0 0 4px #ef4444}}
+    .live-text{font-size:13px;font-weight:800;color:#ef4444;letter-spacing:2px}
+    .live-timer{font-size:12px;color:#aaa;font-weight:600;font-variant-numeric:tabular-nums}
+    .live-brand{display:flex;align-items:center;gap:8px}
+    .live-brand img{height:28px;object-fit:contain}
+    .live-brand-x{color:#555;font-size:14px;font-weight:300}
+
+    .live-bottom{position:absolute;bottom:0;left:0;right:0;padding:16px;display:flex;justify-content:center;align-items:center;background:linear-gradient(0deg,rgba(0,0,0,.7) 0%,transparent 100%);pointer-events:auto}
+    .end-btn{
+      padding:12px 40px;border-radius:30px;border:none;
+      background:#ef4444;color:#fff;font-size:14px;font-weight:800;
+      cursor:pointer;font-family:inherit;letter-spacing:1px;
+      transition:all .2s;
+    }
+    .end-btn:hover{background:#dc2626;transform:scale(1.05)}
+
+    .cam-switch{
+      position:absolute;bottom:16px;right:16px;
+      width:44px;height:44px;border-radius:50%;
+      background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);
+      color:#fff;font-size:20px;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;
+      pointer-events:auto;backdrop-filter:blur(4px);
+    }
+
+    /* End screen */
+    .ended{position:absolute;inset:0;z-index:30;display:none;flex-direction:column;align-items:center;justify-content:center;background:#0a0a0f}
+    .ended.active{display:flex}
+    .ended-icon{font-size:48px;margin-bottom:12px;opacity:.4}
+    .ended-text{font-size:18px;font-weight:700;margin-bottom:4px}
+    .ended-sub{font-size:13px;color:#666;margin-bottom:24px}
+    .restart-btn{padding:10px 24px;border-radius:8px;border:none;background:#22c55e;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="logo"><span class="logo-v">V</span><span class="logo-x">x</span><span class="logo-d">D</span></div>
-    <div class="subtitle">Live Reporter</div>
+  <!-- Rotate message for portrait -->
+  <div class="rotate-msg" id="rotateMsg">
+    <div style="font-size:36px">📱↔️</div>
+    <div>Please rotate your phone to landscape</div>
+  </div>
 
-    <div id="nameDisplay" class="reporter-name"></div>
-    <div class="reporter-badge">FIELD REPORTER</div>
+  <div class="app">
+    <!-- VDO.Ninja iframe -->
+    <iframe id="vdoFrame" class="vdo-frame" allow="camera;microphone;autoplay;display-capture"></iframe>
 
-    <div class="preview-box" id="previewBox">
-      <div class="preview-placeholder" id="placeholder">
-        <div class="cam-icon">📷</div>
-        <span>Tap GO LIVE to start</span>
+    <!-- Idle screen -->
+    <div class="idle" id="idleScreen">
+      <div class="brand">
+        <img src="img/voice.png" alt="VOICE">
+        <span class="brand-x">✕</span>
+        <img src="img/dhuvas.png" alt="DHUVAS" style="height:48px">
       </div>
-      <video id="localVideo" autoplay playsinline muted style="display:none"></video>
-      <iframe id="vdoFrame" style="display:none" allow="camera;microphone;autoplay"></iframe>
+      <div class="reporter-name" id="reporterName">Reporter</div>
+      <div class="reporter-tag">FIELD REPORTER</div>
+      <button class="go-btn" onclick="startLive()">GO LIVE</button>
+      <div class="idle-tips">Hold phone in landscape • Allow camera when asked • Use WiFi for best quality</div>
     </div>
 
-    <button class="go-btn start" id="goBtn" onclick="toggleLive()">GO LIVE</button>
-    <div class="status" id="statusText">Ready to stream</div>
-
-    <div class="tips">
-      <div class="tips-title">Tips</div>
-      <div class="tip"><span class="tip-num">1.</span> Use Chrome browser for best results</div>
-      <div class="tip"><span class="tip-num">2.</span> Allow camera and microphone when asked</div>
-      <div class="tip"><span class="tip-num">3.</span> Hold phone horizontally (landscape) for best quality</div>
-      <div class="tip"><span class="tip-num">4.</span> Stay in a well-lit area</div>
-      <div class="tip"><span class="tip-num">5.</span> Use WiFi if possible, or strong 4G/5G</div>
+    <!-- Live overlay -->
+    <div class="live-overlay" id="liveOverlay">
+      <div class="live-top">
+        <div class="live-badge-bar">
+          <span class="live-dot"></span>
+          <span class="live-text">LIVE</span>
+          <span class="live-timer" id="liveTimer">00:00</span>
+        </div>
+        <div class="live-brand">
+          <img src="img/voice.png" alt="VOICE" style="height:24px">
+          <span class="live-brand-x">✕</span>
+          <img src="img/dhuvas.png" alt="DHUVAS" style="height:24px">
+        </div>
+      </div>
+      <div class="live-bottom">
+        <button class="end-btn" onclick="endLive()">END STREAM</button>
+      </div>
+      <button class="cam-switch" onclick="switchCam()" title="Switch camera">🔄</button>
     </div>
 
-    <div class="footer">VxD Broadcast System</div>
+    <!-- Ended screen -->
+    <div class="ended" id="endedScreen">
+      <div class="ended-icon">✓</div>
+      <div class="ended-text">Stream Ended</div>
+      <div class="ended-sub" id="endedDuration">Duration: 00:00</div>
+      <button class="restart-btn" onclick="restart()">Go Live Again</button>
+    </div>
   </div>
 
   <script>
     const params = new URLSearchParams(window.location.search);
     const streamId = params.get('id') || 'reporter';
-    const reporterName = params.get('name') || 'Reporter';
+    const reporterName = decodeURIComponent(params.get('name') || 'Reporter');
     const room = 'vxdlive';
     const password = 'vxd2026';
 
-    document.getElementById('nameDisplay').textContent = reporterName;
+    document.getElementById('reporterName').textContent = reporterName;
     document.title = 'VxD Live — ' + reporterName;
 
-    let isLive = false;
-
-    function toggleLive() {
-      if (!isLive) {
-        startLive();
-      } else {
-        stopLive();
-      }
-    }
+    let timerInterval = null;
+    let startTime = null;
+    let usingFrontCam = false;
 
     function startLive() {
-      const btn = document.getElementById('goBtn');
-      const status = document.getElementById('statusText');
-      const placeholder = document.getElementById('placeholder');
       const frame = document.getElementById('vdoFrame');
+      const idle = document.getElementById('idleScreen');
+      const overlay = document.getElementById('liveOverlay');
 
-      btn.disabled = true;
-      btn.textContent = 'CONNECTING...';
-      status.textContent = 'Connecting to VxD...';
-      status.className = 'status';
+      // VDO.Ninja URL: back camera (rear), 720p, h264, autostart
+      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=environment&width=1280&height=720&autostart&noaudio=0`;
 
-      // Build VDO.Ninja URL
-      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&autostart`;
-
-      // Load VDO.Ninja in iframe
       frame.src = vdoUrl;
+      frame.classList.add('active');
       frame.style.display = 'block';
-      placeholder.classList.add('hidden');
 
-      // Assume connected after a few seconds
+      // Hide idle, show overlay after brief delay
       setTimeout(() => {
-        btn.disabled = false;
-        btn.textContent = 'END STREAM';
-        btn.className = 'go-btn stop';
-        status.textContent = '● LIVE — Streaming to VxD';
-        status.className = 'status live';
-        isLive = true;
-      }, 3000);
+        idle.classList.add('hidden');
+        overlay.classList.add('active');
+        startTimer();
+      }, 2000);
     }
 
-    function stopLive() {
-      const btn = document.getElementById('goBtn');
-      const status = document.getElementById('statusText');
-      const placeholder = document.getElementById('placeholder');
+    function endLive() {
+      if (!confirm('End the live stream?')) return;
+
       const frame = document.getElementById('vdoFrame');
+      const overlay = document.getElementById('liveOverlay');
+      const ended = document.getElementById('endedScreen');
 
       frame.src = '';
       frame.style.display = 'none';
-      placeholder.classList.remove('hidden');
+      overlay.classList.remove('active');
+      ended.classList.add('active');
 
-      btn.textContent = 'GO LIVE';
-      btn.className = 'go-btn start';
-      status.textContent = 'Stream ended';
-      status.className = 'status';
-      isLive = false;
+      stopTimer();
+      document.getElementById('endedDuration').textContent = 'Duration: ' + document.getElementById('liveTimer').textContent;
     }
+
+    function restart() {
+      document.getElementById('endedScreen').classList.remove('active');
+      document.getElementById('idleScreen').classList.remove('hidden');
+      document.getElementById('liveTimer').textContent = '00:00';
+    }
+
+    function switchCam() {
+      // Toggle camera by reloading with different facing mode
+      usingFrontCam = !usingFrontCam;
+      const frame = document.getElementById('vdoFrame');
+      const facing = usingFrontCam ? 'user' : 'environment';
+      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${facing}&width=1280&height=720&autostart`;
+      frame.src = vdoUrl;
+    }
+
+    function startTimer() {
+      startTime = Date.now();
+      timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+        const s = String(elapsed % 60).padStart(2, '0');
+        document.getElementById('liveTimer').textContent = m + ':' + s;
+      }, 1000);
+    }
+
+    function stopTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+    }
+
+    // Request screen wake lock to prevent sleep
+    async function requestWakeLock() {
+      try { await navigator.wakeLock.request('screen'); } catch (e) {}
+    }
+    requestWakeLock();
+
+    // Lock to landscape if possible
+    try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) {}
   </script>
 </body>
 </html>
