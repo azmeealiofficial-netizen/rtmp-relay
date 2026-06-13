@@ -8,11 +8,14 @@
   <meta name="mobile-web-app-capable" content="yes">
   <title>VxD Live</title>
   <style>
+    @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
+    @font-face{font-family:'MvEamaan';src:url('fonts/Mv_Eamaan_XP.otf') format('opentype')}
     *{margin:0;padding:0;box-sizing:border-box}
     html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Inter',system-ui,-apple-system,sans-serif;color:#fff;touch-action:manipulation}
 
     /* Force landscape hint */
     .rotate-msg{display:none;position:fixed;inset:0;background:#000;z-index:9999;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-size:16px;gap:12px}
+    .rotate-msg span{font-family:'MvEamaan','MVWaheed',sans-serif;font-size:20px;direction:rtl}
     @media(orientation:portrait){.rotate-msg{display:flex}}
 
     .app{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000}
@@ -88,7 +91,7 @@
   <!-- Rotate message for portrait -->
   <div class="rotate-msg" id="rotateMsg">
     <div style="font-size:36px">📱↔️</div>
-    <div>Please rotate your phone to landscape</div>
+    <span>ލައިވް ކުރަން ފެށުމަށް ފޯނު އަނބުރާލާ</span>
   </div>
 
   <div class="app">
