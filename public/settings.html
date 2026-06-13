@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>VxD Settings</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',system-ui,sans-serif;background:#0a0a0f;color:#e5e5e5;min-height:100vh}
+    :root{--card:#141420;--bdr:#2a2a3a;--t1:#e5e5e5;--t2:#888;--red:#dc2626;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b}
+    .ctr{max-width:480px;margin:0 auto;padding:16px}
+    .hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #1a1a2a}
+    .hdr-logo{font-size:20px;font-weight:900;letter-spacing:-0.5px}
+    .hdr-logo .l{color:#666;font-size:12px;font-weight:400;margin-left:8px}
+    .back{background:none;border:1px solid var(--bdr);border-radius:6px;padding:6px 14px;color:var(--t2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none}
+    .section{background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:20px;margin-bottom:16px}
+    .section-t{font-size:14px;font-weight:800;margin-bottom:4px}
+    .section-d{font-size:12px;color:#666;margin-bottom:16px}
+    .fld{width:100%;padding:12px 14px;background:#0a0a12;border:1px solid #2a2a3a;border-radius:8px;color:#fff;font-size:13px;outline:none;font-family:'Inter',monospace;margin-bottom:8px}
+    .fld::placeholder{color:#444}.fld:focus{border-color:#555}
+    .hint{color:#555;font-size:11px;margin-bottom:14px}
+    .btn{width:100%;padding:12px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#fff}
+    .btn.primary{background:var(--blu)}
+    .btn.danger{background:var(--red);margin-top:8px}
+    .status{padding:10px 14px;border-radius:8px;font-size:12px;font-weight:600;margin-top:12px;display:none}
+    .status.ok{background:#0a2e1a;border:1px solid #22c55e33;color:var(--grn);display:block}
+    .status.err{background:#2d1215;border:1px solid #ef444444;color:#fca5a5;display:block}
+    .current{background:#0a0a12;border:1px solid #1a1a2a;border-radius:8px;padding:10px 14px;margin-bottom:14px}
+    .current-l{font-size:10px;color:#555;font-weight:600;letter-spacing:.5px;margin-bottom:4px}
+    .current-v{font-size:12px;color:#888;font-family:monospace;word-break:break-all}
+    .current-v.none{color:#555;font-style:italic}
+  </style>
+</head>
+<body>
+  <div class="ctr">
+    <div class="hdr">
+      <div class="hdr-logo"><span style="color:var(--red)">V</span><span style="color:var(--amb)">x</span><span style="color:var(--grn)">D</span><span class="l">Settings</span></div>
+      <a href="/" class="back">← Back</a>
+    </div>
+
+    <div class="section">
+      <div class="section-t">vMix Connection</div>
+      <div class="section-d">Enter the ngrok URL to connect to vMix remotely</div>
+      
+      <div class="current">
+        <div class="current-l">CURRENT CONNECTION</div>
+        <div id="currentUrl" class="current-v none">Not configured</div>
+      </div>
+
+      <input type="text" id="urlInput" class="fld" placeholder="https://reprint-cabbage-bonding.ngrok-free.dev">
+      <div class="hint">Run <strong>ngrok http 8088</strong> on the vMix PC and paste the URL here</div>
+      <button class="btn primary" onclick="saveUrl()">Save & Connect</button>
+      <button class="btn danger" onclick="clearUrl()">Disconnect</button>
+      <div id="status" class="status"></div>
+    </div>
+  </div>
+
+  <script>
+    // Load current URL
+    fetch('/api/get-vmix-url').then(r=>r.json()).then(d=>{
+      if(d.url){
+        document.getElementById('currentUrl').textContent=d.url;
+        document.getElementById('currentUrl').className='current-v';
+        document.getElementById('urlInput').value=d.url;
+      }
+    });
+
+    async function saveUrl(){
+      let u=document.getElementById('urlInput').value.trim().replace(/\/$/,'');
+      if(!u){showStatus('Enter a URL','err');return;}
+      if(!u.startsWith('http'))u='https://'+u;
+      
+      try{
+        await fetch('/api/set-vmix-url',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u})});
+        
+        // Test connection
+        const r=await fetch('/api/vmix');
+        if(r.ok){
+          document.getElementById('currentUrl').textContent=u;
+          document.getElementById('currentUrl').className='current-v';
+          showStatus('Connected to vMix!','ok');
+        }else{
+          document.getElementById('currentUrl').textContent=u;
+          document.getElementById('currentUrl').className='current-v';
+          showStatus('URL saved but cannot reach vMix. Check ngrok is running.','err');
+        }
+      }catch(e){
+        showStatus('Failed to save: '+e.message,'err');
+      }
+    }
+
+    async function clearUrl(){
+      await fetch('/api/set-vmix-url',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:''})});
+      document.getElementById('currentUrl').textContent='Not configured';
+      document.getElementById('currentUrl').className='current-v none';
+      document.getElementById('urlInput').value='';
+      showStatus('Disconnected','ok');
+    }
+
+    function showStatus(msg,type){
+      const el=document.getElementById('status');
+      el.textContent=msg;
+      el.className='status '+type;
+    }
+  </script>
+</body>
+</html>

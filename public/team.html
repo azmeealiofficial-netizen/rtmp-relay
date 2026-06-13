@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>VxD Control — Team</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',system-ui,sans-serif;background:#0a0a0f;color:#e5e5e5;min-height:100vh}
+    :root{--card:#141420;--bdr:#2a2a3a;--t1:#e5e5e5;--t2:#888;--red:#dc2626;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b}
+    .ctr{max-width:480px;margin:0 auto;padding:16px}
+    .mid{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+    .logo{font-size:32px;font-weight:900;letter-spacing:-1px}.logo .v{color:var(--red)}.logo .x{color:var(--amb)}.logo .d{color:var(--grn)}
+    .hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #1a1a2a}
+    .hdr-logo{font-size:20px;font-weight:900}.hdr-logo .l{color:#666;font-size:12px;font-weight:400;margin-left:8px}
+    .tbdg{background:#3b82f622;color:var(--blu);font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:1px;margin-left:6px}
+    .st{display:flex;align-items:center;gap:6px}
+    .dot{width:8px;height:8px;border-radius:50%;display:inline-block}.dot.on{background:var(--grn);box-shadow:0 0 8px var(--grn)}.dot.off{background:var(--red)}
+    .st-l{font-size:11px;font-weight:600}
+    .nav{display:flex;gap:4px;margin-bottom:16px}
+    .nav a{flex:1;text-align:center;padding:8px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;color:#888;background:var(--card);border:1px solid var(--bdr)}
+    .nav a.act{color:#fff;background:var(--blu);border-color:var(--blu)}
+    .err-b{background:#2d1215;border:1px solid #ef444444;border-radius:8px;padding:10px 14px;color:#fca5a5;font-size:12px;margin-bottom:16px}
+    .noconf{background:#2d1215;border:1px solid #ef444444;border-radius:10px;padding:20px;text-align:center;color:#fca5a5;font-size:13px;margin-top:30vh}
+    .preview-box{background:#000;border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:16px;position:relative}
+    .preview-box img{width:100%;display:block;min-height:120px;object-fit:contain;background:#000}
+    .preview-label{position:absolute;top:8px;left:10px;background:var(--red);color:#fff;font-size:9px;font-weight:800;padding:2px 8px;border-radius:4px;letter-spacing:1px}
+    .preview-off{width:100%;height:180px;display:flex;align-items:center;justify-content:center;color:#444;font-size:12px}
+    .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
+    .stat{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:10px;text-align:center}
+    .stat-l{color:var(--t2);font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:3px}
+    .stat-v{font-size:20px;font-weight:800}.stat-v.g{color:var(--grn)}.stat-v.w{color:var(--amb)}.stat-v.b{color:var(--red)}.stat-u{font-size:11px;color:var(--t2)}
+    .sh{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .st-t{color:#888;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+    .sb{display:flex;gap:6px}
+    .sm{border:none;border-radius:5px;padding:4px 12px;font-size:10px;font-weight:700;cursor:pointer;color:#fff;font-family:inherit}.sm.g{background:var(--grn)}.sm.r{background:var(--red)}
+    .stms{display:flex;flex-direction:column;gap:5px;margin-bottom:16px}
+    .stm{border-radius:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--bdr)}
+    .stm.on{background:linear-gradient(135deg,#0a2e1a,#0d3320);border-color:#22c55e44}.stm.off{background:var(--card)}
+    .stm-i{display:flex;align-items:center;gap:8px}.stm-n{font-size:13px;font-weight:600}
+    .ltag{background:#22c55e22;color:var(--grn);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;letter-spacing:1px}
+    .stm-b{border:none;border-radius:6px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;color:#fff;font-family:inherit}.stm-b.go{background:var(--grn)}.stm-b.no{background:var(--red)}
+    .inps{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:16px}
+    .inp{border:1px solid var(--bdr);border-radius:10px;padding:9px;text-align:center;position:relative;background:var(--card)}
+    .inp.pgm{background:linear-gradient(135deg,#7f1d1d,#991b1b);border-color:var(--red)}.inp.prv{background:linear-gradient(135deg,#78350f,#92400e);border-color:var(--amb)}
+    .inp-bd{position:absolute;top:4px;right:5px;font-size:7px;font-weight:800;padding:1px 4px;border-radius:3px;letter-spacing:1px;color:#fff}.inp-bd.pgm{background:var(--red)}.inp-bd.prv{background:var(--amb);color:#000}
+    .inp-t{font-size:10px;font-weight:700;margin-bottom:5px;min-height:26px;display:flex;align-items:center;justify-content:center;word-break:break-word}
+    .inp-bs{display:flex;gap:3px}
+    .inp-b{flex:1;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 0;font-size:9px;font-weight:600;cursor:pointer;font-family:inherit;color:#ccc;background:rgba(255,255,255,0.08)}.inp-b.cut{background:var(--red);color:#fff;border:none}
+    .trs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:16px}
+    .tr{border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;color:#fff;font-family:inherit;letter-spacing:1px}.tr.c{background:var(--red)}.tr.f{background:var(--blu)}.tr.t{background:#333}
+    .ovs{display:flex;flex-direction:column;gap:5px;margin-bottom:16px}
+    .ov{border:1px solid var(--bdr);border-radius:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;background:var(--card)}.ov.on{background:linear-gradient(135deg,#1e3a5f,#1e40af);border-color:#3b82f644}
+    .ov-n{font-size:13px;font-weight:600}
+    .tog{width:38px;height:20px;border-radius:10px;position:relative;transition:background .2s}.tog.on{background:var(--blu)}.tog.off{background:#555}
+    .tog-t{width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;transition:left .2s}.tog-t.on{left:20px}.tog-t.off{left:2px}
+    .ftr{text-align:center;padding:12px 0;border-top:1px solid #1a1a2a}.ftr-t{color:#444;font-size:10px}
+  </style>
+</head>
+<body>
+  <div id="loadScreen" class="mid"><div style="text-align:center"><div class="logo"><span class="v">V</span><span class="x">x</span><span class="d">D</span></div><div style="color:#666;font-size:13px;margin-top:12px">Connecting...</div></div></div>
+  <div id="noConfig" style="display:none" class="ctr"><div class="noconf">Admin has not configured the vMix connection yet.</div></div>
+
+  <div id="panel" class="ctr" style="display:none">
+    <div class="hdr">
+      <div class="hdr-logo"><span class="v">V</span><span class="x">x</span><span class="d">D</span><span class="l">Control</span><span class="tbdg">TEAM</span></div>
+      <div class="st"><span id="sDot" class="dot off"></span><span id="sTxt" class="st-l" style="color:var(--red)">OFFLINE</span></div>
+    </div>
+    <div class="nav"><a href="/">Control</a><a href="/relay">Relay</a><a href="/team" class="act">Team</a></div>
+    <div id="errBox" class="err-b" style="display:none"></div>
+    <div id="previewBox" class="preview-box" style="display:none"><span class="preview-label">PROGRAM</span><img id="previewImg" src=""></div>
+    <div id="previewOff" class="preview-box"><div class="preview-off">No live preview</div></div>
+    <div class="stats"><div class="stat"><div class="stat-l">FPS</div><div id="xFps" class="stat-v g">—</div></div><div class="stat"><div class="stat-l">Streams</div><div id="xStr" class="stat-v g">0<span class="stat-u">/5</span></div></div><div class="stat"><div class="stat-l">Status</div><div id="xAir" class="stat-v w">OFF</div></div></div>
+    <div class="sh"><h3 class="st-t">Streams</h3><div class="sb"><button class="sm g" onclick="cmd('StartStreaming')">START ALL</button><button class="sm r" onclick="cmd('StopStreaming')">STOP ALL</button></div></div>
+    <div id="stList" class="stms"></div>
+    <div class="sh"><h3 class="st-t">Sources</h3></div>
+    <div id="inGrid" class="inps"></div>
+    <div class="trs"><button class="tr c" onclick="cmd('Cut')">CUT</button><button class="tr f" onclick="cmd('Fade','Duration=500')">FADE</button><button class="tr t" onclick="cmd('FadeToBlack')">FTB</button></div>
+    <div class="sh"><h3 class="st-t">Overlays</h3></div>
+    <div id="ovList" class="ovs"></div>
+    <div class="ftr"><div id="fTxt" class="ftr-t">VxD Team Access</div></div>
+  </div>
+
+  <script>
+    const SN=['VOICE Facebook','Dhuvas Facebook','VOICE YouTube','Dhuvas TikTok','VOICE TikTok'];
+    const ON=['OV1 — VOICE Logo','OV2 — VOICE Lower Third','OV3 — Dhuvas Logo','OV4 — Dhuvas Lower Third'];
+    let poll=null,pp=null,s={connected:false,active:null,preview:null,inputs:[],overlays:{1:false,2:false,3:false,4:false},streams:[false,false,false,false,false],fps:'—',isLive:false};
+
+    async function init(){try{const r=await fetch('/api/get-vmix-url');const d=await r.json();if(d.url){document.getElementById('loadScreen').style.display='none';document.getElementById('panel').style.display='block';pollStatus();poll=setInterval(pollStatus,3000);pp=setInterval(updatePreview,3000);}else{document.getElementById('loadScreen').style.display='none';document.getElementById('noConfig').style.display='block';}}catch(e){document.getElementById('loadScreen').style.display='none';document.getElementById('noConfig').style.display='block';}}
+    init();
+
+    async function cmd(f,p=''){try{await fetch(`/api/vmix-cmd?Function=${f}${p?'&'+p:''}`);setTimeout(pollStatus,500);}catch(e){}}
+    async function pollStatus(){try{const r=await fetch('/api/vmix');if(!r.ok)throw 0;parseXML(await r.text());showErr('');}catch(e){s.connected=false;render();showErr('Broadcast system may be offline.');}}
+
+    function parseXML(x){try{const d=new DOMParser().parseFromString(x,'text/xml'),v=d.querySelector('vmix');if(!v)return;s.inputs=Array.from(d.querySelectorAll('inputs > input')).map((n,i)=>({number:n.getAttribute('number')||String(i+1),title:n.getAttribute('title')||'Input '+(i+1)}));const a=v.querySelector('active'),p=v.querySelector('preview');s.active=a?a.textContent:null;s.preview=p?p.textContent:null;s.overlays={1:false,2:false,3:false,4:false};d.querySelectorAll('overlays > overlay').forEach(n=>{const num=parseInt(n.getAttribute('number'));if(n.textContent&&n.textContent.trim()!=='')s.overlays[num]=true;});const st=v.querySelector('streaming');if(st){s.streams[0]=st.textContent==='True';s.isLive=st.textContent==='True';}const f=v.querySelector('fps');s.fps=f?parseFloat(f.textContent).toFixed(1):'—';s.connected=true;render();}catch(e){}}
+
+    function updatePreview(){if(!s.isLive){document.getElementById('previewBox').style.display='none';document.getElementById('previewOff').style.display='block';return;}document.getElementById('previewOff').style.display='none';document.getElementById('previewBox').style.display='block';document.getElementById('previewImg').src='/api/vmix-preview?t='+Date.now();}
+
+    function render(){document.getElementById('sDot').className='dot '+(s.connected?'on':'off');document.getElementById('sTxt').style.color=s.connected?'var(--grn)':'var(--red)';document.getElementById('sTxt').textContent=s.connected?'CONNECTED':'OFFLINE';const fE=document.getElementById('xFps');fE.textContent=s.fps;const fN=parseFloat(s.fps);fE.className='stat-v '+(fN>=24?'g':fN>=20?'w':'b');const ac=s.streams.filter(Boolean).length;document.getElementById('xStr').innerHTML=ac+'<span class="stat-u">/5</span>';const air=document.getElementById('xAir');air.textContent=ac>0?'ON AIR':'OFF';air.className='stat-v '+(ac>0?'g':'w');
+    document.getElementById('stList').innerHTML=SN.map((n,i)=>{const o=s.streams[i];return`<div class="stm ${o?'on':'off'}"><div class="stm-i"><span class="dot ${o?'on':'off'}"></span><span class="stm-n">${n}</span>${o?'<span class="ltag">LIVE</span>':''}</div><button class="stm-b ${o?'no':'go'}" onclick="togS(${i})">${o?'STOP':'START'}</button></div>`;}).join('');
+    const inp=s.inputs.length>0?s.inputs:[1,2,3,4,5,6,7,8].map(n=>({number:String(n),title:'Input '+n}));document.getElementById('inGrid').innerHTML=inp.map(i=>{const isA=String(s.active)===String(i.number),isP=String(s.preview)===String(i.number);let c='inp';if(isA)c+=' pgm';else if(isP)c+=' prv';let b='';if(isA)b='<div class="inp-bd pgm">PGM</div>';else if(isP)b='<div class="inp-bd prv">PRV</div>';let t=i.title;if(t.length>16)t=t.substring(0,14)+'…';return`<div class="${c}">${b}<div class="inp-t">${t}</div><div class="inp-bs"><button class="inp-b" onclick="cmd('PreviewInput','Input=${i.number}')">PRV</button><button class="inp-b cut" onclick="cmd('Cut','Input=${i.number}')">CUT</button></div></div>`;}).join('');
+    document.getElementById('ovList').innerHTML=ON.map((n,i)=>{const num=i+1,o=s.overlays[num];return`<div class="ov ${o?'on':''}" onclick="togO(${num})"><span class="ov-n">${n}</span><div class="tog ${o?'on':'off'}"><div class="tog-t ${o?'on':'off'}"></div></div></div>`;}).join('');
+    document.getElementById('fTxt').textContent='VxD Team • '+new Date().toLocaleTimeString();}
+    function togS(i){cmd(s.streams[i]?'StopStreaming':'StartStreaming','Value='+i);s.streams[i]=!s.streams[i];render();}
+    function togO(n){cmd(s.overlays[n]?'OverlayInput'+n+'Off':'OverlayInput'+n+'In');s.overlays[n]=!s.overlays[n];render();}
+    function showErr(m){const e=document.getElementById('errBox');if(m){e.textContent=m;e.style.display='block';}else e.style.display='none';}
+  </script>
+</body>
+</html>

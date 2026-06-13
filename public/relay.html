@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>VxD Relay</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',system-ui,sans-serif;background:#0a0a0f;color:#e5e5e5;min-height:100vh}
+    :root{--card:#141420;--bdr:#2a2a3a;--t1:#e5e5e5;--t2:#888;--red:#dc2626;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b}
+    .ctr{max-width:480px;margin:0 auto;padding:16px}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+    .hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #1a1a2a}
+    .hdr-logo{font-size:20px;font-weight:900}.hdr-logo .l{color:#666;font-size:12px;font-weight:400;margin-left:8px}
+    .nav{display:flex;gap:4px;margin-bottom:16px}
+    .nav a{flex:1;text-align:center;padding:8px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;color:#888;background:var(--card);border:1px solid var(--bdr)}
+    .nav a.act{color:#fff;background:var(--blu);border-color:var(--blu)}
+    .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px}
+    .stat{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:14px;text-align:center}
+    .stat-l{color:var(--t2);font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
+    .stat-v{font-size:24px;font-weight:900}.stat-v.g{color:var(--grn)}
+    .stat-u{font-size:12px;color:#555;font-weight:400}
+    .st-t{color:#888;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px}
+    .feed-card{background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:8px}
+    .feed-card.live{border-color:#22c55e33;background:linear-gradient(135deg,#0a1a14,#0d2818)}
+    .feed-hdr{padding:10px 14px;display:flex;justify-content:space-between;align-items:center}
+    .feed-info{display:flex;align-items:center;gap:8px}
+    .dot{width:8px;height:8px;border-radius:50%;display:inline-block}.dot.on{background:var(--grn);box-shadow:0 0 8px var(--grn)}.dot.off{background:#555}
+    .feed-name{font-size:13px;font-weight:700}
+    .feed-key{font-size:10px;color:#555}
+    .live-badge{background:#22c55e18;border:1px solid #22c55e33;color:var(--grn);font-size:9px;font-weight:800;padding:3px 8px;border-radius:4px;letter-spacing:1.5px;animation:pulse 2s infinite}
+    .off-badge{color:#555;font-size:9px;font-weight:700;letter-spacing:1px}
+    .feed-preview{background:#000;width:100%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center}
+    .feed-preview video{width:100%;height:100%;object-fit:contain;background:#000}
+    .feed-preview-off{color:#333;font-size:11px}
+    .feed-urls{padding:8px 14px}
+    .url-row{margin-bottom:6px}.url-row:last-child{margin-bottom:0}
+    .url-label{font-size:9px;color:#555;font-weight:600;letter-spacing:.5px;margin-bottom:3px}
+    .url-box{display:flex;align-items:center;gap:4px;background:#0a0a12;border-radius:5px;padding:6px 8px;border:1px solid #1a1a2a}
+    .url-text{flex:1;font-size:10px;color:#777;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace}
+    .copy-btn{background:#333;color:#fff;border:none;border-radius:3px;padding:3px 8px;font-size:9px;font-weight:600;cursor:pointer;min-width:40px;font-family:inherit}
+    .copy-btn.ok{background:var(--grn)}
+    .ftr{text-align:center;padding:16px 0;border-top:1px solid #1a1a2a}.ftr-t{color:#333;font-size:10px}
+  </style>
+</head>
+<body>
+  <div class="ctr">
+    <div class="hdr">
+      <div class="hdr-logo"><span style="color:var(--red)">V</span><span style="color:var(--amb)">x</span><span style="color:var(--grn)">D</span><span class="l">Relay</span></div>
+    </div>
+
+    <div class="nav"><a href="/">Control</a><a href="/relay" class="act">Relay</a><a href="/team">Team</a></div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-l">LIVE FEEDS</div><div id="liveCount" class="stat-v g">0<span class="stat-u">/4</span></div></div>
+      <div class="stat"><div class="stat-l">SERVER</div><div id="srvStatus" class="stat-v g">—</div></div>
+    </div>
+
+    <div class="st-t">STREAM CHANNELS</div>
+    <div id="feedList"></div>
+
+    <div class="ftr"><div class="ftr-t">VxD Relay • RTMP Server on Railway</div></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+  <script>
+    const RTMP_HOST='acela.proxy.rlwy.net:15678';
+    const HLS_HOST=window.location.origin;
+    const FEEDS=[
+      {key:'liveu',name:'LiveU Solo'},
+      {key:'phone1',name:'Reporter 1'},
+      {key:'phone2',name:'Reporter 2'},
+      {key:'mdp',name:'MDP Feed'}
+    ];
+    let liveFeeds={};
+    let hlsPlayers={};
+
+    async function pollFeeds(){
+      try{
+        const r=await fetch('/api/relay-stats');if(!r.ok)throw 0;
+        const t=await r.text();
+        const d=new DOMParser().parseFromString(t,'text/xml');
+        const streams=d.querySelectorAll('stream');
+        const newLive={};
+        streams.forEach(st=>{
+          const name=st.querySelector('name');
+          if(name)newLive[name.textContent]=true;
+        });
+        const changed=JSON.stringify(newLive)!==JSON.stringify(liveFeeds);
+        liveFeeds=newLive;
+        const count=Object.keys(liveFeeds).length;
+        document.getElementById('liveCount').innerHTML=count+'<span class="stat-u">/'+FEEDS.length+'</span>';
+        document.getElementById('srvStatus').textContent='ONLINE';
+        document.getElementById('srvStatus').style.color='var(--grn)';
+        if(changed)renderFeeds();
+      }catch(e){
+        document.getElementById('srvStatus').textContent='OFFLINE';
+        document.getElementById('srvStatus').style.color='var(--red)';
+      }
+    }
+
+    function renderFeeds(){
+      document.getElementById('feedList').innerHTML=FEEDS.map(f=>{
+        const isLive=!!liveFeeds[f.key];
+        const rtmpUrl=`rtmp://${RTMP_HOST}/live/${f.key}`;
+        const hlsUrl=`${HLS_HOST}/hls/${f.key}.m3u8`;
+        return `
+          <div class="feed-card ${isLive?'live':''}">
+            <div class="feed-hdr">
+              <div class="feed-info">
+                <span class="dot ${isLive?'on':'off'}"></span>
+                <div><span class="feed-name">${f.name}</span> <span class="feed-key">/${f.key}</span></div>
+              </div>
+              ${isLive?'<span class="live-badge">● LIVE</span>':'<span class="off-badge">OFFLINE</span>'}
+            </div>
+            <div class="feed-preview" id="preview-${f.key}">
+              ${isLive?`<video id="vid-${f.key}" muted autoplay playsinline></video>`:'<span class="feed-preview-off">No feed</span>'}
+            </div>
+            <div class="feed-urls">
+              <div class="url-row">
+                <div class="url-label">RTMP PUSH (give to source)</div>
+                <div class="url-box">
+                  <span class="url-text">${rtmpUrl}</span>
+                  <button class="copy-btn" onclick="copyUrl(this,'${rtmpUrl}')">COPY</button>
+                </div>
+              </div>
+              <div class="url-row">
+                <div class="url-label">vMix PULL (HLS)</div>
+                <div class="url-box">
+                  <span class="url-text">${hlsUrl}</span>
+                  <button class="copy-btn" onclick="copyUrl(this,'${hlsUrl}')">COPY</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      FEEDS.forEach(f=>{
+        if(liveFeeds[f.key]){
+          const vid=document.getElementById('vid-'+f.key);
+          if(vid&&!hlsPlayers[f.key]){
+            const hlsUrl=`${HLS_HOST}/hls/${f.key}.m3u8`;
+            if(Hls.isSupported()){
+              const hls=new Hls({liveSyncDuration:2,liveMaxLatencyDuration:5,maxBufferLength:3,maxMaxBufferLength:5,startLevel:-1,capLevelToPlayerSize:true});
+              hls.loadSource(hlsUrl);
+              hls.attachMedia(vid);
+              hls.on(Hls.Events.MANIFEST_PARSED,()=>{vid.play().catch(()=>{});});
+              hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal){hls.destroy();delete hlsPlayers[f.key];}});
+              hlsPlayers[f.key]=hls;
+            }else if(vid.canPlayType('application/vnd.apple.mpegurl')){
+              vid.src=hlsUrl;vid.play().catch(()=>{});
+            }
+          }
+        }else{
+          if(hlsPlayers[f.key]){hlsPlayers[f.key].destroy();delete hlsPlayers[f.key];}
+        }
+      });
+    }
+
+    function copyUrl(btn,text){navigator.clipboard.writeText(text);btn.textContent='✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent='COPY';btn.classList.remove('ok');},2000);}
+
+    renderFeeds();
+    pollFeeds();
+    setInterval(pollFeeds,5000);
+  </script>
+</body>
+</html>
