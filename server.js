@@ -50,7 +50,7 @@ app.get('/api/vmix-cmd', async (req, res) => {
 // Get NGINX-RTMP stats
 app.get('/api/relay-stats', async (req, res) => {
   try {
-    const response = await fetch('http://127.0.0.1:8888/stat.xml');
+    const response = await fetch('http://127.0.0.1:8080/stat.xml');
     const text = await response.text();
     res.set('Content-Type', 'text/xml');
     res.send(text);
