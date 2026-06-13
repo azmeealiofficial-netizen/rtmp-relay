@@ -266,6 +266,7 @@
 
     <div class="main">
       <div class="sec-hdr"><span class="sec-title">Live Feeds</span></div>
+      <div id="reporterFeeds" class="feeds-grid" style="margin-bottom:12px"></div>
       <div id="feedList" class="feeds-grid"></div>
       <div class="footer"><span class="footer-text" id="fTxt">VxD Broadcast Control</span></div>
     </div>
@@ -276,10 +277,6 @@
     const RTMP_HOST='acela.proxy.rlwy.net:15678';
     const HLS_HOST=window.location.origin;
     const FEEDS=[
-      {key:'phone1',name:'Phone 1'},
-      {key:'phone2',name:'Phone 2'},
-      {key:'phone3',name:'Phone 3'},
-      {key:'phone4',name:'Phone 4'},
       {key:'liveu',name:'LiveU'},
       {key:'yolo',name:'Yolo'}
     ];
@@ -476,33 +473,40 @@
     let reporters = JSON.parse(localStorage.getItem('vxd_reporters')||'[]');
 
     function renderReporters(){
+      // Sidebar list
       const el=document.getElementById('frSlots');
-      if(reporters.length===0){el.innerHTML='<div style="color:var(--t3);font-size:11px;text-align:center;padding:8px">No reporters added yet</div>';return;}
-      el.innerHTML=reporters.map((r,i)=>{
-        const streamId=r.id;
-        const sendUrl=`https://vdo.ninja/?push=${streamId}&room=${VDO_ROOM}&password=${VDO_PASS}&quality=1&codec=h264&label=${encodeURIComponent(r.name)}`;
-        const viewUrl=`https://vdo.ninja/?view=${streamId}&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0`;
-        const brandedUrl=`${window.location.origin}/go?id=${streamId}&name=${encodeURIComponent(r.name)}`;
+      if(reporters.length===0){el.innerHTML='<div style="color:var(--t3);font-size:11px;text-align:center;padding:8px">No reporters yet</div>';} 
+      else{
+        el.innerHTML=reporters.map((r,i)=>{
+          const brandedUrl=`${window.location.origin}/go?id=${r.id}&name=${encodeURIComponent(r.name)}`;
+          return `<div class="fr-slot"><div class="fr-slot-hdr"><span class="fr-slot-name">${r.name}</span><button class="fr-slot-rm" onclick="removeReporter(${i})" title="Remove">✕</button></div><div class="fr-url-box"><span class="fr-url-text">${brandedUrl}</span><button class="fr-share" onclick="shareLink('${brandedUrl}','${r.name}')">Share</button><button class="fr-copy" onclick="copyFr(this,'${brandedUrl}')">Copy</button></div></div>`;
+        }).join('');
+      }
+
+      // Main area feed cards
+      const grid=document.getElementById('reporterFeeds');
+      grid.innerHTML=reporters.map(r=>{
+        const viewUrl=`https://vdo.ninja/?view=${r.id}&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0`;
+        const vmixUrl=viewUrl;
         return `
-          <div class="fr-slot">
-            <div class="fr-slot-hdr">
-              <span class="fr-slot-name">${r.name}</span>
-              <button class="fr-slot-rm" onclick="removeReporter(${i})" title="Remove">✕</button>
-            </div>
-            <div class="fr-urls">
-              <div class="fr-url-row">
-                <span class="fr-url-label">SEND TO REPORTER (share this link)</span>
-                <div class="fr-url-box">
-                  <span class="fr-url-text">${brandedUrl}</span>
-                  <button class="fr-share" onclick="shareLink('${brandedUrl}','${r.name}')">Share</button>
-                  <button class="fr-copy" onclick="copyFr(this,'${brandedUrl}')">Copy</button>
-                </div>
+          <div class="feed-card" id="rcard-${r.id}">
+            <div class="feed-header">
+              <div class="feed-left">
+                <span class="stream-dot off" id="rdot-${r.id}"></span>
+                <span class="feed-name">${r.name}</span>
+                <span class="feed-key" style="color:var(--blu)">WebRTC</span>
               </div>
-              <div class="fr-url-row">
-                <span class="fr-url-label">vMix INPUT (Web Browser → 1920x1080)</span>
-                <div class="fr-url-box">
-                  <span class="fr-url-text">${viewUrl}</span>
-                  <button class="fr-copy" onclick="copyFr(this,\`${viewUrl}\`)">Copy</button>
+              <span class="feed-badge off" id="rbadge-${r.id}">STANDBY</span>
+            </div>
+            <div class="feed-video">
+              <iframe id="rvid-${r.id}" src="${viewUrl}" allow="autoplay" style="width:100%;height:100%;border:none;background:#000"></iframe>
+            </div>
+            <div class="feed-urls">
+              <div class="feed-url-row">
+                <span class="feed-url-label">vMix INPUT (Web Browser → 1920x1080)</span>
+                <div class="feed-url-box">
+                  <span class="feed-url-text">${vmixUrl}</span>
+                  <button class="copy-btn" onclick="copyUrl(this,\`${vmixUrl}\`)">Copy</button>
                 </div>
               </div>
             </div>
