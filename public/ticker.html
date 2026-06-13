@@ -20,58 +20,65 @@
     bottom: 0;
     left: 0;
     right: 0;
+    display: flex;
+    flex-direction: column;
+    transition: opacity 0.5s ease, transform 0.4s ease;
+    transform: translateY(0);
+  }
+
+  .ticker-wrap.hidden {
+    opacity: 0;
+    transform: translateY(100%);
+    pointer-events: none;
+  }
+
+  .ticker-stripe {
+    height: 4px;
+    background: linear-gradient(90deg, #ef4444 30%, #f59e0b 100%);
+  }
+
+  .ticker-bar {
     height: 64px;
-    background: linear-gradient(180deg, #0d0d1aee 0%, #0a0a12f5 100%);
-    border-top: 3px solid #ef4444;
     display: flex;
     align-items: center;
-    overflow: hidden;
     direction: rtl;
-    transition: opacity 0.5s ease;
   }
 
   .ticker-label {
     background: #ef4444;
     color: #fff;
     font-family: 'MVWaheed', 'Segoe UI', Arial, sans-serif;
-    font-size: 24px;
-    font-weight: 700;
-    padding: 0 24px;
+    font-size: 28px;
+    padding: 0 28px;
     height: 100%;
     display: flex;
     align-items: center;
     white-space: nowrap;
-    z-index: 2;
-    position: relative;
+    letter-spacing: 0.5px;
     direction: rtl;
+    min-width: 180px;
+    justify-content: center;
   }
 
-  .ticker-label::after {
-    content: '';
-    position: absolute;
-    left: -28px;
-    top: 0;
-    width: 0;
-    height: 0;
-    border-top: 32px solid transparent;
-    border-bottom: 32px solid transparent;
-    border-right: 28px solid #ef4444;
-  }
-
-  .ticker-content {
+  .ticker-body {
+    background: #1a1a2e;
     flex: 1;
+    height: 100%;
+    display: flex;
+    align-items: center;
     overflow: hidden;
-    padding-right: 36px;
     direction: rtl;
+    border-left: 4px solid #f59e0b;
   }
 
   .ticker-text {
     display: inline-block;
     white-space: nowrap;
     font-family: 'MvEamaan', 'Segoe UI', Arial, sans-serif;
-    font-size: 26px;
+    font-size: 30px;
     color: #ffffff;
     line-height: 64px;
+    padding-right: 24px;
     animation: scroll-rtl linear infinite;
     padding-right: 100%;
   }
@@ -81,26 +88,30 @@
     100% { transform: translateX(100%); }
   }
 
-  .ticker-wrap.hidden { opacity: 0; pointer-events: none; }
-
   .ticker-text.static {
     animation: none;
-    padding-right: 0;
-    text-align: center;
+    padding-right: 24px;
     width: 100%;
   }
 
-  .ticker-wrap.ltr { direction: ltr; }
-  .ticker-wrap.ltr .ticker-label { direction: ltr; }
-  .ticker-wrap.ltr .ticker-label::after {
-    left: auto; right: -28px;
-    border-right: none; border-left: 28px solid #ef4444;
-  }
-  .ticker-wrap.ltr .ticker-content { direction: ltr; padding-right: 0; padding-left: 36px; }
+  /* LTR mode for English */
+  .ticker-wrap.ltr .ticker-bar { direction: ltr; }
+  .ticker-wrap.ltr .ticker-label { direction: ltr; font-family: 'Segoe UI', Arial, sans-serif; font-weight: 800; }
+  .ticker-wrap.ltr .ticker-body { direction: ltr; border-left: none; border-right: 4px solid #f59e0b; }
   .ticker-wrap.ltr .ticker-text {
-    padding-right: 0; padding-left: 100%;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    padding-right: 0;
+    padding-left: 100%;
     animation-name: scroll-ltr;
   }
+  .ticker-wrap.ltr .ticker-text.static {
+    padding-left: 24px;
+    padding-right: 0;
+  }
+  .ticker-wrap.ltr .ticker-stripe {
+    background: linear-gradient(270deg, #ef4444 30%, #f59e0b 100%);
+  }
+
   @keyframes scroll-ltr {
     0%   { transform: translateX(0); }
     100% { transform: translateX(-100%); }
@@ -109,14 +120,16 @@
 </head>
 <body>
   <div class="ticker-wrap hidden" id="tickerWrap">
-    <div class="ticker-label" id="tickerLabel">ބްރޭކިންގ</div>
-    <div class="ticker-content">
-      <span class="ticker-text" id="tickerText"></span>
+    <div class="ticker-stripe" id="tickerStripe"></div>
+    <div class="ticker-bar">
+      <div class="ticker-label" id="tickerLabel">ބްރޭކިންގ</div>
+      <div class="ticker-body">
+        <span class="ticker-text" id="tickerText"></span>
+      </div>
     </div>
   </div>
 
   <script>
-    // Get ticker ID from URL: /ticker?id=voice or /ticker?id=dhuvas
     const params = new URLSearchParams(window.location.search);
     const TICKER_ID = params.get('id') || 'voice';
     const API_URL = window.location.origin + '/api/ticker/' + TICKER_ID;
@@ -134,23 +147,37 @@
         const wrap = document.getElementById('tickerWrap');
         const label = document.getElementById('tickerLabel');
         const text = document.getElementById('tickerText');
+        const stripe = document.getElementById('tickerStripe');
 
-        wrap.className = 'ticker-wrap' + (data.visible ? '' : ' hidden') + (data.direction === 'ltr' ? ' ltr' : '');
+        // Direction
+        const isLtr = data.direction === 'ltr';
+        wrap.className = 'ticker-wrap' + (data.visible ? '' : ' hidden') + (isLtr ? ' ltr' : '');
+
+        // Label
         label.textContent = data.label || 'ބްރޭކިންގ';
+
+        // Label color
+        const lc = data.labelColor || '#ef4444';
+        label.style.background = lc;
+
+        // Accent stripe gradient
+        if (isLtr) {
+          stripe.style.background = `linear-gradient(270deg, ${lc} 30%, #f59e0b 100%)`;
+        } else {
+          stripe.style.background = `linear-gradient(90deg, ${lc} 30%, #f59e0b 100%)`;
+        }
+
+        // Text
         text.textContent = data.text || '';
 
+        // Mode
         if (data.mode === 'static') {
           text.className = 'ticker-text static';
         } else {
           text.className = 'ticker-text';
           const speed = data.speed || 15;
-          const duration = Math.max(8, data.text.length / speed * 10);
+          const duration = Math.max(8, (data.text || '').length / speed * 10);
           text.style.animationDuration = duration + 's';
-        }
-
-        if (data.labelColor) {
-          label.style.background = data.labelColor;
-          label.style.setProperty('--label-color', data.labelColor);
         }
       } catch (e) {}
     }
