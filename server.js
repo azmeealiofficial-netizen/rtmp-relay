@@ -76,24 +76,40 @@ app.get('/hls/:file', async (req, res) => {
   }
 });
 
-// Ticker state
-let tickerState = {
-  visible: false,
-  label: 'ބްރޭކިންގ',
-  text: '',
-  mode: 'scroll',
-  speed: 15,
-  direction: 'rtl',
-  labelColor: '#ef4444'
+// Ticker states — one per outlet
+let tickers = {
+  voice: {
+    visible: false,
+    label: 'ބްރޭކިންގ',
+    text: '',
+    mode: 'scroll',
+    speed: 15,
+    direction: 'rtl',
+    labelColor: '#ef4444'
+  },
+  dhuvas: {
+    visible: false,
+    label: 'ބްރޭކިންގ',
+    text: '',
+    mode: 'scroll',
+    speed: 15,
+    direction: 'rtl',
+    labelColor: '#ef4444'
+  }
 };
 
-app.get('/api/ticker', (req, res) => {
-  res.json(tickerState);
+app.get('/api/ticker/:id', (req, res) => {
+  const id = req.params.id;
+  if (tickers[id]) res.json(tickers[id]);
+  else res.status(404).json({ error: 'Unknown ticker' });
 });
 
-app.post('/api/ticker', (req, res) => {
-  Object.assign(tickerState, req.body);
-  res.json(tickerState);
+app.post('/api/ticker/:id', (req, res) => {
+  const id = req.params.id;
+  if (tickers[id]) {
+    Object.assign(tickers[id], req.body);
+    res.json(tickers[id]);
+  } else res.status(404).json({ error: 'Unknown ticker' });
 });
 
 // Pages
