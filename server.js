@@ -6,7 +6,7 @@ const PORT = 8080;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-let vmixProxyUrl = 'https://vmix.vxd.news';
+let vmixProxyUrl = '';
 
 // vMix URL management
 app.post('/api/set-vmix-url', (req, res) => {
@@ -76,11 +76,32 @@ app.get('/hls/:file', async (req, res) => {
   }
 });
 
+// Ticker state
+let tickerState = {
+  visible: false,
+  label: 'ބްރޭކިންގ',
+  text: '',
+  mode: 'scroll',
+  speed: 15,
+  direction: 'rtl',
+  labelColor: '#ef4444'
+};
+
+app.get('/api/ticker', (req, res) => {
+  res.json(tickerState);
+});
+
+app.post('/api/ticker', (req, res) => {
+  Object.assign(tickerState, req.body);
+  res.json(tickerState);
+});
+
 // Pages
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/team', (req, res) => res.sendFile(path.join(__dirname, 'public', 'team.html')));
 app.get('/relay', (req, res) => res.sendFile(path.join(__dirname, 'public', 'relay.html')));
 app.get('/settings', (req, res) => res.sendFile(path.join(__dirname, 'public', 'settings.html')));
+app.get('/ticker', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ticker.html')));
 
 app.listen(PORT, () => {
   console.log(`VxD Relay running on port ${PORT}`);
