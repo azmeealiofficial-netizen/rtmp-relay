@@ -486,21 +486,19 @@
       // Main area feed cards
       const grid=document.getElementById('reporterFeeds');
       grid.innerHTML=reporters.map(r=>{
-        const viewUrl=`https://vdo.ninja/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}&autojoin&autoplay`;
-        const vmixViewUrl=`https://vdo.ninja/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}&autojoin&autoplay`;
+        const viewUrl=`https://vdo.ninja/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}&autojoin&autoplay&muted`;
+        const vmixViewUrl=`https://vdo.ninja/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}`;
         const brandedUrl=`${window.location.origin}/go?id=${r.id}&name=${encodeURIComponent(r.name)}`;
         return `
           <div class="feed-card" id="rcard-${r.id}">
             <div class="feed-header">
               <div class="feed-left">
-                <span class="stream-dot off" id="rdot-${r.id}"></span>
                 <span class="feed-name">${r.name}</span>
                 <span class="feed-key" style="color:var(--blu)">WebRTC</span>
               </div>
-              <span class="feed-badge off" id="rbadge-${r.id}">STANDBY</span>
             </div>
             <div class="feed-video">
-              <iframe id="rvid-${r.id}" src="${viewUrl}" allow="autoplay" style="width:100%;height:100%;border:none;background:#000"></iframe>
+              <iframe id="rvid-${r.id}" src="${viewUrl}" allow="autoplay;camera;microphone" style="width:100%;height:100%;border:none;background:#000"></iframe>
             </div>
             <div class="feed-urls">
               <div class="feed-url-row">
