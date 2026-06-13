@@ -41,14 +41,11 @@
     .gear{background:var(--card2);border:1px solid var(--bdr);border-radius:6px;padding:6px 10px;color:var(--t3);font-size:14px;cursor:pointer;transition:all .15s;text-decoration:none}
     .gear:hover{background:var(--bdr);color:var(--t1)}
 
-    .alert{background:#451a0320;border:1px solid #ef444430;border-radius:var(--radius);padding:10px 14px;color:#fca5a5;font-size:12px;margin-bottom:12px}
-    .alert a{color:#fca5a5;text-decoration:underline}
-
     /* Quick actions */
     .quick-bar{display:flex;gap:6px;margin-bottom:20px}
     .q-btn{flex:1;border:none;border-radius:var(--radius);padding:14px 8px;font-size:13px;font-weight:800;cursor:pointer;color:#fff;font-family:inherit;letter-spacing:.5px;transition:all .15s}
     .q-btn:hover{opacity:.85}
-    .q-btn.c{background:var(--red)}.q-btn.f{background:var(--blu)}.q-btn.t{background:var(--bdr2)}
+    .q-btn.c{background:var(--red)}.q-btn.f{background:var(--blu)}.q-btn.t{background:var(--bdr2)}.q-btn.s{background:#dc2626;font-size:11px}
 
     /* Section */
     .sec-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
@@ -139,17 +136,16 @@
       </div>
       <div class="topbar-right">
         <div id="connStatus" class="conn-status off"><span class="conn-dot"></span>OFFLINE</div>
-        <a href="/settings" class="gear" title="Settings">⚙</a>
       </div>
     </div>
 
     <div class="sidebar">
-      <div id="errBox" class="alert" style="display:none"></div>
 
       <div class="quick-bar">
         <button class="q-btn c" onclick="cmd('Cut')">CUT</button>
         <button class="q-btn f" onclick="cmd('Fade','Duration=500')">FADE</button>
         <button class="q-btn t" onclick="cmd('FadeToBlack')">FTB</button>
+        <button class="q-btn s" onclick="if(confirm('End all streams?'))cmd('StopStreaming')">END ALL</button>
       </div>
 
       <div class="sec-hdr"><span class="sec-title">Live Ticker</span></div>
@@ -262,10 +258,7 @@
     checkUrl();
 
     function checkUrl(){
-      fetch('/api/get-vmix-url').then(r=>r.json()).then(d=>{
-        if(d.url){startPolling();}
-        else{showErr('vMix not connected. Go to <a href="/settings" style="color:#fca5a5">Settings</a>.');}
-      }).catch(()=>{showErr('vMix not connected.');});
+      startPolling();
       pollFeeds();
       feedPoll=setInterval(pollFeeds,5000);
     }
@@ -277,7 +270,7 @@
     async function pollStatus(){
       try{
         const r=await fetch('/api/vmix');if(!r.ok)throw 0;
-        s.connected=true;render();showErr('');
+        s.connected=true;render();
       }catch(e){s.connected=false;render();}
     }
 
@@ -439,7 +432,6 @@
       }else if(vid.canPlayType('application/vnd.apple.mpegurl')){vid.src=hlsUrl;vid.play().catch(()=>{});}
     }
 
-    function showErr(m){const e=document.getElementById('errBox');if(m){e.innerHTML=m;e.style.display='block';}else e.style.display='none';}
     function copyUrl(btn,text){navigator.clipboard.writeText(text);btn.textContent='✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2000);}
 
     render();
