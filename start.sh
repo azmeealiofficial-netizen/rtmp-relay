@@ -1,3 +1,3 @@
 #!/bin/bash
-nginx &
+nginx -t && nginx &
 cd /app && node server.js
