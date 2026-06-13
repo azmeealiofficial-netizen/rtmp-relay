@@ -183,7 +183,7 @@
       usingFrontCam = !usingFrontCam;
       const frame = document.getElementById('vdoFrame');
       const facing = usingFrontCam ? 'user' : 'environment';
-      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${facing}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer`;
+      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${facing}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
       frame.src = '';
       setTimeout(() => { frame.src = vdoUrl; }, 500);
     }
@@ -194,7 +194,7 @@
       const overlay = document.getElementById('liveOverlay');
       const facing = usingFrontCam ? 'user' : 'environment';
 
-      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${facing}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer`;
+      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${facing}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
 
       frame.src = vdoUrl;
       frame.classList.add('active');
