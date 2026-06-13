@@ -122,6 +122,20 @@
 
     .footer{padding:12px 0;border-top:1px solid var(--bdr);text-align:center;margin-top:16px}
     .footer-text{color:var(--bdr2);font-size:10px}
+
+    /* Ticker controls */
+    .ticker-ctrl{background:var(--card);border:1px solid var(--bdr);border-radius:var(--radius);padding:10px;margin-bottom:14px}
+    .tc-row{display:flex;gap:4px;margin-bottom:6px}
+    .tc-row:last-child{margin-bottom:0}
+    .tc-input,.tc-textarea,.tc-select{width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--bdr);border-radius:5px;color:var(--t1);font-size:12px;font-family:inherit;outline:none;margin-bottom:6px}
+    .tc-textarea{resize:none;font-size:13px;line-height:1.4}
+    .tc-select{padding:6px 8px;font-size:11px;cursor:pointer;flex:1}
+    .tc-input:focus,.tc-textarea:focus{border-color:var(--bdr2)}
+    .tc-input::placeholder,.tc-textarea::placeholder{color:var(--t3)}
+    .tc-btn{flex:1;border:none;border-radius:5px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;color:#fff;font-family:inherit;transition:all .15s}
+    .tc-btn:hover{opacity:.85}
+    .tc-go{background:var(--grn)}
+    .tc-stop{background:var(--red)}
   </style>
 </head>
 <body>
@@ -164,6 +178,41 @@
 
       <div class="sec-hdr"><span class="sec-title">Overlays</span></div>
       <div id="ovList" class="overlay-list"></div>
+
+      <div class="sec-hdr"><span class="sec-title">Live Ticker</span></div>
+      <div class="ticker-ctrl">
+        <div class="tc-row">
+          <select id="tkDir" class="tc-select" onchange="updateTicker()">
+            <option value="rtl">ދިވެހި (RTL)</option>
+            <option value="ltr">English (LTR)</option>
+          </select>
+          <select id="tkMode" class="tc-select" onchange="updateTicker()">
+            <option value="scroll">Scroll</option>
+            <option value="static">Static</option>
+          </select>
+        </div>
+        <input type="text" id="tkLabel" class="tc-input" placeholder="Label — ބްރޭކިންގ" dir="auto" onchange="updateTicker()">
+        <textarea id="tkText" class="tc-textarea" placeholder="Ticker text — ޓިކަރ ޓެކްސްޓް" dir="auto" rows="2" onchange="updateTicker()"></textarea>
+        <div class="tc-row">
+          <select id="tkColor" class="tc-select" onchange="updateTicker()">
+            <option value="#ef4444">Red</option>
+            <option value="#3b82f6">Blue</option>
+            <option value="#22c55e">Green</option>
+            <option value="#f59e0b">Amber</option>
+            <option value="#8b5cf6">Purple</option>
+            <option value="#06b6d4">Cyan</option>
+          </select>
+          <select id="tkSpeed" class="tc-select" onchange="updateTicker()">
+            <option value="10">Slow</option>
+            <option value="15" selected>Normal</option>
+            <option value="25">Fast</option>
+          </select>
+        </div>
+        <div class="tc-row">
+          <button class="tc-btn tc-go" onclick="showTicker()">SHOW TICKER</button>
+          <button class="tc-btn tc-stop" onclick="hideTicker()">HIDE</button>
+        </div>
+      </div>
     </div>
 
     <div class="main">
@@ -393,6 +442,45 @@
     function togO(n){cmd(s.overlays[n]?'OverlayInput'+n+'Off':'OverlayInput'+n+'In');s.overlays[n]=!s.overlays[n];render();}
     function showErr(m){const e=document.getElementById('errBox');if(m){e.innerHTML=m;e.style.display='block';}else e.style.display='none';}
     function copyUrl(btn,text){navigator.clipboard.writeText(text);btn.textContent='✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2000);}
+
+    async function updateTicker(){
+      const data={
+        label:document.getElementById('tkLabel').value||'ބްރޭކިންގ',
+        text:document.getElementById('tkText').value,
+        mode:document.getElementById('tkMode').value,
+        speed:parseInt(document.getElementById('tkSpeed').value),
+        direction:document.getElementById('tkDir').value,
+        labelColor:document.getElementById('tkColor').value
+      };
+      await fetch('/api/ticker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    }
+
+    async function showTicker(){
+      const data={
+        visible:true,
+        label:document.getElementById('tkLabel').value||'ބްރޭކިންގ',
+        text:document.getElementById('tkText').value,
+        mode:document.getElementById('tkMode').value,
+        speed:parseInt(document.getElementById('tkSpeed').value),
+        direction:document.getElementById('tkDir').value,
+        labelColor:document.getElementById('tkColor').value
+      };
+      await fetch('/api/ticker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    }
+
+    async function hideTicker(){
+      await fetch('/api/ticker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visible:false})});
+    }
+
+    // Load current ticker state
+    fetch('/api/ticker').then(r=>r.json()).then(d=>{
+      if(d.label)document.getElementById('tkLabel').value=d.label==='ބްރޭކިންގ'?'':d.label;
+      if(d.text)document.getElementById('tkText').value=d.text;
+      if(d.mode)document.getElementById('tkMode').value=d.mode;
+      if(d.speed)document.getElementById('tkSpeed').value=d.speed;
+      if(d.direction)document.getElementById('tkDir').value=d.direction;
+      if(d.labelColor)document.getElementById('tkColor').value=d.labelColor;
+    }).catch(()=>{});
 
     render();
     renderFeeds();
