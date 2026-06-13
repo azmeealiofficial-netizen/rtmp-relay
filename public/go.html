@@ -144,9 +144,6 @@
         </div>
       </div>
       <div class="ctrl-bar" id="ctrlBar">
-        <div class="ctrl-btn" onclick="zoomIn()" title="Zoom In">+</div>
-        <div class="ctrl-btn" onclick="zoomOut()" title="Zoom Out">−</div>
-        <div class="ctrl-btn" id="micBtn" onclick="toggleMic()" title="Mute/Unmute">🎤</div>
         <div class="ctrl-btn" onclick="switchCam()" title="Flip Camera">🔄</div>
       </div>
       <div class="live-bottom">
@@ -176,53 +173,19 @@
     let timerInterval = null;
     let startTime = null;
     let usingFrontCam = false;
-    let zoomLevel = 1;
-    let micMuted = false;
 
     function toggleDefaultCam() {
       usingFrontCam = !usingFrontCam;
       document.getElementById('camLabel').textContent = usingFrontCam ? 'Front Camera' : 'Back Camera';
     }
 
-    function zoomIn() {
-      zoomLevel = Math.min(zoomLevel + 0.5, 5);
-      applyZoom();
-    }
-
-    function zoomOut() {
-      zoomLevel = Math.max(zoomLevel - 0.5, 1);
-      applyZoom();
-    }
-
-    function applyZoom() {
-      const frame = document.getElementById('vdoFrame');
-      frame.style.transform = `scale(${zoomLevel})`;
-      frame.style.transformOrigin = 'center center';
-    }
-
-    function toggleMic() {
-      micMuted = !micMuted;
-      const btn = document.getElementById('micBtn');
-      if (micMuted) {
-        btn.classList.add('muted');
-        btn.textContent = '🔇';
-      } else {
-        btn.classList.remove('muted');
-        btn.textContent = '🎤';
-      }
-      // Send mute command to VDO.Ninja iframe
-      const frame = document.getElementById('vdoFrame');
-      frame.contentWindow.postMessage({ mute: micMuted }, '*');
-    }
-
     function switchCam() {
       usingFrontCam = !usingFrontCam;
       const frame = document.getElementById('vdoFrame');
       const facing = usingFrontCam ? 'user' : 'environment';
-      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${facing}&width=1280&height=720&autostart&cleanoutput&cleanviewer`;
-      frame.src = vdoUrl;
-      zoomLevel = 1;
-      applyZoom();
+      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${facing}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer`;
+      frame.src = '';
+      setTimeout(() => { frame.src = vdoUrl; }, 500);
     }
 
     function startLive() {
