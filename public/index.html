@@ -119,6 +119,32 @@
     .copy-btn{background:var(--card2);color:var(--t2);border:1px solid var(--bdr);border-radius:3px;padding:2px 6px;font-size:8px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
     .copy-btn:hover{background:var(--bdr);color:var(--t1)}
     .copy-btn.ok{background:var(--grn);color:#fff;border-color:var(--grn)}
+
+    /* Field Reporters */
+    .fr-panel{background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:16px;margin-bottom:20px}
+    .fr-desc{font-size:11px;color:var(--t3);line-height:1.5;margin-bottom:12px}
+    .fr-slots{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+    .fr-slot{background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px}
+    .fr-slot-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .fr-slot-name{font-size:13px;font-weight:700;color:var(--t1)}
+    .fr-slot-rm{background:none;border:none;color:var(--t3);cursor:pointer;font-size:14px;padding:2px 6px}
+    .fr-slot-rm:hover{color:var(--red)}
+    .fr-urls{display:flex;flex-direction:column;gap:6px}
+    .fr-url-row{display:flex;flex-direction:column;gap:2px}
+    .fr-url-label{font-size:9px;color:var(--t3);font-weight:600;letter-spacing:.5px}
+    .fr-url-box{display:flex;align-items:center;gap:4px;background:var(--card);border-radius:5px;padding:5px 8px;border:1px solid var(--bdr)}
+    .fr-url-text{flex:1;font-size:10px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'SF Mono',SFMono-Regular,ui-monospace,monospace}
+    .fr-copy{background:var(--card2);color:var(--t2);border:1px solid var(--bdr);border-radius:3px;padding:2px 8px;font-size:9px;font-weight:600;cursor:pointer;font-family:inherit}
+    .fr-copy:hover{background:var(--bdr);color:var(--t1)}
+    .fr-copy.ok{background:var(--grn);color:#fff;border-color:var(--grn)}
+    .fr-share{background:var(--blu);color:#fff;border:none;border-radius:3px;padding:2px 8px;font-size:9px;font-weight:600;cursor:pointer;font-family:inherit}
+    .fr-share:hover{opacity:.85}
+    .fr-add{display:flex;gap:6px}
+    .fr-input{flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;color:var(--t1);font-size:12px;font-family:inherit;outline:none}
+    .fr-input:focus{border-color:var(--bdr2)}
+    .fr-input::placeholder{color:var(--t3)}
+    .fr-btn{background:var(--blu);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+    .fr-btn:hover{opacity:.85}
     .footer{padding:12px 0;border-top:1px solid var(--bdr);text-align:center;margin-top:16px}
     .footer-text{color:var(--bdr2);font-size:10px}
   </style>
@@ -224,6 +250,16 @@
         <div class="tk-actions" style="margin-top:6px">
           <button class="tk-btn both-show" onclick="showBothTickers()">BOTH SHOW</button>
           <button class="tk-btn both-hide" onclick="hideBothTickers()">BOTH HIDE</button>
+        </div>
+      </div>
+
+      <div class="sec-hdr"><span class="sec-title">Field Reporters (WebRTC)</span></div>
+      <div class="fr-panel">
+        <div class="fr-desc">Send a link to anyone — they open it, tap Go Live, and their camera appears here and in vMix. No app needed.</div>
+        <div class="fr-slots" id="frSlots"></div>
+        <div class="fr-add">
+          <input type="text" id="frName" class="fr-input" placeholder="Reporter name (e.g. Ahmed - Addu)">
+          <button class="fr-btn" onclick="addReporter()">+ Add Reporter</button>
         </div>
       </div>
     </div>
@@ -433,6 +469,77 @@
     }
 
     function copyUrl(btn,text){navigator.clipboard.writeText(text);btn.textContent='✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2000);}
+
+    // === FIELD REPORTERS (VDO.Ninja WebRTC) ===
+    const VDO_ROOM = 'vxdlive';
+    const VDO_PASS = 'vxd2026';
+    let reporters = JSON.parse(localStorage.getItem('vxd_reporters')||'[]');
+
+    function renderReporters(){
+      const el=document.getElementById('frSlots');
+      if(reporters.length===0){el.innerHTML='<div style="color:var(--t3);font-size:11px;text-align:center;padding:8px">No reporters added yet</div>';return;}
+      el.innerHTML=reporters.map((r,i)=>{
+        const streamId=r.id;
+        const sendUrl=`https://vdo.ninja/?push=${streamId}&room=${VDO_ROOM}&password=${VDO_PASS}&quality=1&codec=h264&label=${encodeURIComponent(r.name)}`;
+        const viewUrl=`https://vdo.ninja/?view=${streamId}&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0`;
+        const brandedUrl=`${window.location.origin}/go?id=${streamId}&name=${encodeURIComponent(r.name)}`;
+        return `
+          <div class="fr-slot">
+            <div class="fr-slot-hdr">
+              <span class="fr-slot-name">${r.name}</span>
+              <button class="fr-slot-rm" onclick="removeReporter(${i})" title="Remove">✕</button>
+            </div>
+            <div class="fr-urls">
+              <div class="fr-url-row">
+                <span class="fr-url-label">SEND TO REPORTER (share this link)</span>
+                <div class="fr-url-box">
+                  <span class="fr-url-text">${brandedUrl}</span>
+                  <button class="fr-share" onclick="shareLink('${brandedUrl}','${r.name}')">Share</button>
+                  <button class="fr-copy" onclick="copyFr(this,'${brandedUrl}')">Copy</button>
+                </div>
+              </div>
+              <div class="fr-url-row">
+                <span class="fr-url-label">vMix INPUT (Web Browser → 1920x1080)</span>
+                <div class="fr-url-box">
+                  <span class="fr-url-text">${viewUrl}</span>
+                  <button class="fr-copy" onclick="copyFr(this,\`${viewUrl}\`)">Copy</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function addReporter(){
+      const name=document.getElementById('frName').value.trim();
+      if(!name)return;
+      const id='vxd'+Date.now().toString(36);
+      reporters.push({name,id});
+      localStorage.setItem('vxd_reporters',JSON.stringify(reporters));
+      document.getElementById('frName').value='';
+      renderReporters();
+    }
+
+    function removeReporter(i){
+      if(!confirm('Remove '+reporters[i].name+'?'))return;
+      reporters.splice(i,1);
+      localStorage.setItem('vxd_reporters',JSON.stringify(reporters));
+      renderReporters();
+    }
+
+    function shareLink(url,name){
+      if(navigator.share){
+        navigator.share({title:'VxD Live — '+name,text:'Open this link to go live as '+name,url:url}).catch(()=>{});
+      }else{
+        navigator.clipboard.writeText(url);
+        alert('Link copied! Share it with '+name);
+      }
+    }
+
+    function copyFr(btn,text){navigator.clipboard.writeText(text);btn.textContent='✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2000);}
+
+    renderReporters();
 
     render();
     renderFeeds();
