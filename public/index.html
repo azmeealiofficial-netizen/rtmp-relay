@@ -486,8 +486,8 @@
       // Main area feed cards
       const grid=document.getElementById('reporterFeeds');
       grid.innerHTML=reporters.map(r=>{
-        const viewUrl=`https://vdo.ninja/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}`;
-        const vmixViewUrl=`https://vdo.ninja/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}`;
+        const viewUrl=`https://vdo.ninja/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}&autojoin&autoplay`;
+        const vmixViewUrl=`https://vdo.ninja/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}&autojoin&autoplay`;
         const brandedUrl=`${window.location.origin}/go?id=${r.id}&name=${encodeURIComponent(r.name)}`;
         return `
           <div class="feed-card" id="rcard-${r.id}">
