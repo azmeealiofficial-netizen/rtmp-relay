@@ -90,27 +90,15 @@
     width: 100%;
   }
 
-  /* English/LTR mode */
-  .ticker-wrap.ltr {
-    direction: ltr;
-  }
-  .ticker-wrap.ltr .ticker-label {
-    direction: ltr;
-  }
+  .ticker-wrap.ltr { direction: ltr; }
+  .ticker-wrap.ltr .ticker-label { direction: ltr; }
   .ticker-wrap.ltr .ticker-label::after {
-    left: auto;
-    right: -28px;
-    border-right: none;
-    border-left: 28px solid #ef4444;
+    left: auto; right: -28px;
+    border-right: none; border-left: 28px solid #ef4444;
   }
-  .ticker-wrap.ltr .ticker-content {
-    direction: ltr;
-    padding-right: 0;
-    padding-left: 36px;
-  }
+  .ticker-wrap.ltr .ticker-content { direction: ltr; padding-right: 0; padding-left: 36px; }
   .ticker-wrap.ltr .ticker-text {
-    padding-right: 0;
-    padding-left: 100%;
+    padding-right: 0; padding-left: 100%;
     animation-name: scroll-ltr;
   }
   @keyframes scroll-ltr {
@@ -128,7 +116,10 @@
   </div>
 
   <script>
-    const API_URL = window.location.origin + '/api/ticker';
+    // Get ticker ID from URL: /ticker?id=voice or /ticker?id=dhuvas
+    const params = new URLSearchParams(window.location.search);
+    const TICKER_ID = params.get('id') || 'voice';
+    const API_URL = window.location.origin + '/api/ticker/' + TICKER_ID;
     let current = {};
 
     async function pollTicker() {
@@ -144,16 +135,10 @@
         const label = document.getElementById('tickerLabel');
         const text = document.getElementById('tickerText');
 
-        // Show/hide
         wrap.className = 'ticker-wrap' + (data.visible ? '' : ' hidden') + (data.direction === 'ltr' ? ' ltr' : '');
-
-        // Label (heading - MVWaheed)
         label.textContent = data.label || 'ބްރޭކިންގ';
-
-        // Text (sub heading - MvEamaan)
         text.textContent = data.text || '';
 
-        // Scroll or static
         if (data.mode === 'static') {
           text.className = 'ticker-text static';
         } else {
@@ -163,10 +148,9 @@
           text.style.animationDuration = duration + 's';
         }
 
-        // Custom colors
-        if (data.labelColor) label.style.background = data.labelColor;
         if (data.labelColor) {
-          const after = document.querySelector('.ticker-label::after');
+          label.style.background = data.labelColor;
+          label.style.setProperty('--label-color', data.labelColor);
         }
       } catch (e) {}
     }
