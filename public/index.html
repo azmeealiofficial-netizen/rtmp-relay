@@ -230,6 +230,7 @@
     }
 
     let feedFailCount={};
+    let feedsRendered=false;
 
     async function pollFeeds(){
       const newLive={};
@@ -244,15 +245,15 @@
             }
           }
         }catch(e){}
-        // Only mark offline after 3 consecutive failures
         if(!newLive[f.key]&&liveFeeds[f.key]){
           feedFailCount[f.key]=(feedFailCount[f.key]||0)+1;
-          if(feedFailCount[f.key]<3)newLive[f.key]=true; // keep alive
+          if(feedFailCount[f.key]<3)newLive[f.key]=true;
         }
       }));
-      const changed=JSON.stringify(newLive)!==JSON.stringify(liveFeeds);
+      const oldLive=liveFeeds;
       liveFeeds=newLive;
-      if(changed)renderFeeds();
+      if(!feedsRendered){renderFeeds();feedsRendered=true;}
+      else{updateFeedStatus(oldLive);}
     }
 
     function renderFeeds(){
@@ -262,17 +263,18 @@
         const rtmpUrl=`rtmp://${RTMP_HOST}/live/${f.key}`;
         const hlsUrl=`${HLS_HOST}/hls/${f.key}.m3u8`;
         return `
-          <div class="feed-card ${isLive?'live':''}">
+          <div class="feed-card ${isLive?'live':''}" id="card-${f.key}">
             <div class="feed-header">
               <div class="feed-left">
-                <span class="stream-dot ${isLive?'on':'off'}"></span>
+                <span class="stream-dot ${isLive?'on':'off'}" id="dot-${f.key}"></span>
                 <span class="feed-name">${f.name}</span>
                 <span class="feed-key">/${f.key}</span>
               </div>
-              <span class="feed-badge ${isLive?'live':'off'}">${isLive?'● LIVE':'OFFLINE'}</span>
+              <span class="feed-badge ${isLive?'live':'off'}" id="badge-${f.key}">${isLive?'● LIVE':'OFFLINE'}</span>
             </div>
             <div class="feed-video" id="preview-${f.key}">
-              ${isLive?`<video id="vid-${f.key}" muted autoplay playsinline></video>`:'<span class="feed-offline">No feed</span>'}
+              <video id="vid-${f.key}" muted autoplay playsinline style="display:${isLive?'block':'none'}"></video>
+              <span class="feed-offline" id="offline-${f.key}" style="display:${isLive?'none':'block'}">No feed</span>
             </div>
             <div class="feed-urls">
               <div class="feed-url-row">
@@ -293,27 +295,54 @@
           </div>
         `;
       }).join('');
+      attachPlayers();
+    }
 
+    function updateFeedStatus(oldLive){
       FEEDS.forEach(f=>{
-        if(liveFeeds[f.key]){
-          const vid=document.getElementById('vid-'+f.key);
-          if(vid&&!hlsPlayers[f.key]){
-            const hlsUrl=`${HLS_HOST}/hls/${f.key}.m3u8`;
-            if(Hls.isSupported()){
-              const hls=new Hls({liveSyncDuration:2,liveMaxLatencyDuration:5,maxBufferLength:3,maxMaxBufferLength:5,startLevel:-1,capLevelToPlayerSize:true});
-              hls.loadSource(hlsUrl);
-              hls.attachMedia(vid);
-              hls.on(Hls.Events.MANIFEST_PARSED,()=>{vid.play().catch(()=>{});});
-              hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal){hls.destroy();delete hlsPlayers[f.key];}});
-              hlsPlayers[f.key]=hls;
-            }else if(vid.canPlayType('application/vnd.apple.mpegurl')){
-              vid.src=hlsUrl;vid.play().catch(()=>{});
-            }
-          }
-        }else{
+        const isLive=!!liveFeeds[f.key];
+        const wasLive=!!oldLive[f.key];
+        // Update badges without rebuilding DOM
+        const card=document.getElementById('card-'+f.key);
+        const dot=document.getElementById('dot-'+f.key);
+        const badge=document.getElementById('badge-'+f.key);
+        const vid=document.getElementById('vid-'+f.key);
+        const offline=document.getElementById('offline-'+f.key);
+        if(card){card.className='feed-card '+(isLive?'live':'');}
+        if(dot){dot.className='stream-dot '+(isLive?'on':'off');}
+        if(badge){badge.className='feed-badge '+(isLive?'live':'off');badge.textContent=isLive?'● LIVE':'OFFLINE';}
+        if(isLive&&!wasLive){
+          // Just went live — show video, hide offline, attach player
+          if(vid){vid.style.display='block';}
+          if(offline){offline.style.display='none';}
+          attachPlayer(f.key);
+        }else if(!isLive&&wasLive){
+          // Just went offline — hide video, show offline, destroy player
+          if(vid){vid.style.display='none';}
+          if(offline){offline.style.display='block';}
           if(hlsPlayers[f.key]){hlsPlayers[f.key].destroy();delete hlsPlayers[f.key];}
         }
       });
+    }
+
+    function attachPlayers(){
+      FEEDS.forEach(f=>{if(liveFeeds[f.key])attachPlayer(f.key);});
+    }
+
+    function attachPlayer(key){
+      const vid=document.getElementById('vid-'+key);
+      if(!vid||hlsPlayers[key])return;
+      const hlsUrl=`${HLS_HOST}/hls/${key}.m3u8`;
+      if(Hls.isSupported()){
+        const hls=new Hls({liveSyncDuration:2,liveMaxLatencyDuration:5,maxBufferLength:3,maxMaxBufferLength:5,startLevel:-1,capLevelToPlayerSize:true});
+        hls.loadSource(hlsUrl);
+        hls.attachMedia(vid);
+        hls.on(Hls.Events.MANIFEST_PARSED,()=>{vid.play().catch(()=>{});});
+        hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal){hls.destroy();delete hlsPlayers[key];}});
+        hlsPlayers[key]=hls;
+      }else if(vid.canPlayType('application/vnd.apple.mpegurl')){
+        vid.src=hlsUrl;vid.play().catch(()=>{});
+      }
     }
 
     function render(){
