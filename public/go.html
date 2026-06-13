@@ -76,14 +76,22 @@
     }
     .end-btn:hover{background:#dc2626;transform:scale(1.05)}
 
-    .cam-switch{
-      position:absolute;bottom:16px;right:16px;
-      width:44px;height:44px;border-radius:50%;
-      background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);
-      color:#fff;font-size:20px;cursor:pointer;
-      display:flex;align-items:center;justify-content:center;
-      pointer-events:auto;backdrop-filter:blur(4px);
+    .ctrl-bar{
+      position:absolute;right:16px;top:60px;
+      display:flex;flex-direction:column;gap:10px;
+      pointer-events:auto;
     }
+    .ctrl-btn{
+      width:46px;height:46px;border-radius:50%;
+      background:rgba(0,0,0,0.55);border:2px solid rgba(255,255,255,0.18);
+      display:flex;align-items:center;justify-content:center;
+      color:#fff;font-size:18px;cursor:pointer;
+      backdrop-filter:blur(6px);transition:all .15s;
+      user-select:none;-webkit-user-select:none;
+    }
+    .ctrl-btn:hover{border-color:rgba(255,255,255,0.35);background:rgba(0,0,0,0.7)}
+    .ctrl-btn:active{transform:scale(0.9)}
+    .ctrl-btn.muted{border-color:rgba(239,68,68,0.5);color:#ef4444;background:rgba(239,68,68,0.15)}
 
     /* End screen */
     .ended{position:absolute;inset:0;z-index:30;display:none;flex-direction:column;align-items:center;justify-content:center;background:#0a0a0f}
@@ -135,10 +143,15 @@
           <img src="img/dhuvas.png" alt="DHUVAS" style="height:24px">
         </div>
       </div>
+      <div class="ctrl-bar" id="ctrlBar">
+        <div class="ctrl-btn" onclick="zoomIn()" title="Zoom In">+</div>
+        <div class="ctrl-btn" onclick="zoomOut()" title="Zoom Out">−</div>
+        <div class="ctrl-btn" id="micBtn" onclick="toggleMic()" title="Mute/Unmute">🎤</div>
+        <div class="ctrl-btn" onclick="switchCam()" title="Flip Camera">🔄</div>
+      </div>
       <div class="live-bottom">
         <button class="end-btn" onclick="endLive()">END STREAM</button>
       </div>
-      <button class="cam-switch" onclick="switchCam()" title="Switch camera">🔄</button>
     </div>
 
     <!-- Ended screen -->
@@ -163,10 +176,53 @@
     let timerInterval = null;
     let startTime = null;
     let usingFrontCam = false;
+    let zoomLevel = 1;
+    let micMuted = false;
 
     function toggleDefaultCam() {
       usingFrontCam = !usingFrontCam;
       document.getElementById('camLabel').textContent = usingFrontCam ? 'Front Camera' : 'Back Camera';
+    }
+
+    function zoomIn() {
+      zoomLevel = Math.min(zoomLevel + 0.5, 5);
+      applyZoom();
+    }
+
+    function zoomOut() {
+      zoomLevel = Math.max(zoomLevel - 0.5, 1);
+      applyZoom();
+    }
+
+    function applyZoom() {
+      const frame = document.getElementById('vdoFrame');
+      frame.style.transform = `scale(${zoomLevel})`;
+      frame.style.transformOrigin = 'center center';
+    }
+
+    function toggleMic() {
+      micMuted = !micMuted;
+      const btn = document.getElementById('micBtn');
+      if (micMuted) {
+        btn.classList.add('muted');
+        btn.textContent = '🔇';
+      } else {
+        btn.classList.remove('muted');
+        btn.textContent = '🎤';
+      }
+      // Send mute command to VDO.Ninja iframe
+      const frame = document.getElementById('vdoFrame');
+      frame.contentWindow.postMessage({ mute: micMuted }, '*');
+    }
+
+    function switchCam() {
+      usingFrontCam = !usingFrontCam;
+      const frame = document.getElementById('vdoFrame');
+      const facing = usingFrontCam ? 'user' : 'environment';
+      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${facing}&width=1280&height=720&autostart&cleanoutput&cleanviewer`;
+      frame.src = vdoUrl;
+      zoomLevel = 1;
+      applyZoom();
     }
 
     function startLive() {
@@ -209,15 +265,6 @@
       document.getElementById('endedScreen').classList.remove('active');
       document.getElementById('idleScreen').classList.remove('hidden');
       document.getElementById('liveTimer').textContent = '00:00';
-    }
-
-    function switchCam() {
-      // Toggle camera by reloading with different facing mode
-      usingFrontCam = !usingFrontCam;
-      const frame = document.getElementById('vdoFrame');
-      const facing = usingFrontCam ? 'user' : 'environment';
-      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${facing}&width=1280&height=720&autostart&cleanoutput&cleanviewer`;
-      frame.src = vdoUrl;
     }
 
     function startTimer() {
