@@ -146,7 +146,7 @@
 
       <div class="stats-row">
         <div class="stat-card"><div class="stat-label">FPS</div><div id="xFps" class="stat-val g">—</div></div>
-        <div class="stat-card"><div class="stat-label">Streams</div><div id="xStr" class="stat-val g">0<span class="stat-unit">/5</span></div></div>
+        <div class="stat-card"><div class="stat-label">Streams</div><div id="xStr" class="stat-val g">0<span class="stat-unit">/3</span></div></div>
         <div class="stat-card"><div class="stat-label">Status</div><div id="xAir" class="stat-val w">OFF</div></div>
       </div>
 
@@ -177,7 +177,7 @@
   <script>
     const RTMP_HOST='acela.proxy.rlwy.net:15678';
     const HLS_HOST=window.location.origin;
-    const SN=['VOICE Facebook','Dhuvas Facebook','VOICE YouTube','Dhuvas TikTok','VOICE TikTok'];
+    const SN=['VOICE Facebook','Dhuvas Facebook','VOICE YouTube'];
     const ON=['OV1 — VOICE Logo','OV2 — VOICE Lower Third','OV3 — Dhuvas Logo','OV4 — Dhuvas Lower Third'];
     const FEEDS=[
       {key:'phone1',name:'Phone 1'},
@@ -190,7 +190,7 @@
     let poll=null,feedPoll=null;
     let hlsPlayers={};
     let liveFeeds={};
-    let s={connected:false,active:null,preview:null,inputs:[],overlays:{1:false,2:false,3:false,4:false},streams:[false,false,false,false,false],fps:'—',isLive:false};
+    let s={connected:false,active:null,preview:null,inputs:[],overlays:{1:false,2:false,3:false,4:false},streams:[false,false,false],fps:'—',isLive:false};
 
     checkUrl();
 
@@ -222,8 +222,18 @@
         s.active=a?a.textContent:null;s.preview=p?p.textContent:null;
         s.overlays={1:false,2:false,3:false,4:false};
         d.querySelectorAll('overlays > overlay').forEach(n=>{const num=parseInt(n.getAttribute('number'));if(n.textContent&&n.textContent.trim()!=='')s.overlays[num]=true;});
-        const st=v.querySelector('streaming');
-        if(st){s.streams[0]=st.textContent==='True';s.isLive=st.textContent==='True';}
+        // Parse individual stream states
+        s.streams=[false,false,false];
+        const streaming=d.querySelectorAll('streaming');
+        if(streaming.length>0){
+          // vMix XML has individual stream elements or a single streaming tag
+          const st=v.querySelector('streaming');
+          if(st)s.streams[0]=st.textContent==='True';
+        }
+        // Check for stream2 and stream3
+        const st2=v.querySelector('stream2');if(st2)s.streams[1]=st2.textContent==='True';
+        const st3=v.querySelector('stream3');if(st3)s.streams[2]=st3.textContent==='True';
+        s.isLive=s.streams.some(Boolean);
         const f=v.querySelector('fps');s.fps=f?parseFloat(f.textContent).toFixed(1):'—';
         s.connected=true;render();
       }catch(e){}
@@ -354,7 +364,7 @@
       const fN=parseFloat(s.fps);fE.className='stat-val '+(fN>=24?'g':fN>=20?'w':'r');
 
       const ac=s.streams.filter(Boolean).length;
-      document.getElementById('xStr').innerHTML=ac+'<span class="stat-unit">/5</span>';
+      document.getElementById('xStr').innerHTML=ac+'<span class="stat-unit">/3</span>';
       const air=document.getElementById('xAir');air.textContent=ac>0?'ON AIR':'OFF';air.className='stat-val '+(ac>0?'g':'w');
 
       document.getElementById('stList').innerHTML=SN.map((n,i)=>{
