@@ -46,6 +46,13 @@
 
     .idle-tips{position:absolute;bottom:20px;left:0;right:0;text-align:center;color:#444;font-size:11px}
 
+    .cam-flip-idle{
+      margin-top:16px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);
+      border-radius:20px;padding:8px 20px;color:#aaa;font-size:13px;cursor:pointer;
+      font-family:inherit;transition:all .2s;display:flex;align-items:center;gap:6px;
+    }
+    .cam-flip-idle:hover{background:rgba(255,255,255,.15);color:#fff}
+
     /* Live overlay controls */
     .live-overlay{position:absolute;inset:0;z-index:20;display:none;pointer-events:none}
     .live-overlay.active{display:block}
@@ -107,7 +114,10 @@
       </div>
       <div class="reporter-name" id="reporterName">Reporter</div>
       <div class="reporter-tag">FIELD REPORTER</div>
-      <button class="go-btn" onclick="startLive()">GO LIVE</button>
+      <div style="display:flex;align-items:center;gap:16px">
+        <button class="go-btn" onclick="startLive()">GO LIVE</button>
+      </div>
+      <button class="cam-flip-idle" onclick="toggleDefaultCam()">🔄 <span id="camLabel">Back Camera</span></button>
       <div class="idle-tips">Hold phone in landscape • Allow camera when asked • Use WiFi for best quality</div>
     </div>
 
@@ -154,13 +164,18 @@
     let startTime = null;
     let usingFrontCam = false;
 
+    function toggleDefaultCam() {
+      usingFrontCam = !usingFrontCam;
+      document.getElementById('camLabel').textContent = usingFrontCam ? 'Front Camera' : 'Back Camera';
+    }
+
     function startLive() {
       const frame = document.getElementById('vdoFrame');
       const idle = document.getElementById('idleScreen');
       const overlay = document.getElementById('liveOverlay');
+      const facing = usingFrontCam ? 'user' : 'environment';
 
-      // VDO.Ninja URL: back camera (rear), 720p, h264, autostart
-      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=environment&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer`;
+      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${facing}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer`;
 
       frame.src = vdoUrl;
       frame.classList.add('active');
