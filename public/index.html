@@ -578,15 +578,13 @@
       micStates[id] = !micStates[id];
       const btn = document.getElementById('mic-' + id);
       if (micStates[id]) {
-        btn.textContent = '🔇';
-        btn.style.background = 'rgba(239,68,68,0.15)';
-        btn.style.borderColor = 'rgba(239,68,68,0.4)';
-        btn.style.color = '#ef4444';
+        btn.innerHTML = '<span style="opacity:.5;text-decoration:line-through">🎤</span>';
+        btn.style.background = 'rgba(239,68,68,0.2)';
+        btn.style.borderColor = '#ef4444';
       } else {
-        btn.textContent = '🎤';
+        btn.innerHTML = '🎤';
         btn.style.background = '';
         btn.style.borderColor = '';
-        btn.style.color = '';
       }
       await dirCmd(id, 'mic', 'toggle');
     }
@@ -595,11 +593,11 @@
       camStates[id] = !camStates[id];
       const btn = document.getElementById('cam-' + id);
       if (camStates[id]) {
-        btn.textContent = '📷❌';
-        btn.style.background = 'rgba(239,68,68,0.15)';
-        btn.style.borderColor = 'rgba(239,68,68,0.4)';
+        btn.innerHTML = '<span style="opacity:.5;text-decoration:line-through">📷</span>';
+        btn.style.background = 'rgba(239,68,68,0.2)';
+        btn.style.borderColor = '#ef4444';
       } else {
-        btn.textContent = '📷';
+        btn.innerHTML = '📷';
         btn.style.background = '';
         btn.style.borderColor = '';
       }
