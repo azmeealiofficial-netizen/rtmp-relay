@@ -141,11 +141,11 @@
         const v = d.querySelector('vmix');
         if (!v) return;
         const st = v.querySelector('streaming');
-        if (st) streams[0] = st.textContent === 'True';
-        const st2 = v.querySelector('stream2');
-        if (st2) streams[1] = st2.textContent === 'True';
-        const st3 = v.querySelector('stream3');
-        if (st3) streams[2] = st3.textContent === 'True';
+        if (st) {
+          streams[0] = st.getAttribute('channel1') === 'True';
+          streams[1] = st.getAttribute('channel2') === 'True';
+          streams[2] = st.getAttribute('channel3') === 'True';
+        }
       } catch(e) {}
     }
 
