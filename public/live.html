@@ -82,6 +82,15 @@
     </div>
 
     <div class="streams">
+      <div class="stream-card" id="st4" style="border-color:var(--amb)33">
+        <div class="stream-left">
+          <span class="stream-dot off" id="dot4"></span>
+          <span class="stream-name">PSM Monitor Feed</span>
+          <span class="stream-live" id="live4" style="display:none">STREAMING</span>
+        </div>
+        <button class="stream-btn go" id="btn4" onclick="togStream(3)" style="background:var(--amb)">START</button>
+      </div>
+      <div style="height:1px;background:var(--bdr);margin:4px 0"></div>
       <div class="stream-card" id="st1">
         <div class="stream-left">
           <span class="stream-dot off" id="dot1"></span>
@@ -116,7 +125,7 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
   <script>
     let connected = false;
-    let streams = [false, false, false];
+    let streams = [false, false, false, false];
     let hlsPlayer = null;
     let feedLive = false;
 
@@ -145,6 +154,7 @@
           streams[0] = st.getAttribute('channel1') === 'True';
           streams[1] = st.getAttribute('channel2') === 'True';
           streams[2] = st.getAttribute('channel3') === 'True';
+          streams[3] = st.getAttribute('channel4') === 'True';
         }
       } catch(e) {}
     }
@@ -154,7 +164,7 @@
       cs.className = 'conn ' + (connected ? 'on' : 'off');
       cs.innerHTML = '<span class="conn-dot"></span>' + (connected ? 'CONNECTED' : 'OFFLINE');
 
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 4; i++) {
         const n = i + 1;
         const on = streams[i];
         document.getElementById('st' + n).className = 'stream-card' + (on ? ' on' : '');
@@ -163,6 +173,8 @@
         const btn = document.getElementById('btn' + n);
         btn.textContent = on ? 'STOP' : 'START';
         btn.className = 'stream-btn ' + (on ? 'no' : 'go');
+        if (n === 4 && !on) btn.style.background = 'var(--amb)';
+        else if (n === 4 && on) btn.style.background = '';
       }
     }
 
@@ -185,7 +197,7 @@
 
     function endAll() {
       cmd('StopStreaming');
-      streams = [false, false, false];
+      streams = [false, false, false, false];
       render();
     }
 
