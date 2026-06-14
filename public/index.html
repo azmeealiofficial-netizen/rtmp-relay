@@ -676,7 +676,7 @@
     async function pollComms() {
       for (const r of reporters) {
         try {
-          const res = await fetch('/api/msg/status?id=' + encodeURIComponent(r.id));
+          const res = await fetch('/api/msg/status?id=' + encodeURIComponent(r.id), { cache: 'no-store' });
           const j = await res.json();
           paintComms(r.id, j.msg);
         } catch (e) {}
