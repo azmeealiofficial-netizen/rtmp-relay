@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>VxD Live</title>
+  <style>
+    @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
+    @font-face{font-family:'MvEamaan';src:url('fonts/Mv_Eamaan_XP.otf') format('opentype')}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',system-ui,sans-serif;background:#09090b;color:#e4e4e7;min-height:100vh}
+    :root{--bg:#09090b;--card:#18181b;--card2:#1f1f23;--bdr:#27272a;--t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;--red:#ef4444;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+    .page{max-width:900px;margin:0 auto;padding:20px}
+
+    .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--bdr)}
+    .topbar-logos{display:flex;align-items:center;gap:10px}
+    .topbar-logos img{height:36px;object-fit:contain}
+    .topbar-logos span{color:#555;font-size:14px}
+    .conn{display:flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:11px;font-weight:600}
+    .conn.on{background:#22c55e12;color:var(--grn);border:1px solid #22c55e25}
+    .conn.off{background:#ef444412;color:var(--red);border:1px solid #ef444425}
+    .conn-dot{width:6px;height:6px;border-radius:50%}
+    .conn.on .conn-dot{background:var(--grn);box-shadow:0 0 6px var(--grn)}
+    .conn.off .conn-dot{background:var(--red)}
+
+    /* Feed preview */
+    .feed-box{background:#000;border-radius:12px;overflow:hidden;margin-bottom:20px;border:1px solid var(--bdr);position:relative}
+    .feed-header{padding:10px 16px;display:flex;justify-content:space-between;align-items:center;background:var(--card);border-bottom:1px solid var(--bdr)}
+    .feed-name{font-size:15px;font-weight:700}
+    .feed-badge{font-size:9px;font-weight:800;padding:3px 10px;border-radius:4px;letter-spacing:1.5px}
+    .feed-badge.live{background:#22c55e12;border:1px solid #22c55e30;color:var(--grn);animation:pulse 2s infinite}
+    .feed-badge.off{background:var(--card2);color:var(--t3)}
+    .feed-video{width:100%;aspect-ratio:16/9;background:#000;display:flex;align-items:center;justify-content:center}
+    .feed-video video{width:100%;height:100%;object-fit:contain}
+    .feed-offline{color:#333;font-size:14px}
+
+    /* Stream controls */
+    .streams{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+    .stream-card{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;transition:all .2s}
+    .stream-card.on{background:linear-gradient(135deg,#052e16,#14532d);border-color:#22c55e30}
+    .stream-left{display:flex;align-items:center;gap:10px}
+    .stream-dot{width:8px;height:8px;border-radius:50%}
+    .stream-dot.on{background:var(--grn);box-shadow:0 0 8px var(--grn)}.stream-dot.off{background:#3f3f46}
+    .stream-name{font-size:14px;font-weight:600}
+    .stream-live{background:#22c55e15;color:var(--grn);font-size:9px;font-weight:800;padding:3px 8px;border-radius:4px;letter-spacing:1.5px;margin-left:8px}
+    .stream-btn{border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;color:#fff;font-family:inherit;transition:all .15s}
+    .stream-btn:hover{opacity:.85}
+    .stream-btn:active{transform:scale(0.95)}
+    .stream-btn.go{background:var(--grn)}
+    .stream-btn.no{background:var(--red)}
+
+    .end-all{width:100%;padding:14px;border:none;border-radius:10px;background:#dc2626;color:#fff;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:.5px;transition:all .15s;margin-top:8px}
+    .end-all:hover{background:#b91c1c}
+    .end-all:active{transform:scale(0.98)}
+
+    .back-link{display:inline-block;margin-top:16px;color:var(--t3);font-size:12px;text-decoration:none}
+    .back-link:hover{color:var(--t2)}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <div class="topbar-logos">
+        <img src="img/voice.png" alt="VOICE">
+        <span>✕</span>
+        <img src="img/dhuvas.png" alt="DHUVAS">
+      </div>
+      <div class="conn off" id="connStatus"><span class="conn-dot"></span>OFFLINE</div>
+    </div>
+
+    <div class="feed-box">
+      <div class="feed-header">
+        <span class="feed-name">PSM Live Feed</span>
+        <span class="feed-badge off" id="feedBadge">OFFLINE</span>
+      </div>
+      <div class="feed-video">
+        <video id="feedVideo" muted autoplay playsinline style="display:none"></video>
+        <span class="feed-offline" id="feedOffline">Waiting for PSM feed...</span>
+      </div>
+    </div>
+
+    <div class="streams">
+      <div class="stream-card" id="st1">
+        <div class="stream-left">
+          <span class="stream-dot off" id="dot1"></span>
+          <span class="stream-name">VOICE Facebook</span>
+          <span class="stream-live" id="live1" style="display:none">LIVE</span>
+        </div>
+        <button class="stream-btn go" id="btn1" onclick="togStream(0)">START</button>
+      </div>
+      <div class="stream-card" id="st2">
+        <div class="stream-left">
+          <span class="stream-dot off" id="dot2"></span>
+          <span class="stream-name">Dhuvas Facebook</span>
+          <span class="stream-live" id="live2" style="display:none">LIVE</span>
+        </div>
+        <button class="stream-btn go" id="btn2" onclick="togStream(1)">START</button>
+      </div>
+      <div class="stream-card" id="st3">
+        <div class="stream-left">
+          <span class="stream-dot off" id="dot3"></span>
+          <span class="stream-name">VOICE YouTube</span>
+          <span class="stream-live" id="live3" style="display:none">LIVE</span>
+        </div>
+        <button class="stream-btn go" id="btn3" onclick="togStream(2)">START</button>
+      </div>
+    </div>
+
+    <button class="end-all" onclick="if(confirm('End ALL streams?'))endAll()">END ALL STREAMS</button>
+
+    <a href="/" class="back-link">← Back to Control Panel</a>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+  <script>
+    let connected = false;
+    let streams = [false, false, false];
+    let hlsPlayer = null;
+    let feedLive = false;
+
+    // Poll vMix status
+    async function pollStatus() {
+      try {
+        const r = await fetch('/api/vmix');
+        if (!r.ok) throw 0;
+        const t = await r.text();
+        connected = true;
+        parseStreams(t);
+        render();
+      } catch(e) {
+        connected = false;
+        render();
+      }
+    }
+
+    function parseStreams(xml) {
+      try {
+        const d = new DOMParser().parseFromString(xml, 'text/xml');
+        const v = d.querySelector('vmix');
+        if (!v) return;
+        const st = v.querySelector('streaming');
+        if (st) streams[0] = st.textContent === 'True';
+        const st2 = v.querySelector('stream2');
+        if (st2) streams[1] = st2.textContent === 'True';
+        const st3 = v.querySelector('stream3');
+        if (st3) streams[2] = st3.textContent === 'True';
+      } catch(e) {}
+    }
+
+    function render() {
+      const cs = document.getElementById('connStatus');
+      cs.className = 'conn ' + (connected ? 'on' : 'off');
+      cs.innerHTML = '<span class="conn-dot"></span>' + (connected ? 'CONNECTED' : 'OFFLINE');
+
+      for (let i = 0; i < 3; i++) {
+        const n = i + 1;
+        const on = streams[i];
+        document.getElementById('st' + n).className = 'stream-card' + (on ? ' on' : '');
+        document.getElementById('dot' + n).className = 'stream-dot ' + (on ? 'on' : 'off');
+        document.getElementById('live' + n).style.display = on ? 'inline' : 'none';
+        const btn = document.getElementById('btn' + n);
+        btn.textContent = on ? 'STOP' : 'START';
+        btn.className = 'stream-btn ' + (on ? 'no' : 'go');
+      }
+    }
+
+    async function cmd(f, p) {
+      try {
+        await fetch('/api/vmix-cmd?Function=' + f + (p ? '&' + p : ''));
+        setTimeout(pollStatus, 500);
+      } catch(e) {}
+    }
+
+    function togStream(i) {
+      if (streams[i]) {
+        if (confirm('Stop this stream?')) cmd('StopStreaming', 'Value=' + i);
+      } else {
+        cmd('StartStreaming', 'Value=' + i);
+      }
+      streams[i] = !streams[i];
+      render();
+    }
+
+    function endAll() {
+      cmd('StopStreaming');
+      streams = [false, false, false];
+      render();
+    }
+
+    // Poll PSM feed
+    async function pollFeed() {
+      try {
+        const r = await fetch('/hls/psm.m3u8', { cache: 'no-store' });
+        if (r.ok) {
+          const t = await r.text();
+          if (t.includes('.ts')) {
+            if (!feedLive) {
+              feedLive = true;
+              showFeed();
+            }
+            return;
+          }
+        }
+      } catch(e) {}
+      if (feedLive) {
+        feedLive = false;
+        hideFeed();
+      }
+    }
+
+    function showFeed() {
+      const vid = document.getElementById('feedVideo');
+      const off = document.getElementById('feedOffline');
+      const badge = document.getElementById('feedBadge');
+      vid.style.display = 'block';
+      off.style.display = 'none';
+      badge.className = 'feed-badge live';
+      badge.textContent = '● LIVE';
+
+      if (!hlsPlayer && Hls.isSupported()) {
+        hlsPlayer = new Hls({ liveSyncDuration: 2, liveMaxLatencyDuration: 5, maxBufferLength: 3 });
+        hlsPlayer.loadSource('/hls/psm.m3u8');
+        hlsPlayer.attachMedia(vid);
+        hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => { vid.play().catch(() => {}); });
+        hlsPlayer.on(Hls.Events.ERROR, (e, d) => { if (d.fatal) { hlsPlayer.destroy(); hlsPlayer = null; } });
+      }
+    }
+
+    function hideFeed() {
+      const vid = document.getElementById('feedVideo');
+      const off = document.getElementById('feedOffline');
+      const badge = document.getElementById('feedBadge');
+      vid.style.display = 'none';
+      off.style.display = 'block';
+      badge.className = 'feed-badge off';
+      badge.textContent = 'OFFLINE';
+      if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
+    }
+
+    // Start polling
+    pollStatus();
+    setInterval(pollStatus, 3000);
+    pollFeed();
+    setInterval(pollFeed, 5000);
+    render();
+  </script>
+</body>
+</html>
