@@ -314,7 +314,7 @@
 
       async function poll() {
         try {
-          const r = await fetch('/api/msg/poll?id=' + encodeURIComponent(streamId));
+          const r = await fetch('/api/msg/poll?id=' + encodeURIComponent(streamId), { cache: 'no-store' });
           const j = await r.json();
           const m = j.msg;
           if (m && m.status === 'pending'
