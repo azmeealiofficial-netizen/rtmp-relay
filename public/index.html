@@ -523,10 +523,10 @@
 
       // Main area feed cards with Director controls
       const grid=document.getElementById('reporterFeeds');
-      const directorUrl=`https://vdo.ninja/?director=${VDO_ROOM}&password=${VDO_PASS}&cleanoutput&autostart`;
+      const directorUrl=`https://live.vxd.news/?director=${VDO_ROOM}&password=${VDO_PASS}&cleanoutput&autostart`;
       grid.innerHTML=reporters.map(r=>{
-        const viewUrl=`https://vdo.ninja/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}&muted&autoplay`;
-        const vmixViewUrl=`https://vdo.ninja/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}`;
+        const viewUrl=`https://live.vxd.news/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}&muted&autoplay`;
+        const vmixViewUrl=`https://live.vxd.news/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}`;
         const brandedUrl=`${window.location.origin}/go?id=${r.id}&name=${encodeURIComponent(r.name)}`;
         return `
           <div class="feed-card" id="rcard-${r.id}">
