@@ -322,11 +322,9 @@
     function setMasterVol(val) {
       masterDragging = true;
       document.getElementById('masterVolVal').textContent = val + '%';
-      const amp = sliderToAmplitude(parseInt(val));
-      cmd('SetMasterVolume', 'Value=' + amp);
-      // Reset dragging after a delay
+      cmd('SetMasterVolume', 'Value=' + val);
       clearTimeout(window._masterDragTimer);
-      window._masterDragTimer = setTimeout(() => { masterDragging = false; }, 2000);
+      window._masterDragTimer = setTimeout(() => { masterDragging = false; }, 3000);
     }
 
     function toggleMasterMute() {
@@ -345,7 +343,8 @@
         if (master) {
           const amp = parseFloat(master.getAttribute('volume'));
           const muted = master.getAttribute('muted') === 'True';
-          const sliderVal = amplitudeToSlider(amp);
+          // amp is 0-100 amplitude, convert to slider: slider = amp^0.25 * 100
+          const sliderVal = Math.round(Math.pow(amp / 100, 0.25) * 100);
           document.getElementById('masterVolSlider').value = sliderVal;
           document.getElementById('masterVolVal').textContent = sliderVal + '%';
           masterMuted = muted;
