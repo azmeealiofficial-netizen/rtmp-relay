@@ -18,14 +18,14 @@
     .bar-right{display:flex;align-items:center;gap:14px;font-size:13px;color:var(--t2)}
     .bar-clock{font-variant-numeric:tabular-nums;font-weight:600}
 
-    .grid{flex:1;display:grid;gap:8px;padding:8px;grid-auto-rows:1fr;
-      grid-template-columns:repeat(auto-fit,minmax(440px,1fr));overflow:hidden}
+    .grid{flex:1;display:grid;gap:10px;padding:10px;align-content:start;
+      grid-template-columns:repeat(auto-fit,minmax(440px,1fr));overflow-y:auto}
     /* When few feeds, don't let tiles get gigantic */
-    .grid.few{grid-template-columns:repeat(auto-fit,minmax(560px,1fr))}
+    .grid.few{grid-template-columns:repeat(auto-fit,minmax(520px,1fr))}
 
     .tile{position:relative;background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
     .tile.live{border-color:#22c55e40}
-    .tile-media{flex:1;background:#000;position:relative;display:flex;align-items:center;justify-content:center;min-height:0}
+    .tile-media{aspect-ratio:16/9;width:100%;background:#000;position:relative;display:flex;align-items:center;justify-content:center}
     .tile-media iframe,.tile-media video{width:100%;height:100%;border:none;object-fit:contain;background:#000}
     .tile-off{color:#2a2a2e;font-size:14px;font-weight:600;letter-spacing:1px}
     .tile-top{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:space-between;
