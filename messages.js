@@ -13,6 +13,12 @@ module.exports = function attachMessaging(app) {
   const now = () => Date.now();
   const mkId = () => now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+  // never let a browser/proxy cache a poll response — fresh state every time
+  app.use('/api/msg', (req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    next();
+  });
+
   // DIRECTOR → send a message to a reporter
   app.post('/api/msg/send', (req, res) => {
     const { id, text = '', action = '' } = req.body || {};
