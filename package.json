@@ -4,6 +4,7 @@
   "description": "VxD RTMP Relay + Control Panel",
   "main": "server.js",
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "pg": "^8.13.0"
   }
 }
