@@ -278,11 +278,11 @@
 
     let masterMuted = false;
     let masterVolume = 100;
+    let volumeLoaded = false;
 
     function setVolume(val) {
       masterVolume = parseInt(val);
       document.getElementById('volVal').textContent = val + '%';
-      // vMix volume is 0-100, API uses SetMasterVolume
       cmd('SetMasterVolume', 'Value=' + val);
     }
 
@@ -301,26 +301,21 @@
     }
 
     function parseVolume(xml) {
+      if (volumeLoaded) return;
       try {
         const d = new DOMParser().parseFromString(xml, 'text/xml');
         const master = d.querySelector('master');
         if (master) {
           const vol = parseFloat(master.getAttribute('volume'));
           const muted = master.getAttribute('muted') === 'True';
-          const slider = document.getElementById('volSlider');
-          const valEl = document.getElementById('volVal');
-          const muteBtn = document.getElementById('volMute');
           const pct = Math.round(vol);
-          slider.value = pct;
-          valEl.textContent = pct + '%';
+          document.getElementById('volSlider').value = pct;
+          document.getElementById('volVal').textContent = pct + '%';
           masterMuted = muted;
-          if (muted) {
-            muteBtn.textContent = '🔇';
-            muteBtn.classList.add('muted');
-          } else {
-            muteBtn.textContent = '🔊';
-            muteBtn.classList.remove('muted');
-          }
+          const muteBtn = document.getElementById('volMute');
+          muteBtn.textContent = muted ? '🔇' : '🔊';
+          if (muted) muteBtn.classList.add('muted'); else muteBtn.classList.remove('muted');
+          volumeLoaded = true;
         }
       } catch(e) {}
     }
