@@ -192,11 +192,25 @@
     // Default to back camera
     setCam('back');
 
+    function enterFullscreen() {
+      const el = document.documentElement;
+      const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.webkitRequestFullScreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+      if (!fn) return;
+      try { const p = fn.call(el); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+    }
+    function exitFullscreen() {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) return;
+      const fn = document.exitFullscreen || document.webkitExitFullscreen || document.webkitCancelFullScreen || document.mozCancelFullScreen || document.msExitFullscreen;
+      if (!fn) return;
+      try { const p = fn.call(document); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+    }
+
     function buildVdoUrl() {
       return `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${selectedCam}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
     }
 
     function startLive() {
+      enterFullscreen();
       const frame = document.getElementById('vdoFrame');
       const idle = document.getElementById('idleScreen');
       const overlay = document.getElementById('liveOverlay');
@@ -223,6 +237,7 @@
 
     function endLive() {
       if (!confirm('End the live stream?')) return;
+      exitFullscreen();
       const frame = document.getElementById('vdoFrame');
       const overlay = document.getElementById('liveOverlay');
       const ended = document.getElementById('endedScreen');
