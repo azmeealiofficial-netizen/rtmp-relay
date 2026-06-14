@@ -96,12 +96,23 @@
 
     <div class="vol-box">
       <div class="vol-header">
-        <span class="vol-label">MASTER VOLUME</span>
-        <span class="vol-val" id="volVal">100%</span>
+        <span class="vol-label">PREVIEW VOLUME</span>
+        <span class="vol-val" id="prevVolVal">100%</span>
       </div>
       <div class="vol-row">
-        <button class="vol-mute" id="volMute" onclick="toggleMasterMute()">🔊</button>
-        <input type="range" id="volSlider" class="vol-slider" min="0" max="100" value="100" oninput="setVolume(this.value)">
+        <button class="vol-mute" id="prevVolMute" onclick="togglePreviewMute()">🔊</button>
+        <input type="range" id="prevVolSlider" class="vol-slider" min="0" max="100" value="100" oninput="setPreviewVol(this.value)">
+      </div>
+    </div>
+
+    <div class="vol-box">
+      <div class="vol-header">
+        <span class="vol-label">vMix MASTER VOLUME</span>
+        <span class="vol-val" id="masterVolVal">—</span>
+      </div>
+      <div class="vol-row">
+        <button class="vol-mute" id="masterVolMute" onclick="toggleMasterMute()">🔊</button>
+        <input type="range" id="masterVolSlider" class="vol-slider" min="0" max="100" value="100" oninput="setMasterVol(this.value)">
       </div>
     </div>
 
@@ -161,7 +172,7 @@
         const t = await r.text();
         connected = true;
         parseStreams(t);
-        parseVolume(t);
+        parseMasterVolume(t);
         render();
       } catch(e) {
         connected = false;
@@ -276,46 +287,71 @@
       if (hlsPlayer) { hlsPlayer.destroy(); hlsPlayer = null; }
     }
 
+    let previewMuted = false;
     let masterMuted = false;
-    let masterVolume = 100;
-    let volumeLoaded = false;
+    let masterLoaded = false;
+    let masterDragging = false;
 
-    function setVolume(val) {
-      masterVolume = parseInt(val);
-      document.getElementById('volVal').textContent = val + '%';
-      cmd('SetMasterVolume', 'Value=' + val);
+    // Preview volume (browser audio only)
+    function setPreviewVol(val) {
+      const vid = document.getElementById('feedVideo');
+      vid.volume = parseInt(val) / 100;
+      document.getElementById('prevVolVal').textContent = val + '%';
+    }
+
+    function togglePreviewMute() {
+      previewMuted = !previewMuted;
+      const vid = document.getElementById('feedVideo');
+      const btn = document.getElementById('prevVolMute');
+      vid.muted = previewMuted;
+      btn.textContent = previewMuted ? '🔇' : '🔊';
+      if (previewMuted) btn.classList.add('muted'); else btn.classList.remove('muted');
+    }
+
+    // vMix Master volume (amplitude conversion)
+    // XML amplitude → slider: Volume = (Amplitude/100)^0.25 * 100
+    // Slider → API amplitude: Amplitude = (Volume/100)^4 * 100
+    function amplitudeToSlider(amp) {
+      return Math.round(Math.pow(amp / 100, 0.25) * 100);
+    }
+
+    function sliderToAmplitude(vol) {
+      return Math.round(Math.pow(vol / 100, 4) * 100);
+    }
+
+    function setMasterVol(val) {
+      masterDragging = true;
+      document.getElementById('masterVolVal').textContent = val + '%';
+      const amp = sliderToAmplitude(parseInt(val));
+      cmd('SetMasterVolume', 'Value=' + amp);
+      // Reset dragging after a delay
+      clearTimeout(window._masterDragTimer);
+      window._masterDragTimer = setTimeout(() => { masterDragging = false; }, 2000);
     }
 
     function toggleMasterMute() {
       masterMuted = !masterMuted;
-      const btn = document.getElementById('volMute');
-      if (masterMuted) {
-        btn.textContent = '🔇';
-        btn.classList.add('muted');
-        cmd('MasterAudioOff');
-      } else {
-        btn.textContent = '🔊';
-        btn.classList.remove('muted');
-        cmd('MasterAudioOn');
-      }
+      const btn = document.getElementById('masterVolMute');
+      btn.textContent = masterMuted ? '🔇' : '🔊';
+      if (masterMuted) btn.classList.add('muted'); else btn.classList.remove('muted');
+      cmd(masterMuted ? 'MasterAudioOff' : 'MasterAudioOn');
     }
 
-    function parseVolume(xml) {
-      if (volumeLoaded) return;
+    function parseMasterVolume(xml) {
+      if (masterDragging) return;
       try {
         const d = new DOMParser().parseFromString(xml, 'text/xml');
         const master = d.querySelector('master');
         if (master) {
-          const vol = parseFloat(master.getAttribute('volume'));
+          const amp = parseFloat(master.getAttribute('volume'));
           const muted = master.getAttribute('muted') === 'True';
-          const pct = Math.round(vol);
-          document.getElementById('volSlider').value = pct;
-          document.getElementById('volVal').textContent = pct + '%';
+          const sliderVal = amplitudeToSlider(amp);
+          document.getElementById('masterVolSlider').value = sliderVal;
+          document.getElementById('masterVolVal').textContent = sliderVal + '%';
           masterMuted = muted;
-          const muteBtn = document.getElementById('volMute');
-          muteBtn.textContent = muted ? '🔇' : '🔊';
-          if (muted) muteBtn.classList.add('muted'); else muteBtn.classList.remove('muted');
-          volumeLoaded = true;
+          const btn = document.getElementById('masterVolMute');
+          btn.textContent = muted ? '🔇' : '🔊';
+          if (muted) btn.classList.add('muted'); else btn.classList.remove('muted');
         }
       } catch(e) {}
     }
