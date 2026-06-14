@@ -112,8 +112,46 @@ app.post('/api/ticker/:id', (req, res) => {
   } else res.status(404).json({ error: 'Unknown ticker' });
 });
 
-// Director ↔ reporter messaging (/api/msg/*)
-require('./messages')(app);
+// === Director ↔ reporter messaging (/api/msg/*) — inlined, no separate file ===
+const msgStore = Object.create(null);
+const msgNow = () => Date.now();
+const mkMsgId = () => msgNow().toString(36) + Math.random().toString(36).slice(2, 6);
+
+app.use('/api/msg', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  next();
+});
+
+app.post('/api/msg/send', (req, res) => {
+  const { id, text = '', action = '' } = req.body || {};
+  if (!id) return res.status(400).json({ ok: false, error: 'missing id' });
+  const msgId = mkMsgId();
+  msgStore[id] = { msgId, text: String(text).slice(0, 300), action: String(action || ''), sentAt: msgNow(), status: 'pending', respAt: 0 };
+  res.json({ ok: true, msgId });
+});
+
+app.get('/api/msg/poll', (req, res) => {
+  res.json({ ok: true, msg: msgStore[req.query.id] || null });
+});
+
+app.post('/api/msg/ack', (req, res) => {
+  const { id, msgId, response } = req.body || {};
+  const m = msgStore[id];
+  if (!m || m.msgId !== msgId) return res.json({ ok: false, error: 'stale' });
+  if (response !== 'yes' && response !== 'ignore') return res.status(400).json({ ok: false, error: 'bad response' });
+  m.status = response;
+  m.respAt = msgNow();
+  res.json({ ok: true });
+});
+
+app.get('/api/msg/status', (req, res) => {
+  res.json({ ok: true, msg: msgStore[req.query.id] || null });
+});
+
+app.post('/api/msg/clear', (req, res) => {
+  if (req.body && req.body.id) delete msgStore[req.body.id];
+  res.json({ ok: true });
+});
 
 // Pages
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
