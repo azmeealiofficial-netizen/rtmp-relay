@@ -112,6 +112,9 @@ app.post('/api/ticker/:id', (req, res) => {
   } else res.status(404).json({ error: 'Unknown ticker' });
 });
 
+// Director ↔ reporter messaging (/api/msg/*)
+require('./messages')(app);
+
 // Pages
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/team', (req, res) => res.sendFile(path.join(__dirname, 'public', 'team.html')));
