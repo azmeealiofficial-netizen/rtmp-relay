@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VxD Feeds — TV</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{--bg:#000;--card:#0c0d10;--bdr:#1c1d22;--t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;--red:#ef4444;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b}
+    html,body{height:100%;background:#000;color:var(--t1);font-family:'Inter',system-ui,sans-serif;overflow:hidden}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+    .wall{height:100vh;display:flex;flex-direction:column}
+    .bar{display:flex;align-items:center;justify-content:space-between;padding:10px 18px;background:var(--card);border-bottom:1px solid var(--bdr)}
+    .bar-logos{display:flex;align-items:center;gap:10px}
+    .bar-logos img{height:30px;object-fit:contain}
+    .bar-logos span{color:#555;font-size:14px}
+    .bar-right{display:flex;align-items:center;gap:14px;font-size:13px;color:var(--t2)}
+    .bar-clock{font-variant-numeric:tabular-nums;font-weight:600}
+
+    .grid{flex:1;display:grid;gap:8px;padding:8px;grid-auto-rows:1fr;
+      grid-template-columns:repeat(auto-fit,minmax(440px,1fr));overflow:hidden}
+    /* When few feeds, don't let tiles get gigantic */
+    .grid.few{grid-template-columns:repeat(auto-fit,minmax(560px,1fr))}
+
+    .tile{position:relative;background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+    .tile.live{border-color:#22c55e40}
+    .tile-media{flex:1;background:#000;position:relative;display:flex;align-items:center;justify-content:center;min-height:0}
+    .tile-media iframe,.tile-media video{width:100%;height:100%;border:none;object-fit:contain;background:#000}
+    .tile-off{color:#2a2a2e;font-size:14px;font-weight:600;letter-spacing:1px}
+    .tile-top{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:space-between;
+      padding:8px 12px;background:linear-gradient(180deg,rgba(0,0,0,.75),transparent);pointer-events:none}
+    .tile-name{font-size:15px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+    .tile-tag{font-size:9px;font-weight:700;letter-spacing:1px;color:var(--blu);margin-left:6px}
+    .badge{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:800;letter-spacing:1px;padding:3px 8px;border-radius:4px}
+    .badge.live{background:#22c55e1a;color:var(--grn);border:1px solid #22c55e40;animation:pulse 2s infinite}
+    .badge.off{background:#18181b;color:var(--t3);border:1px solid var(--bdr)}
+    .badge .dot{width:6px;height:6px;border-radius:50%}
+    .badge.live .dot{background:var(--grn);box-shadow:0 0 6px var(--grn)}
+    .badge.off .dot{background:var(--t3)}
+
+    .empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--t3);font-size:16px}
+  </style>
+</head>
+<body>
+  <div class="wall">
+    <div class="bar">
+      <div class="bar-logos">
+        <img src="img/voice.png" alt="VOICE">
+        <span>✕</span>
+        <img src="img/dhuvas.png" alt="DHUVAS">
+      </div>
+      <div class="bar-right">
+        <span id="count">0 feeds</span>
+        <span class="bar-clock" id="clock">--:--:--</span>
+      </div>
+    </div>
+    <div class="grid" id="grid"><div class="empty">Waiting for feeds…</div></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+  <script>
+    const VDO_ROOM='vxdlive';
+    const VDO_PASS='vxd2026';
+    const HLS_HOST=window.location.origin;
+    const FEEDS=[{key:'liveu',name:'LiveU'},{key:'yolo',name:'Yolo'}];
+
+    let reporters=[];
+    let liveFeeds={};
+    let failCount={};
+    let hlsPlayers={};
+    let renderedKey='';   // signature of what's currently on screen
+
+    // clock
+    setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString();},1000);
+
+    async function loadReporters(){
+      try{const r=await fetch('/api/reporters',{cache:'no-store'});reporters=await r.json();}catch(e){}
+    }
+
+    async function pollFeeds(){
+      const newLive={};
+      await Promise.all(FEEDS.map(async f=>{
+        try{
+          const r=await fetch(`/hls/${f.key}.m3u8`,{cache:'no-store'});
+          if(r.ok){const t=await r.text();if(t.includes('.ts')){newLive[f.key]=true;failCount[f.key]=0;}}
+        }catch(e){}
+        if(!newLive[f.key]&&liveFeeds[f.key]){
+          failCount[f.key]=(failCount[f.key]||0)+1;
+          if(failCount[f.key]<3)newLive[f.key]=true;
+        }
+      }));
+      liveFeeds=newLive;
+    }
+
+    function signature(){
+      return reporters.map(r=>r.id).join(',')+'|'+FEEDS.map(f=>f.key+(liveFeeds[f.key]?'1':'0')).join(',');
+    }
+
+    function render(){
+      const grid=document.getElementById('grid');
+      const total=reporters.length+FEEDS.length;
+      document.getElementById('count').textContent=total+(total===1?' feed':' feeds');
+      grid.className='grid'+(total<=4?' few':'');
+
+      let html='';
+      // reporter WebRTC feeds
+      reporters.forEach(r=>{
+        const viewUrl=`https://vdo.ninja/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}&muted&autoplay&cleanoutput`;
+        html+=`<div class="tile live" id="tile-r-${r.id}">
+          <div class="tile-top"><span class="tile-name">${r.name}<span class="tile-tag">WEBRTC</span></span></div>
+          <div class="tile-media"><iframe src="${viewUrl}" allow="autoplay"></iframe></div>
+        </div>`;
+      });
+      // RTMP / HLS feeds
+      FEEDS.forEach(f=>{
+        const on=!!liveFeeds[f.key];
+        html+=`<div class="tile ${on?'live':''}" id="tile-f-${f.key}">
+          <div class="tile-top">
+            <span class="tile-name">${f.name}</span>
+            <span class="badge ${on?'live':'off'}"><span class="dot"></span>${on?'LIVE':'OFFLINE'}</span>
+          </div>
+          <div class="tile-media">
+            <video id="vid-${f.key}" muted autoplay playsinline style="display:${on?'block':'none'}"></video>
+            <span class="tile-off" id="off-${f.key}" style="display:${on?'none':'block'}">No feed</span>
+          </div>
+        </div>`;
+      });
+      grid.innerHTML=html||'<div class="empty">No feeds yet</div>';
+
+      // (re)attach HLS players for live RTMP feeds
+      FEEDS.forEach(f=>{ if(liveFeeds[f.key]) attachPlayer(f.key); });
+    }
+
+    function attachPlayer(key){
+      const vid=document.getElementById('vid-'+key);
+      if(!vid||hlsPlayers[key])return;
+      const url=`${HLS_HOST}/hls/${key}.m3u8`;
+      if(Hls.isSupported()){
+        const hls=new Hls({liveSyncDuration:2,liveMaxLatencyDuration:5,maxBufferLength:3,maxMaxBufferLength:5});
+        hls.loadSource(url);hls.attachMedia(vid);
+        hls.on(Hls.Events.MANIFEST_PARSED,()=>{vid.play().catch(()=>{});});
+        hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal){hls.destroy();delete hlsPlayers[key];}});
+        hlsPlayers[key]=hls;
+      }else if(vid.canPlayType('application/vnd.apple.mpegurl')){vid.src=url;vid.play().catch(()=>{});}
+    }
+
+    function destroyDeadPlayers(){
+      Object.keys(hlsPlayers).forEach(key=>{
+        if(!liveFeeds[key]){hlsPlayers[key].destroy();delete hlsPlayers[key];}
+      });
+    }
+
+    async function tick(){
+      await Promise.all([loadReporters(),pollFeeds()]);
+      const sig=signature();
+      if(sig!==renderedKey){      // only re-render (which reloads iframes) when the set changes
+        destroyDeadPlayers();
+        // wipe player handles for feeds being rebuilt
+        Object.keys(hlsPlayers).forEach(k=>{hlsPlayers[k].destroy();delete hlsPlayers[k];});
+        render();
+        renderedKey=sig;
+      }
+    }
+
+    tick();
+    setInterval(tick,5000);
+  </script>
+</body>
+</html>
