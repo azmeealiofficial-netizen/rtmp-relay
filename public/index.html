@@ -679,12 +679,36 @@
 
     let camFacing = {};
     async function flipCam(id) {
+      // Step 1: Ask reporter if ready for field reporting
+      await commsSend(id, 'ފީލްޑް ރިޕޯޓިންގ އަކަށް ރެޑީތަ؟', 'ask-flip');
+      // Track that we're waiting for a flip confirmation
       camFacing[id] = camFacing[id] === 'front' ? 'rear' : 'front';
-      const action = camFacing[id] === 'front' ? 'front-cam' : 'rear-cam';
-      const text = camFacing[id] === 'front' ? 'Switching to front camera' : 'Switching to rear camera';
       const btn = document.getElementById('cam-' + id);
-      btn.innerHTML = camFacing[id] === 'front' ? '🤳' : '🔄';
-      await commsSend(id, text, action);
+      btn.innerHTML = '⏳';
+      // Poll for acceptance, then auto-send camera switch
+      const checkAccept = setInterval(async () => {
+        try {
+          const res = await fetch('/api/msg/status?id=' + encodeURIComponent(id), { cache: 'no-store' });
+          const j = await res.json();
+          if (j.msg && j.msg.action === 'ask-flip') {
+            if (j.msg.status === 'yes') {
+              clearInterval(checkAccept);
+              // Auto-send the camera switch (no prompt needed on reporter side)
+              const action = camFacing[id] === 'front' ? 'front-cam' : 'rear-cam';
+              const text = camFacing[id] === 'front' ? 'Switching to front camera' : 'Switching to rear camera';
+              await commsSend(id, text, action);
+              btn.innerHTML = camFacing[id] === 'front' ? '🤳' : '🔄';
+            } else if (j.msg.status === 'ignore') {
+              clearInterval(checkAccept);
+              // Reporter declined — revert
+              camFacing[id] = camFacing[id] === 'front' ? 'rear' : 'front';
+              btn.innerHTML = '🔄';
+            }
+          }
+        } catch(e) {}
+      }, 1500);
+      // Timeout after 30 seconds
+      setTimeout(() => { clearInterval(checkAccept); btn.innerHTML = '🔄'; }, 30000);
     }
 
     // === REPORTER MESSAGES ===
