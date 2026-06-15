@@ -253,14 +253,16 @@
     // Default to back camera
     setCam('back');
 
+    function buildVdoUrl() {
+      return `https://live.vxd.news/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facing=${selectedCam}&width=1280&height=720&autostart&view&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
+    }
+
     function startLive() {
       const frame = document.getElementById('vdoFrame');
       const idle = document.getElementById('idleScreen');
       const overlay = document.getElementById('liveOverlay');
 
-      const vdoUrl = `https://live.vxd.news/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${selectedCam}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
-
-      frame.src = vdoUrl;
+      frame.src = buildVdoUrl();
       frame.style.display = 'block';
 
       setTimeout(() => {
@@ -336,12 +338,13 @@
       setTimeout(() => sent.classList.add('hidden'), 2000);
     }
     // === CONTROL-ROOM MESSAGES ===
-    function restartPushWithCam(cam) {
-      selectedCam = cam === 'front' ? 'user' : 'environment';
+    function restartPushWithCam(which) {
+      setCam(which === 'front' ? 'front' : 'back');
       const frame = document.getElementById('vdoFrame');
-      const vdoUrl = `https://live.vxd.news/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${selectedCam}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
-      frame.src = '';
-      setTimeout(() => { frame.src = vdoUrl; }, 500);
+      const overlay = document.getElementById('liveOverlay');
+      if (overlay.classList.contains('active')) {
+        frame.src = buildVdoUrl();
+      }
     }
 
     function applyCommsAction(action) {
