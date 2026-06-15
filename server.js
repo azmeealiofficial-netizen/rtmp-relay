@@ -6,7 +6,27 @@ const PORT = 8080;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-let vmixProxyUrl = '';
+// ============================================================
+// OPTIONAL POSTGRESQL PERSISTENCE
+// If DATABASE_URL is set (Railway Postgres), reporters + ticker
+// settings persist across deploys. If it's not set (or pg isn't
+// installed), the server still runs fine using in-memory only —
+// it just resets on deploy, like before. No crash either way.
+// ============================================================
+let pool = null;
+if (process.env.DATABASE_URL) {
+  try {
+    const { Pool } = require('pg');
+    const url = process.env.DATABASE_URL;
+    const useSSL = /sslmode=require/.test(url) || /\.rlwy\.net/.test(url);
+    pool = new Pool({ connectionString: url, ssl: useSSL ? { rejectUnauthorized: false } : false });
+  } catch (e) {
+    console.error('pg not available, using in-memory:', e.message);
+    pool = null;
+  }
+}
+
+let vmixProxyUrl = 'https://vmix.vxd.news';
 
 // vMix URL management
 app.post('/api/set-vmix-url', (req, res) => {
@@ -76,27 +96,35 @@ app.get('/hls/:file', async (req, res) => {
   }
 });
 
-// Reporters (server-side storage so all devices see the same list)
+// ---- Reporters (persisted to Postgres when available) ----
 let reporters = [];
 
 app.get('/api/reporters', (req, res) => {
   res.json(reporters);
 });
 
-app.post('/api/reporters', (req, res) => {
+app.post('/api/reporters', async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Name required' });
   const id = 'vxd' + Date.now().toString(36);
   reporters.push({ name, id });
+  if (pool) {
+    try { await pool.query('INSERT INTO reporters (id, name, created_at) VALUES ($1,$2,$3)', [id, name, Date.now()]); }
+    catch (e) { console.error('reporters insert failed:', e.message); }
+  }
   res.json(reporters);
 });
 
-app.delete('/api/reporters/:id', (req, res) => {
+app.delete('/api/reporters/:id', async (req, res) => {
   reporters = reporters.filter(r => r.id !== req.params.id);
+  if (pool) {
+    try { await pool.query('DELETE FROM reporters WHERE id=$1', [req.params.id]); }
+    catch (e) { console.error('reporters delete failed:', e.message); }
+  }
   res.json(reporters);
 });
 
-// SOS alerts from field reporters
+// ---- SOS alerts from field reporters ----
 let sosAlerts = [];
 
 app.get('/api/sos', (req, res) => {
@@ -108,7 +136,6 @@ app.post('/api/sos', (req, res) => {
   alert.id = Date.now();
   alert.read = false;
   sosAlerts.unshift(alert);
-  // Keep only last 50 alerts
   if (sosAlerts.length > 50) sosAlerts = sosAlerts.slice(0, 50);
   res.json({ ok: true });
 });
@@ -118,7 +145,7 @@ app.delete('/api/sos/:id', (req, res) => {
   res.json(sosAlerts);
 });
 
-// === Director ↔ reporter messaging (/api/msg/*) — in-memory ===
+// === Director ↔ reporter messaging (/api/msg/*) — in-memory by design ===
 const msgStore = Object.create(null);
 const msgNow = () => Date.now();
 const mkMsgId = () => msgNow().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -154,7 +181,12 @@ app.get('/api/msg/status', (req, res) => {
   res.json({ ok: true, msg: msgStore[req.query.id] || null });
 });
 
-// Ticker states — one per outlet
+app.post('/api/msg/clear', (req, res) => {
+  if (req.body && req.body.id) delete msgStore[req.body.id];
+  res.json({ ok: true });
+});
+
+// ---- Ticker states (persisted to Postgres when available) ----
 let tickers = {
   voice: {
     visible: false,
@@ -182,16 +214,20 @@ app.get('/api/ticker/:id', (req, res) => {
   else res.status(404).json({ error: 'Unknown ticker' });
 });
 
-app.post('/api/ticker/:id', (req, res) => {
+app.post('/api/ticker/:id', async (req, res) => {
   const id = req.params.id;
-  if (tickers[id]) {
-    Object.assign(tickers[id], req.body);
-    res.json(tickers[id]);
-  } else res.status(404).json({ error: 'Unknown ticker' });
+  if (!tickers[id]) return res.status(404).json({ error: 'Unknown ticker' });
+  Object.assign(tickers[id], req.body);
+  if (pool) {
+    try { await pool.query('INSERT INTO tickers (id, data) VALUES ($1,$2) ON CONFLICT (id) DO UPDATE SET data=$2', [id, tickers[id]]); }
+    catch (e) { console.error('ticker save failed:', e.message); }
+  }
+  res.json(tickers[id]);
 });
 
 // Pages
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/tv', (req, res) => res.sendFile(path.join(__dirname, 'public', 'tv.html')));
 app.get('/team', (req, res) => res.sendFile(path.join(__dirname, 'public', 'team.html')));
 app.get('/relay', (req, res) => res.sendFile(path.join(__dirname, 'public', 'relay.html')));
 app.get('/settings', (req, res) => res.sendFile(path.join(__dirname, 'public', 'settings.html')));
@@ -199,6 +235,31 @@ app.get('/ticker', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ti
 app.get('/go', (req, res) => res.sendFile(path.join(__dirname, 'public', 'go.html')));
 app.get('/live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'live.html')));
 
-app.listen(PORT, () => {
-  console.log(`VxD Relay running on port ${PORT}`);
+// ---- Load persisted data, then start the server ----
+async function initDB() {
+  if (!pool) {
+    console.log('No DATABASE_URL — running in-memory (data resets on deploy)');
+    return;
+  }
+  try {
+    await pool.query('CREATE TABLE IF NOT EXISTS reporters (id text PRIMARY KEY, name text NOT NULL, created_at bigint)');
+    await pool.query('CREATE TABLE IF NOT EXISTS tickers (id text PRIMARY KEY, data jsonb NOT NULL)');
+
+    const rr = await pool.query('SELECT id, name FROM reporters ORDER BY created_at ASC');
+    reporters = rr.rows.map(r => ({ id: r.id, name: r.name }));
+
+    for (const id of ['voice', 'dhuvas']) {
+      const tr = await pool.query('SELECT data FROM tickers WHERE id=$1', [id]);
+      if (tr.rows.length) tickers[id] = tr.rows[0].data;
+      else await pool.query('INSERT INTO tickers (id, data) VALUES ($1,$2)', [id, tickers[id]]);
+    }
+    console.log(`PostgreSQL connected — ${reporters.length} reporters loaded, data persists across deploys`);
+  } catch (e) {
+    console.error('DB init failed, falling back to in-memory:', e.message);
+    pool = null;
+  }
+}
+
+initDB().finally(() => {
+  app.listen(PORT, () => console.log(`VxD Relay running on port ${PORT}`));
 });
