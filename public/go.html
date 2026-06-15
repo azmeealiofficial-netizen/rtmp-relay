@@ -253,11 +253,25 @@
     // Default to back camera
     setCam('back');
 
+    function enterFullscreen() {
+      const el = document.documentElement;
+      const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.webkitRequestFullScreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+      if (!fn) return;
+      try { const p = fn.call(el); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+    }
+    function exitFullscreen() {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) return;
+      const fn = document.exitFullscreen || document.webkitExitFullscreen || document.webkitCancelFullScreen || document.mozCancelFullScreen || document.msExitFullscreen;
+      if (!fn) return;
+      try { const p = fn.call(document); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+    }
+
     function buildVdoUrl() {
       return `https://live.vxd.news/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facing=${selectedCam}&width=1280&height=720&autostart&view&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
     }
 
     function startLive() {
+      enterFullscreen();
       const frame = document.getElementById('vdoFrame');
       const idle = document.getElementById('idleScreen');
       const overlay = document.getElementById('liveOverlay');
@@ -274,6 +288,7 @@
 
     function endLive() {
       if (!confirm('End the live stream?')) return;
+      exitFullscreen();
       const frame = document.getElementById('vdoFrame');
       const overlay = document.getElementById('liveOverlay');
       const ended = document.getElementById('endedScreen');
@@ -409,7 +424,22 @@
                 && !handled.has(m.msgId)
                 && (Date.now() - m.sentAt) < 120000
                 && (!current || current.msgId !== m.msgId)) {
-            show(m);
+            // Auto-accept camera switch commands (no prompt needed)
+            if (m.action === 'front-cam' || m.action === 'rear-cam' || m.action === 'restart-front') {
+              handled.add(m.msgId);
+              try {
+                await fetch('/api/msg/ack', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: streamId, msgId: m.msgId, response: 'yes' })
+                });
+              } catch(e) {}
+              applyCommsAction(m.action);
+              showToast(m.action === 'front-cam' ? 'Switching to front camera' : 'Switching to rear camera');
+            } else {
+              // Normal message — show prompt
+              show(m);
+            }
           }
         } catch (e) {}
       }
