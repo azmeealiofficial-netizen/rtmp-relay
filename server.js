@@ -6,7 +6,7 @@ const PORT = 8080;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-let vmixProxyUrl = 'https://vmix.vxd.news';
+let vmixProxyUrl = '';
 
 // vMix URL management
 app.post('/api/set-vmix-url', (req, res) => {
@@ -94,6 +94,28 @@ app.post('/api/reporters', (req, res) => {
 app.delete('/api/reporters/:id', (req, res) => {
   reporters = reporters.filter(r => r.id !== req.params.id);
   res.json(reporters);
+});
+
+// SOS alerts from field reporters
+let sosAlerts = [];
+
+app.get('/api/sos', (req, res) => {
+  res.json(sosAlerts);
+});
+
+app.post('/api/sos', (req, res) => {
+  const alert = req.body;
+  alert.id = Date.now();
+  alert.read = false;
+  sosAlerts.unshift(alert);
+  // Keep only last 50 alerts
+  if (sosAlerts.length > 50) sosAlerts = sosAlerts.slice(0, 50);
+  res.json({ ok: true });
+});
+
+app.delete('/api/sos/:id', (req, res) => {
+  sosAlerts = sosAlerts.filter(a => a.id !== parseInt(req.params.id));
+  res.json(sosAlerts);
 });
 
 // Ticker states — one per outlet
