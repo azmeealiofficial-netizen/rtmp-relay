@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="dv">
+<head>
+<meta charset="UTF-8">
+<title>VxD Reporter Tag</title>
+<style>
+  @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
+  @font-face{font-family:'MvEamaan';src:url('fonts/Mv_Eamaan_XP.otf') format('opentype')}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:transparent;overflow:hidden;width:1920px;height:1080px;font-family:'MvEamaan','Segoe UI',Arial,sans-serif}
+
+  :root{--accent:#f5821f}
+
+  /* Anchored bottom-RIGHT, sitting ABOVE the ticker (ticker = bottom 0–93px).
+     direction:rtl => first DOM child (photo) renders on the right, panel to its left. */
+  .tag-wrap{
+    position:absolute;bottom:120px;right:90px;
+    display:flex;align-items:center;direction:rtl;gap:16px;
+    transition:opacity .45s ease,transform .45s cubic-bezier(.22,1,.36,1);
+    transform:translateY(0);
+    filter:drop-shadow(0 10px 26px rgba(0,0,0,.5));
+  }
+  .tag-wrap.hidden{opacity:0;transform:translateY(150%);pointer-events:none}
+
+  /* Circular photo on the leading (right) edge with orange ring */
+  .tag-photo{
+    width:116px;height:116px;flex:0 0 116px;
+    border-radius:50%;object-fit:cover;display:block;
+    border:4px solid var(--accent);
+    background:#0a0a12;
+  }
+  .tag-photo.empty{display:none}
+
+  /* Two-tier text panel */
+  .tag-panel{
+    display:flex;flex-direction:column;
+    border-radius:12px;overflow:hidden;
+    min-width:320px;max-width:920px;
+  }
+
+  /* Top tier — name on dark bar */
+  .tag-name{
+    background:#16161c;color:#fff;
+    font-family:'MVWaheed','Segoe UI',Arial,sans-serif;
+    font-size:46px;line-height:1.2;
+    padding:12px 30px 10px;
+    direction:rtl;text-align:right;white-space:nowrap;
+  }
+
+  /* Bottom tier — location on orange bar */
+  .tag-loc{
+    background:var(--accent);color:#16161c;
+    font-family:'MvEamaan','Segoe UI',Arial,sans-serif;
+    font-size:27px;line-height:1.2;font-weight:600;
+    padding:8px 30px 10px;
+    direction:rtl;text-align:right;white-space:nowrap;
+  }
+  .tag-loc.empty{display:none}
+</style>
+</head>
+<body>
+  <div class="tag-wrap hidden" id="wrap">
+    <img class="tag-photo empty" id="photo" alt="">
+    <div class="tag-panel">
+      <div class="tag-name" id="name"></div>
+      <div class="tag-loc empty" id="loc"></div>
+    </div>
+  </div>
+
+  <script>
+    const params  = new URLSearchParams(location.search);
+    const ID       = params.get('id') || '';
+    const PREVIEW  = params.get('preview') === '1'; // force-show for vMix positioning
+    const ORIGIN   = location.origin;
+
+    const wrap   = document.getElementById('wrap');
+    const photo  = document.getElementById('photo');
+    const nameEl = document.getElementById('name');
+    const locEl  = document.getElementById('loc');
+
+    let lastTagKey = '';   // light state diff
+    let lastPv     = -1;   // photo version we've loaded
+
+    async function loadPhoto(){
+      if (!ID) return;
+      try{
+        const r = await fetch(`${ORIGIN}/api/reporters/${ID}`);
+        if (!r.ok) return;
+        const data = await r.json();
+        const p = data.photo || '';
+        if (p){
+          photo.src = p;
+          photo.classList.remove('empty');
+        }else{
+          photo.removeAttribute('src');
+          photo.classList.add('empty');
+        }
+      }catch(e){}
+    }
+
+    async function poll(){
+      if (!ID) return;
+      try{
+        const r = await fetch(`${ORIGIN}/api/reporters/${ID}/tag?t=${Date.now()}`);
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!d.ok){ wrap.classList.add('hidden'); return; }
+
+        // Heavy photo: fetch only when its version changes
+        if (d.pv !== lastPv){ lastPv = d.pv; loadPhoto(); }
+
+        const key = JSON.stringify([d.visible, d.name, d.location]);
+        if (key !== lastTagKey){
+          lastTagKey = key;
+          nameEl.textContent = d.name || '';
+          if (d.location){ locEl.textContent = d.location; locEl.classList.remove('empty'); }
+          else { locEl.textContent = ''; locEl.classList.add('empty'); }
+          wrap.classList.toggle('hidden', !(d.visible || PREVIEW));
+        }
+      }catch(e){}
+    }
+
+    if (PREVIEW){
+      nameEl.textContent = nameEl.textContent || 'ރިޕޯޓަރުގެ ނަން';
+      locEl.textContent  = locEl.textContent  || 'މާލެ';
+      locEl.classList.remove('empty');
+      wrap.classList.remove('hidden');
+    }
+
+    poll();
+    setInterval(poll, 1000);
+  </script>
+</body>
+</html>
