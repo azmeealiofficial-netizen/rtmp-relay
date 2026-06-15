@@ -68,44 +68,48 @@
 
     /* SOS */
     .sos-btn{
-      position:absolute;top:12px;left:14px;
-      width:44px;height:44px;border-radius:50%;
-      background:rgba(239,68,68,0.2);border:2px solid rgba(239,68,68,0.5);
-      color:#fff;font-size:18px;cursor:pointer;
+      position:absolute;left:14px;top:50%;transform:translateY(-50%);
+      width:48px;height:48px;border-radius:50%;
+      background:rgba(255,255,255,0.12);border:2px solid rgba(255,255,255,0.25);
+      color:#fff;font-size:22px;cursor:pointer;
       display:flex;align-items:center;justify-content:center;
-      pointer-events:auto;backdrop-filter:blur(4px);transition:all .15s;
+      pointer-events:auto;backdrop-filter:blur(6px);transition:all .15s;
       z-index:25;
     }
-    .sos-btn:active{transform:scale(0.9)}
+    .sos-btn:active{transform:translateY(-50%) scale(0.9)}
 
     .sos-panel{
-      position:absolute;top:60px;left:14px;
-      background:rgba(10,10,15,0.95);border:1px solid rgba(239,68,68,0.3);
-      border-radius:12px;padding:12px;width:220px;
-      display:flex;flex-direction:column;gap:6px;
-      pointer-events:auto;backdrop-filter:blur(10px);
-      z-index:25;animation:fadeIn .2s ease;
+      position:absolute;left:14px;top:50%;transform:translateY(-50%);
+      background:rgba(10,10,15,0.95);border:1px solid rgba(255,255,255,0.15);
+      border-radius:16px;padding:12px;
+      pointer-events:auto;backdrop-filter:blur(12px);
+      z-index:26;
+      animation:bubbleIn .25s ease;
     }
+    @keyframes bubbleIn{from{opacity:0;transform:translateY(-50%) scale(0.8) translateX(-20px)}to{opacity:1;transform:translateY(-50%) scale(1) translateX(0)}}
     .sos-panel.hidden{display:none}
-    .sos-title{font-size:12px;font-weight:800;color:#ef4444;letter-spacing:2px;text-align:center;margin-bottom:4px}
-    .sos-msg{
-      border:1px solid rgba(255,255,255,0.1);border-radius:8px;
-      padding:10px 12px;background:rgba(255,255,255,0.05);
-      color:#fff;font-size:14px;cursor:pointer;text-align:right;
-      direction:rtl;font-family:'MvEamaan','Inter',sans-serif;
-      transition:all .15s;
-    }
-    .sos-msg:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2)}
-    .sos-msg:active{transform:scale(0.97)}
     .sos-close{
-      border:none;border-radius:8px;padding:8px;
-      background:rgba(255,255,255,0.08);color:#888;
-      font-size:12px;cursor:pointer;font-family:inherit;
-      margin-top:2px;
+      position:absolute;top:6px;right:8px;
+      background:none;border:none;color:#666;font-size:16px;
+      cursor:pointer;padding:4px;z-index:1;
     }
+    .sos-close:hover{color:#fff}
+    .sos-grid{
+      display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;
+      padding-top:4px;
+    }
+    .sos-msg{
+      border:1px solid rgba(255,255,255,0.1);border-radius:10px;
+      padding:10px 8px;background:rgba(255,255,255,0.05);
+      color:#fff;font-size:11px;cursor:pointer;text-align:center;
+      font-family:'Inter',system-ui,sans-serif;font-weight:600;
+      transition:all .15s;white-space:nowrap;
+    }
+    .sos-msg:hover{background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.25)}
+    .sos-msg:active{transform:scale(0.95)}
 
     .sos-sent{
-      position:absolute;top:14px;left:70px;
+      position:absolute;left:14px;top:calc(50% + 40px);
       background:#22c55e;color:#fff;
       padding:6px 16px;border-radius:20px;
       font-size:12px;font-weight:700;
@@ -192,15 +196,17 @@
       <div class="live-bottom">
         <button class="end-btn" onclick="endLive()">END STREAM</button>
       </div>
-      <button class="sos-btn" id="sosBtn" onclick="toggleSos()">⚠️</button>
+      <button class="sos-btn" id="sosBtn" onclick="toggleSos()">✋</button>
       <div class="sos-panel hidden" id="sosPanel">
-        <div class="sos-title">SOS</div>
-        <button class="sos-msg" onclick="sendSos('ބެޓެރީ ހުސްވަނީ','Battery Low')">🔋 ބެޓެރީ ހުސްވަނީ</button>
-        <button class="sos-msg" onclick="sendSos('ޑާޓާ ލޯ','Data Low')">📶 ޑާޓާ ލޯ</button>
-        <button class="sos-msg" onclick="sendSos('ބެކަޕް ބޭނުން','Need Backup')">🆘 ބެކަޕް ބޭނުން</button>
-        <button class="sos-msg" onclick="sendSos('ފެން ބޭނުން','Water')">💧 ފެން ބޭނުން</button>
-        <button class="sos-msg" onclick="sendSos('ހޮސްޕިޓަލަށް ގެންދޭ','Emergency')">🚨 ހޮސްޕިޓަލަށް ގެންދޭ</button>
-        <button class="sos-close" onclick="toggleSos()">✕ Close</button>
+        <button class="sos-close" onclick="toggleSos()">✕</button>
+        <div class="sos-grid">
+          <button class="sos-msg" onclick="sendSos('Battery Low')">🔋 Battery Low</button>
+          <button class="sos-msg" onclick="sendSos('Data Low')">📶 Data Low</button>
+          <button class="sos-msg" onclick="sendSos('Need Backup')">🆘 Need Backup</button>
+          <button class="sos-msg" onclick="sendSos('Water')">💧 Water</button>
+          <button class="sos-msg" onclick="sendSos('Emergency')">🚨 Emergency</button>
+          <button class="sos-msg" onclick="sendSos('Injured')">🩹 Injured</button>
+        </div>
       </div>
       <div class="sos-sent hidden" id="sosSent">✓ Sent!</div>
     </div>
@@ -333,7 +339,7 @@
       document.getElementById('sosPanel').classList.toggle('hidden');
     }
 
-    async function sendSos(msgDv, msgEn) {
+    async function sendSos(msg) {
       try {
         await fetch('/api/sos', {
           method: 'POST',
@@ -341,8 +347,7 @@
           body: JSON.stringify({
             reporter: reporterName,
             reporterId: streamId,
-            message: msgDv,
-            messageEn: msgEn,
+            message: msg,
             time: new Date().toISOString()
           })
         });
@@ -352,6 +357,27 @@
       sent.classList.remove('hidden');
       setTimeout(() => sent.classList.add('hidden'), 2000);
     }
+
+    // Poll for SOS acknowledgments from control
+    async function pollSosAck() {
+      try {
+        const r = await fetch('/api/sos/ack-poll?id=' + encodeURIComponent(streamId), { cache: 'no-store' });
+        const j = await r.json();
+        if (j.acks && j.acks.length > 0) {
+          showSosAck();
+        }
+      } catch(e) {}
+    }
+
+    function showSosAck() {
+      const sent = document.getElementById('sosSent');
+      sent.textContent = '✓ Being Attended';
+      sent.classList.remove('hidden');
+      try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch(e) {}
+      setTimeout(() => { sent.classList.add('hidden'); sent.textContent = '✓ Sent!'; }, 4000);
+    }
+
+    setInterval(pollSosAck, 3000);
     // === CONTROL-ROOM MESSAGES ===
     function restartPushWithCam(which) {
       setCam(which === 'front' ? 'front' : 'back');
@@ -424,22 +450,7 @@
                 && !handled.has(m.msgId)
                 && (Date.now() - m.sentAt) < 120000
                 && (!current || current.msgId !== m.msgId)) {
-            // Auto-accept camera switch commands (no prompt needed)
-            if (m.action === 'front-cam' || m.action === 'rear-cam' || m.action === 'restart-front') {
-              handled.add(m.msgId);
-              try {
-                await fetch('/api/msg/ack', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id: streamId, msgId: m.msgId, response: 'yes' })
-                });
-              } catch(e) {}
-              applyCommsAction(m.action);
-              showToast(m.action === 'front-cam' ? 'Switching to front camera' : 'Switching to rear camera');
-            } else {
-              // Normal message — show prompt
-              show(m);
-            }
+            show(m);
           }
         } catch (e) {}
       }
