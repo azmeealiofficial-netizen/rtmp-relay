@@ -3,7 +3,7 @@ const path = require('path');
 const app = express();
 const PORT = 8080;
 
-app.use(express.json());
+app.use(express.json({ limit: '3mb' })); // 3mb headroom for base64 reporter photos
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ============================================================
@@ -97,22 +97,87 @@ app.get('/hls/:file', async (req, res) => {
 });
 
 // ---- Reporters (persisted to Postgres when available) ----
+// Shape: { id, name, location, photo, tagVisible, pv }
+//   photo: base64 data URL or '' (optional — tag shows text-only without it)
+//   pv:    photo version — bumps whenever the photo changes, so the overlay
+//          can poll light state every second and only refetch the heavy photo
+//          when pv actually changes.
 let reporters = [];
+
+const findReporter = (id) => reporters.find(r => r.id === id);
 
 app.get('/api/reporters', (req, res) => {
   res.json(reporters);
 });
 
+// Full single reporter (includes the heavy photo) — overlay fetches this only on pv change
+app.get('/api/reporters/:id', (req, res) => {
+  const r = findReporter(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Not found' });
+  res.json(r);
+});
+
+// Lightweight tag state — overlay polls this every second (no photo payload)
+app.get('/api/reporters/:id/tag', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const r = findReporter(req.params.id);
+  if (!r) return res.json({ ok: false, visible: false });
+  res.json({ ok: true, visible: !!r.tagVisible, name: r.name, location: r.location || '', pv: r.pv || 0 });
+});
+
 app.post('/api/reporters', async (req, res) => {
-  const { name } = req.body;
+  const { name, location = '', photo = '' } = req.body || {};
   if (!name) return res.status(400).json({ error: 'Name required' });
   const id = 'vxd' + Date.now().toString(36);
-  reporters.push({ name, id });
+  const r = {
+    id, name,
+    location: String(location || ''),
+    photo: photo ? String(photo) : '',
+    tagVisible: false,
+    pv: photo ? Date.now() : 0
+  };
+  reporters.push(r);
   if (pool) {
-    try { await pool.query('INSERT INTO reporters (id, name, created_at) VALUES ($1,$2,$3)', [id, name, Date.now()]); }
-    catch (e) { console.error('reporters insert failed:', e.message); }
+    try {
+      await pool.query(
+        'INSERT INTO reporters (id, name, location, photo, tag_visible, pv, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [id, r.name, r.location, r.photo, r.tagVisible, r.pv, Date.now()]
+      );
+    } catch (e) { console.error('reporters insert failed:', e.message); }
   }
   res.json(reporters);
+});
+
+// Edit reporter fields (name / location / photo). Bumps pv when the photo changes.
+app.put('/api/reporters/:id', async (req, res) => {
+  const r = findReporter(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Not found' });
+  const { name, location, photo } = req.body || {};
+  if (typeof name === 'string' && name.trim()) r.name = name.trim();
+  if (typeof location === 'string') r.location = location;
+  if (typeof photo === 'string' && photo !== r.photo) { r.photo = photo; r.pv = Date.now(); }
+  if (pool) {
+    try {
+      await pool.query(
+        'UPDATE reporters SET name=$2, location=$3, photo=$4, pv=$5 WHERE id=$1',
+        [r.id, r.name, r.location, r.photo, r.pv]
+      );
+    } catch (e) { console.error('reporters update failed:', e.message); }
+  }
+  res.json(reporters);
+});
+
+// Toggle the lower-third on/off (returns just this reporter so the control
+// panel can flip the button in place without re-rendering the live iframes)
+app.post('/api/reporters/:id/tag', async (req, res) => {
+  const r = findReporter(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Not found' });
+  r.tagVisible = !!(req.body && req.body.visible);
+  if (pool) {
+    try { await pool.query('UPDATE reporters SET tag_visible=$2 WHERE id=$1', [r.id, r.tagVisible]); }
+    catch (e) { console.error('tag toggle failed:', e.message); }
+  }
+  res.json({ ok: true, id: r.id, visible: r.tagVisible });
 });
 
 app.delete('/api/reporters/:id', async (req, res) => {
@@ -257,6 +322,7 @@ app.get('/settings', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/ticker', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ticker.html')));
 app.get('/go', (req, res) => res.sendFile(path.join(__dirname, 'public', 'go.html')));
 app.get('/live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'live.html')));
+app.get('/reporter-tag', (req, res) => res.sendFile(path.join(__dirname, 'public', 'reporter-tag.html')));
 
 // ---- Load persisted data, then start the server ----
 async function initDB() {
@@ -266,10 +332,22 @@ async function initDB() {
   }
   try {
     await pool.query('CREATE TABLE IF NOT EXISTS reporters (id text PRIMARY KEY, name text NOT NULL, created_at bigint)');
+    // Additive migrations — safe on existing rows, no-op if already present
+    await pool.query("ALTER TABLE reporters ADD COLUMN IF NOT EXISTS location text DEFAULT ''");
+    await pool.query("ALTER TABLE reporters ADD COLUMN IF NOT EXISTS photo text DEFAULT ''");
+    await pool.query("ALTER TABLE reporters ADD COLUMN IF NOT EXISTS tag_visible boolean DEFAULT false");
+    await pool.query("ALTER TABLE reporters ADD COLUMN IF NOT EXISTS pv bigint DEFAULT 0");
     await pool.query('CREATE TABLE IF NOT EXISTS tickers (id text PRIMARY KEY, data jsonb NOT NULL)');
 
-    const rr = await pool.query('SELECT id, name FROM reporters ORDER BY created_at ASC');
-    reporters = rr.rows.map(r => ({ id: r.id, name: r.name }));
+    const rr = await pool.query('SELECT id, name, location, photo, tag_visible, pv FROM reporters ORDER BY created_at ASC');
+    reporters = rr.rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      location: r.location || '',
+      photo: r.photo || '',
+      tagVisible: !!r.tag_visible,
+      pv: Number(r.pv) || 0
+    }));
 
     for (const id of ['voice', 'dhuvas']) {
       const tr = await pool.query('SELECT data FROM tickers WHERE id=$1', [id]);
