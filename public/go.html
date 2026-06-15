@@ -25,6 +25,13 @@
 
     .vdo-frame{position:absolute;inset:0;width:100%;height:100%;border:none;z-index:1;display:none}
 
+    .vdo-loading{position:absolute;inset:0;z-index:2;background:#0a0a0f;display:none;align-items:center;justify-content:center}
+    .vdo-loading.active{display:flex}
+    .vdo-loading-inner{text-align:center}
+    .vdo-spinner{width:36px;height:36px;border:3px solid #333;border-top:3px solid #FF6B1A;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .vdo-loading-text{color:#666;font-size:13px;font-weight:500}
+
     /* Idle screen */
     .idle{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0a0a0f}
     .idle.hidden{display:none}
@@ -163,6 +170,12 @@
 
   <div class="app">
     <iframe id="vdoFrame" class="vdo-frame" allow="camera;microphone;autoplay;display-capture"></iframe>
+    <div class="vdo-loading" id="vdoLoading">
+      <div class="vdo-loading-inner">
+        <div class="vdo-spinner"></div>
+        <div class="vdo-loading-text">Connecting camera...</div>
+      </div>
+    </div>
 
     <div class="idle" id="idleScreen">
       <div class="brand">
@@ -281,15 +294,21 @@
       const frame = document.getElementById('vdoFrame');
       const idle = document.getElementById('idleScreen');
       const overlay = document.getElementById('liveOverlay');
+      const loading = document.getElementById('vdoLoading');
 
+      // Show loading overlay to hide VDO.Ninja join UI
+      loading.classList.add('active');
+      loading.querySelector('.vdo-loading-text').textContent = 'Connecting camera...';
       frame.src = buildVdoUrl();
       frame.style.display = 'block';
+      idle.classList.add('hidden');
 
+      // Hide loading after VDO.Ninja connects
       setTimeout(() => {
-        idle.classList.add('hidden');
+        loading.classList.remove('active');
         overlay.classList.add('active');
         startTimer();
-      }, 2500);
+      }, 3500);
     }
 
     function endLive() {
@@ -383,8 +402,15 @@
       setCam(which === 'front' ? 'front' : 'back');
       const frame = document.getElementById('vdoFrame');
       const overlay = document.getElementById('liveOverlay');
+      const loading = document.getElementById('vdoLoading');
       if (overlay.classList.contains('active')) {
+        // Show loading to cover VDO.Ninja reconnection
+        loading.classList.add('active');
+        loading.querySelector('.vdo-loading-text').textContent = 'Switching camera...';
         frame.src = buildVdoUrl();
+        setTimeout(() => {
+          loading.classList.remove('active');
+        }, 3500);
       }
     }
 
