@@ -118,6 +118,42 @@ app.delete('/api/sos/:id', (req, res) => {
   res.json(sosAlerts);
 });
 
+// === Director ↔ reporter messaging (/api/msg/*) — in-memory ===
+const msgStore = Object.create(null);
+const msgNow = () => Date.now();
+const mkMsgId = () => msgNow().toString(36) + Math.random().toString(36).slice(2, 6);
+
+app.use('/api/msg', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  next();
+});
+
+app.post('/api/msg/send', (req, res) => {
+  const { id, text = '', action = '' } = req.body || {};
+  if (!id) return res.status(400).json({ ok: false, error: 'missing id' });
+  const msgId = mkMsgId();
+  msgStore[id] = { msgId, text: String(text).slice(0, 300), action: String(action || ''), sentAt: msgNow(), status: 'pending', respAt: 0 };
+  res.json({ ok: true, msgId });
+});
+
+app.get('/api/msg/poll', (req, res) => {
+  res.json({ ok: true, msg: msgStore[req.query.id] || null });
+});
+
+app.post('/api/msg/ack', (req, res) => {
+  const { id, msgId, response } = req.body || {};
+  const m = msgStore[id];
+  if (!m || m.msgId !== msgId) return res.json({ ok: false, error: 'stale' });
+  if (response !== 'yes' && response !== 'ignore') return res.status(400).json({ ok: false, error: 'bad response' });
+  m.status = response;
+  m.respAt = msgNow();
+  res.json({ ok: true });
+});
+
+app.get('/api/msg/status', (req, res) => {
+  res.json({ ok: true, msg: msgStore[req.query.id] || null });
+});
+
 // Ticker states — one per outlet
 let tickers = {
   voice: {
