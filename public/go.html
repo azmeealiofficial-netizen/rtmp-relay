@@ -258,7 +258,7 @@
       const idle = document.getElementById('idleScreen');
       const overlay = document.getElementById('liveOverlay');
 
-      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${selectedCam}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
+      const vdoUrl = `https://live.vxd.news/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${selectedCam}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
 
       frame.src = vdoUrl;
       frame.style.display = 'block';
@@ -339,7 +339,7 @@
     function restartPushWithCam(cam) {
       const facing = cam === 'front' ? 'user' : 'environment';
       const frame = document.getElementById('vdoFrame');
-      const vdoUrl = `https://vdo.ninja/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${facing}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
+      const vdoUrl = `https://live.vxd.news/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facingmode=${facing}&width=1280&height=720&autostart&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
       frame.src = '';
       setTimeout(() => { frame.src = vdoUrl; }, 500);
     }
