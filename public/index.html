@@ -58,6 +58,16 @@
     .sos-alert-dismiss{background:none;border:1px solid #333;border-radius:4px;color:#666;font-size:10px;cursor:pointer;padding:2px 8px;font-family:inherit}
     .sos-alert-dismiss:hover{border-color:#ef4444;color:#ef4444}
 
+    /* SOS on reporter cards */
+    .sos-card-wrap{padding:0 10px 6px}
+    .sos-card-alert{display:flex;align-items:center;gap:8px;background:#ef444418;border:1px solid #ef444430;border-radius:8px;padding:8px 10px;margin-bottom:4px;animation:sos-card-pulse 1.5s infinite}
+    @keyframes sos-card-pulse{0%,100%{border-color:#ef444430}50%{border-color:#ef444466}}
+    .sos-card-icon{font-size:16px}
+    .sos-card-text{flex:1;font-size:12px;font-weight:700;color:#ef4444}
+    .sos-card-time{font-size:9px;color:#888}
+    .sos-card-ack{width:28px;height:28px;border-radius:50%;border:1px solid #22c55e40;background:#22c55e18;color:#22c55e;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;transition:all .15s}
+    .sos-card-ack:hover{background:#22c55e30;border-color:#22c55e}
+
     /* Quick actions */
     .quick-bar{display:flex;gap:6px;margin-bottom:20px}
     .q-btn{flex:1;border:none;border-radius:var(--radius);padding:14px 8px;font-size:13px;font-weight:800;cursor:pointer;color:#fff;font-family:inherit;letter-spacing:.5px;transition:all .15s}
@@ -563,6 +573,7 @@
                 <span class="feed-key" style="color:var(--blu)">WebRTC</span>
               </div>
             </div>
+            <div class="sos-card-wrap" id="sos-card-${r.id}" style="display:none"></div>
             <div class="feed-video">
               <iframe id="rvid-${r.id}" src="${viewUrl}" allow="autoplay;camera;microphone" style="width:100%;height:100%;border:none;background:#000"></iframe>
             </div>
@@ -679,36 +690,12 @@
 
     let camFacing = {};
     async function flipCam(id) {
-      // Step 1: Ask reporter if ready for field reporting
-      await commsSend(id, 'ފީލްޑް ރިޕޯޓިންގ އަކަށް ރެޑީތަ؟', 'ask-flip');
-      // Track that we're waiting for a flip confirmation
       camFacing[id] = camFacing[id] === 'front' ? 'rear' : 'front';
+      const action = camFacing[id] === 'front' ? 'front-cam' : 'rear-cam';
+      const text = camFacing[id] === 'front' ? 'Switch to front camera' : 'Switch to rear camera';
       const btn = document.getElementById('cam-' + id);
-      btn.innerHTML = '⏳';
-      // Poll for acceptance, then auto-send camera switch
-      const checkAccept = setInterval(async () => {
-        try {
-          const res = await fetch('/api/msg/status?id=' + encodeURIComponent(id), { cache: 'no-store' });
-          const j = await res.json();
-          if (j.msg && j.msg.action === 'ask-flip') {
-            if (j.msg.status === 'yes') {
-              clearInterval(checkAccept);
-              // Auto-send the camera switch (no prompt needed on reporter side)
-              const action = camFacing[id] === 'front' ? 'front-cam' : 'rear-cam';
-              const text = camFacing[id] === 'front' ? 'Switching to front camera' : 'Switching to rear camera';
-              await commsSend(id, text, action);
-              btn.innerHTML = camFacing[id] === 'front' ? '🤳' : '🔄';
-            } else if (j.msg.status === 'ignore') {
-              clearInterval(checkAccept);
-              // Reporter declined — revert
-              camFacing[id] = camFacing[id] === 'front' ? 'rear' : 'front';
-              btn.innerHTML = '🔄';
-            }
-          }
-        } catch(e) {}
-      }, 1500);
-      // Timeout after 30 seconds
-      setTimeout(() => { clearInterval(checkAccept); btn.innerHTML = '🔄'; }, 30000);
+      btn.innerHTML = camFacing[id] === 'front' ? '🤳' : '🔄';
+      await commsSend(id, text, action);
     }
 
     // === REPORTER MESSAGES ===
@@ -762,31 +749,35 @@
 
     // === SOS ALERTS ===
     let lastSosCount = 0;
+    let currentSosAlerts = [];
 
     async function pollSos() {
       try {
         const r = await fetch('/api/sos');
         const alerts = await r.json();
+        currentSosAlerts = alerts;
         const badge = document.getElementById('sosBadge');
         const count = document.getElementById('sosCount');
-        if (alerts.length > 0) {
+        const unacked = alerts.filter(a => !a.acknowledged);
+        if (unacked.length > 0) {
           badge.style.display = 'inline';
-          count.textContent = alerts.length;
-          // Play sound on new alert
-          if (alerts.length > lastSosCount) {
+          count.textContent = unacked.length;
+          if (unacked.length > lastSosCount) {
             try { new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVggoGXq6Z8X0hEXH+Yr6qTZT1CYoGUqqmYg19KRFt8l66rlGpKT2KDlauqm4VkTlNli5aqq5yHaFFXf5Grq52JaVhZdJCmqpyLblxce46iqJqMcWBgeI2gppqNdGRjeYufpJiOd2dme4qcopeQem1rfYiaoJSRfXFvf4eanpKTgHV0gYSYm5CTg3l4hIOVmJCUh314h4KTlY6Wi4B8iYGRk42YjoKAi4CQkYyajYWEjX+OkIqcj4iIkH2Mj4idkouMk3uKjYeck46QlnmIi4afk5KTmHaGiYWflJSXnHOEh4OflpaZn3GChn+flpmcoW+Ahn2fmJufo2yAhHufm52hpWp+g3mfnZ+jpmd8gneenqGmqGV7gXWen6OnqmN5gHOeoKWqrGF4f3Geoqesrl93fm+doqiusF13fG2coqmwtFt1e2ucoquytll0emqboqy0uFdzeWiboquAIWA=').play().catch(()=>{}); } catch(e){}
           }
-          lastSosCount = alerts.length;
-          renderSosAlerts(alerts);
+          lastSosCount = unacked.length;
         } else {
           badge.style.display = 'none';
           lastSosCount = 0;
         }
+        renderSosAlerts(alerts);
+        renderSosOnCards();
       } catch(e) {}
     }
 
     function renderSosAlerts(alerts) {
-      document.getElementById('sosAlertList').innerHTML = alerts.map(a => {
+      const unacked = alerts.filter(a => !a.acknowledged);
+      document.getElementById('sosAlertList').innerHTML = (unacked.length === 0 ? '<div style="padding:12px;text-align:center;color:#666;font-size:12px">No active alerts</div>' : '') + unacked.map(a => {
         const time = new Date(a.time);
         const ago = Math.floor((Date.now() - time.getTime()) / 60000);
         const agoText = ago < 1 ? 'Just now' : ago + 'm ago';
@@ -797,18 +788,47 @@
               <div class="sos-alert-msg">${a.message}</div>
               <div class="sos-alert-time">${agoText}</div>
             </div>
-            <button class="sos-alert-dismiss" onclick="dismissSos(${a.id})">Dismiss</button>
+            <button class="sos-alert-dismiss" onclick="ackSos(${a.id},'${a.reporterId}')">✓ Attend</button>
           </div>
         `;
       }).join('');
+    }
+
+    function renderSosOnCards() {
+      // Show SOS alerts directly on reporter cards
+      reporters.forEach(r => {
+        const cardAlerts = currentSosAlerts.filter(a => a.reporterId === r.id && !a.acknowledged);
+        const el = document.getElementById('sos-card-' + r.id);
+        if (!el) return;
+        if (cardAlerts.length === 0) {
+          el.style.display = 'none';
+          el.innerHTML = '';
+          return;
+        }
+        el.style.display = 'block';
+        el.innerHTML = cardAlerts.map(a => {
+          const ago = Math.floor((Date.now() - new Date(a.time).getTime()) / 60000);
+          const agoText = ago < 1 ? 'Just now' : ago + 'm ago';
+          return `<div class="sos-card-alert">
+            <span class="sos-card-icon">✋</span>
+            <span class="sos-card-text">${a.message}</span>
+            <span class="sos-card-time">${agoText}</span>
+            <button class="sos-card-ack" onclick="ackSos(${a.id},'${a.reporterId}')">✓</button>
+          </div>`;
+        }).join('');
+      });
     }
 
     function toggleSosPanel() {
       document.getElementById('sosAlerts').classList.toggle('hidden');
     }
 
-    async function dismissSos(id) {
-      await fetch('/api/sos/' + id, { method: 'DELETE' });
+    async function ackSos(alertId, reporterId) {
+      await fetch('/api/sos/ack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alertId, reporterId })
+      });
       pollSos();
     }
 
