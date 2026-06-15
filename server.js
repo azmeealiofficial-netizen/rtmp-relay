@@ -145,6 +145,29 @@ app.delete('/api/sos/:id', (req, res) => {
   res.json(sosAlerts);
 });
 
+app.post('/api/sos/ack', (req, res) => {
+  const { alertId, reporterId } = req.body;
+  const alert = sosAlerts.find(a => a.id === alertId);
+  if (alert) {
+    alert.acknowledged = true;
+    alert.ackAt = Date.now();
+  }
+  // Store ack for reporter to poll
+  if (!sosAcks[reporterId]) sosAcks[reporterId] = [];
+  sosAcks[reporterId].push({ alertId, message: 'Being attended', time: Date.now() });
+  res.json({ ok: true });
+});
+
+app.get('/api/sos/ack-poll', (req, res) => {
+  const id = req.query.id;
+  const acks = sosAcks[id] || [];
+  // Return and clear
+  sosAcks[id] = [];
+  res.json({ acks });
+});
+
+let sosAcks = {};
+
 // === Director ↔ reporter messaging (/api/msg/*) — in-memory by design ===
 const msgStore = Object.create(null);
 const msgNow = () => Date.now();
