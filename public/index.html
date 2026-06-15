@@ -522,6 +522,7 @@
       { label: 'Front of crowd',  text: 'Move to the front of the crowd' },
       { label: 'Wide shot',       text: 'Step back — get a wider shot' },
       { label: 'Front cam',       text: 'Switch to the front camera', action: 'front-cam' },
+      { label: 'Rear cam',        text: 'Switch to the rear camera', action: 'rear-cam' },
       { label: 'Restart (front)', text: 'End and restart with the front camera', action: 'restart-front' },
       { label: 'Speak up',        text: 'Audio is low — please speak up' },
       { label: 'Wrap 30s',        text: 'Wrap up in 30 seconds' }
@@ -569,7 +570,7 @@
               <button class="fc-btn" onclick="dirCmd('${r.id}','zoom','0.1')" title="Zoom In">+</button>
               <button class="fc-btn" onclick="dirCmd('${r.id}','zoom','-0.1')" title="Zoom Out">−</button>
               <button class="fc-btn" id="mic-${r.id}" onclick="toggleMicBtn('${r.id}')" title="Mute/Unmute Mic">🎤</button>
-              <button class="fc-btn" id="cam-${r.id}" onclick="toggleCamBtn('${r.id}')" title="Camera On/Off">📷</button>
+              <button class="fc-btn" id="cam-${r.id}" onclick="flipCam('${r.id}')" title="Flip Camera">🔄</button>
             </div>
             <div class="feed-comms">
               <span class="fcm-hdr">MESSAGE REPORTER</span>
@@ -674,6 +675,16 @@
         btn.style.borderColor = '';
       }
       await dirCmd(id, 'camera', 'toggle');
+    }
+
+    let camFacing = {};
+    async function flipCam(id) {
+      camFacing[id] = camFacing[id] === 'front' ? 'rear' : 'front';
+      const action = camFacing[id] === 'front' ? 'front-cam' : 'rear-cam';
+      const text = camFacing[id] === 'front' ? 'Switching to front camera' : 'Switching to rear camera';
+      const btn = document.getElementById('cam-' + id);
+      btn.innerHTML = camFacing[id] === 'front' ? '🤳' : '🔄';
+      await commsSend(id, text, action);
     }
 
     // === REPORTER MESSAGES ===
