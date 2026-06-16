@@ -125,6 +125,16 @@ app.get('/api/reporters/:id/tag', (req, res) => {
   res.json({ ok: true, visible: !!r.tagVisible, name: r.name, location: r.location || '', pv: r.pv || 0 });
 });
 
+// Single "active" reporter for the on-page bug overlay (tv / control views).
+// Picks the most recently toggled-on reporter. No photo payload — bug fetches it by id on pv change.
+app.get('/api/active-tag', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const vis = reporters.filter(r => r.tagVisible);
+  if (!vis.length) return res.json({ ok: true, active: false });
+  const r = vis.reduce((a, b) => ((b.tagAt || 0) >= (a.tagAt || 0) ? b : a));
+  res.json({ ok: true, active: true, id: r.id, name: r.name, location: r.location || '', pv: r.pv || 0 });
+});
+
 app.post('/api/reporters', async (req, res) => {
   const { name, location = '', photo = '' } = req.body || {};
   if (!name) return res.status(400).json({ error: 'Name required' });
@@ -173,6 +183,7 @@ app.post('/api/reporters/:id/tag', async (req, res) => {
   const r = findReporter(req.params.id);
   if (!r) return res.status(404).json({ error: 'Not found' });
   r.tagVisible = !!(req.body && req.body.visible);
+  if (r.tagVisible) r.tagAt = Date.now();   // recency — the page bug shows the most recent
   if (pool) {
     try { await pool.query('UPDATE reporters SET tag_visible=$2 WHERE id=$1', [r.id, r.tagVisible]); }
     catch (e) { console.error('tag toggle failed:', e.message); }
@@ -316,7 +327,6 @@ app.post('/api/ticker/:id', async (req, res) => {
 // Pages
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/tv', (req, res) => res.sendFile(path.join(__dirname, 'public', 'tv.html')));
-app.get('/team', (req, res) => res.sendFile(path.join(__dirname, 'public', 'team.html')));
 app.get('/relay', (req, res) => res.sendFile(path.join(__dirname, 'public', 'relay.html')));
 app.get('/settings', (req, res) => res.sendFile(path.join(__dirname, 'public', 'settings.html')));
 app.get('/ticker', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ticker.html')));
