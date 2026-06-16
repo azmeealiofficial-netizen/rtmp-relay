@@ -333,6 +333,7 @@ app.get('/ticker', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ti
 app.get('/go', (req, res) => res.sendFile(path.join(__dirname, 'public', 'go.html')));
 app.get('/live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'live.html')));
 app.get('/reporter-tag', (req, res) => res.sendFile(path.join(__dirname, 'public', 'reporter-tag.html')));
+app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
 
 // ---- Load persisted data, then start the server ----
 async function initDB() {
