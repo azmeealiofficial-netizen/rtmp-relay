@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VxD Feeds — TV</title>
+  <link rel="stylesheet" href="feedtag.css">
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     :root{--bg:#000;--card:#0c0d10;--bdr:#1c1d22;--t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;--red:#ef4444;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b}
@@ -105,10 +106,19 @@
       let html='';
       // reporter WebRTC feeds
       reporters.forEach(r=>{
-        const viewUrl=`${location.origin}/feed?id=${r.id}&muted=1`;
+        const viewUrl=`https://live.vxd.news/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}&muted&autoplay&cleanoutput`;
         html+=`<div class="tile live" id="tile-r-${r.id}">
           <div class="tile-top"><span class="tile-name">${r.name}<span class="tile-tag">WEBRTC</span></span></div>
-          <div class="tile-media"><iframe src="${viewUrl}" allow="autoplay"></iframe></div>
+          <div class="tile-media">
+            <iframe src="${viewUrl}" allow="autoplay"></iframe>
+            <div class="ftag ${r.tagVisible?'on':''}" id="ftag-${r.id}">
+              <div class="ftag-panel">
+                <div class="ftag-name">${r.name||''}</div>
+                <div class="ftag-loc ${r.location?'':'empty'}">${r.location||''}</div>
+              </div>
+              <img class="ftag-photo ${r.photo?'show':''}" ${r.photo?`src="${r.photo}"`:''} alt="">
+            </div>
+          </div>
         </div>`;
       });
       // RTMP / HLS feeds
@@ -150,6 +160,22 @@
       });
     }
 
+    // Update each reporter's tag overlay in place — never rebuilds the tile,
+    // so the WebRTC iframe is never reloaded when a tag is toggled/edited.
+    function updateTags(){
+      reporters.forEach(r=>{
+        const ov=document.getElementById('ftag-'+r.id);
+        if(!ov)return;
+        ov.classList.toggle('on', !!r.tagVisible);
+        const nm=ov.querySelector('.ftag-name');
+        if(nm && nm.textContent!==(r.name||'')) nm.textContent=r.name||'';
+        const lc=ov.querySelector('.ftag-loc');
+        if(lc){ const v=r.location||''; if(lc.textContent!==v) lc.textContent=v; lc.classList.toggle('empty', !v); }
+        const ph=ov.querySelector('.ftag-photo');
+        if(ph){ const v=r.photo||''; if((ph.getAttribute('src')||'')!==v){ if(v){ph.src=v;ph.classList.add('show');}else{ph.removeAttribute('src');ph.classList.remove('show');} } }
+      });
+    }
+
     async function tick(){
       await Promise.all([loadReporters(),pollFeeds()]);
       const sig=signature();
@@ -160,6 +186,7 @@
         render();
         renderedKey=sig;
       }
+      updateTags();   // refresh tag overlays in place every tick
     }
 
     tick();
