@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>VxD Control</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="feedtag.css">
   <style>
     @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
     @font-face{font-family:'MvEamaan';src:url('fonts/Mv_Eamaan_XP.otf') format('opentype')}
@@ -599,7 +600,7 @@
       const grid=document.getElementById('reporterFeeds');
       const directorUrl=`https://live.vxd.news/?director=${VDO_ROOM}&password=${VDO_PASS}&cleanoutput&autostart`;
       grid.innerHTML=reporters.map(r=>{
-        const viewUrl=`${window.location.origin}/feed?id=${r.id}&muted=1`;
+        const viewUrl=`https://live.vxd.news/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}&muted&autoplay&cleanoutput`;
         const vmixViewUrl=`${window.location.origin}/feed?id=${r.id}`;
         const brandedUrl=`${window.location.origin}/go?id=${r.id}&name=${encodeURIComponent(r.name)}`;
         return `
@@ -613,6 +614,13 @@
             <div class="sos-card-wrap" id="sos-card-${r.id}" style="display:none"></div>
             <div class="feed-video">
               <iframe id="rvid-${r.id}" src="${viewUrl}" allow="autoplay;camera;microphone" style="width:100%;height:100%;border:none;background:#000"></iframe>
+              <div class="ftag ${r.tagVisible?'on':''}" id="ftag-${r.id}">
+                <div class="ftag-panel">
+                  <div class="ftag-name">${r.name||''}</div>
+                  <div class="ftag-loc ${r.location?'':'empty'}">${r.location||''}</div>
+                </div>
+                <img class="ftag-photo ${r.photo?'show':''}" ${r.photo?`src="${r.photo}"`:''} alt="">
+              </div>
             </div>
             <div class="feed-controls">
               <button class="fc-btn" onclick="dirCmd('${r.id}','zoom','0.1')" title="Zoom In">+</button>
@@ -727,6 +735,8 @@
         rep.tagVisible=!!d.visible;
         const btn=document.getElementById('tagtog-'+id);
         if(btn){ btn.classList.toggle('on',rep.tagVisible); btn.classList.toggle('off',!rep.tagVisible); btn.textContent=rep.tagVisible?'● ON AIR':'OFF'; }
+        const ov=document.getElementById('ftag-'+id);
+        if(ov){ ov.classList.toggle('on',rep.tagVisible); }
       }catch(e){}
     }
 
@@ -749,6 +759,14 @@
         const r=await fetch('/api/reporters/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         reporters=await r.json();   // server returns full list; we do NOT re-render (keeps live iframes alive)
         delete tagPhotoPending[id];
+        const rep2=reporters.find(x=>x.id===id);
+        const ov=document.getElementById('ftag-'+id);
+        if(ov && rep2){
+          const lc=ov.querySelector('.ftag-loc');
+          if(lc){ lc.textContent=rep2.location||''; lc.classList.toggle('empty', !rep2.location); }
+          const ph=ov.querySelector('.ftag-photo');
+          if(ph){ if(rep2.photo){ ph.src=rep2.photo; ph.classList.add('show'); } else { ph.removeAttribute('src'); ph.classList.remove('show'); } }
+        }
         if(btn){ btn.classList.add('ok'); btn.textContent='Saved ✓'; setTimeout(()=>{btn.classList.remove('ok');btn.textContent='Save';},1500); }
       }catch(e){ if(btn){ btn.textContent='Error'; setTimeout(()=>btn.textContent='Save',1500);} }
     }
