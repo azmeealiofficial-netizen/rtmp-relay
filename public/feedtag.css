@@ -1,0 +1,43 @@
+/* Reporter tag overlay for in-page feed previews (control card + TV tile).
+   Sizes itself to its OWN card via container query units (cqw), so it fits
+   each environment instead of being one fixed size. The full-screen vMix
+   feed uses feed.html / reporter-tag.html instead. */
+
+@font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
+@font-face{font-family:'MvEamaan';src:url('fonts/Mv_Eamaan_XP.otf') format('opentype')}
+
+/* The card becomes the sizing context */
+.feed-video{position:relative;container-type:inline-size}
+.tile-media{container-type:inline-size}
+
+.ftag{
+  position:absolute;z-index:5;bottom:4.5cqw;right:3.5cqw;
+  display:flex;align-items:center;direction:rtl;gap:1.8cqw;
+  pointer-events:none;filter:drop-shadow(0 0.8cqw 2cqw rgba(0,0,0,.5));
+  opacity:0;transform:translateY(10%);
+  transition:opacity .3s ease,transform .3s cubic-bezier(.22,1,.36,1);
+}
+.ftag.on{opacity:1;transform:translateY(0)}
+
+.ftag-photo{
+  width:12cqw;height:12cqw;flex:0 0 12cqw;
+  border-radius:50%;object-fit:cover;
+  border:0.7cqw solid #f5821f;background:#0a0a12;display:none;
+}
+.ftag-photo.show{display:block}
+
+.ftag-panel{display:flex;flex-direction:column;border-radius:1.8cqw;overflow:hidden;max-width:64cqw}
+
+.ftag-name{
+  background:#16161c;color:#fff;
+  font-family:'MVWaheed','Segoe UI',Arial,sans-serif;
+  font-size:4.6cqw;line-height:1.2;padding:1.3cqw 3.4cqw 1cqw;
+  direction:rtl;text-align:right;white-space:nowrap;
+}
+.ftag-loc{
+  background:#f5821f;color:#16161c;
+  font-family:'MvEamaan','Segoe UI',Arial,sans-serif;
+  font-size:3cqw;font-weight:600;line-height:1.2;padding:1cqw 3.4cqw 1.3cqw;
+  direction:rtl;text-align:right;white-space:nowrap;
+}
+.ftag-loc.empty{display:none}
