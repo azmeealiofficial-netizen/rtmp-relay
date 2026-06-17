@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="dv">
+<head>
+<meta charset="UTF-8">
+<title>VxD Streamer Tag</title>
+<style>
+  @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
+  @font-face{font-family:'MvEamaan';src:url('fonts/Mv_Eamaan_XP.otf') format('opentype')}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:transparent;overflow:hidden;width:1920px;height:1080px;font-family:'MvEamaan','Segoe UI',Arial,sans-serif}
+
+  :root{--accent:#f5821f}
+
+  /* Top-LEFT — clear of logos (top-right) and ticker (bottom) */
+  .tag-wrap{
+    position:absolute;top:80px;left:90px;
+    display:flex;align-items:center;direction:rtl;
+    transition:opacity .45s ease,transform .45s cubic-bezier(.22,1,.36,1);
+    transform:translateY(0);
+    filter:drop-shadow(0 8px 22px rgba(0,0,0,.5));
+  }
+  .tag-wrap.hidden{opacity:0;transform:translateY(-150%);pointer-events:none}
+
+  .tag-panel{display:flex;flex-direction:column;border-radius:10px;overflow:hidden;min-width:256px;max-width:740px}
+
+  .tag-name{
+    background:#16161c;color:#fff;
+    font-family:'MVWaheed','Segoe UI',Arial,sans-serif;
+    font-size:37px;line-height:1.2;padding:10px 24px 8px;
+    direction:rtl;text-align:right;white-space:nowrap;
+  }
+  .tag-loc{
+    background:var(--accent);color:#16161c;
+    font-family:'MvEamaan','Segoe UI',Arial,sans-serif;
+    font-size:22px;line-height:1.2;font-weight:600;padding:6px 24px 8px;
+    display:flex;align-items:center;justify-content:flex-start;gap:7px;direction:rtl;white-space:nowrap;
+  }
+  .tag-loc.empty{display:none}
+  .loc-icon{width:.95em;height:.95em;fill:currentColor;flex:0 0 auto}
+</style>
+</head>
+<body>
+  <div class="tag-wrap hidden" id="wrap">
+    <div class="tag-panel">
+      <div class="tag-name" id="name"></div>
+      <div class="tag-loc empty" id="loc">
+        <svg class="loc-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
+        <span id="locText"></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const params  = new URLSearchParams(location.search);
+    const ID       = (params.get('id') === 'dhuvas') ? 'dhuvas' : 'voice';
+    const PREVIEW  = params.get('preview') === '1';
+    const API      = location.origin + '/api/streamer-tag/' + ID;
+
+    const wrap    = document.getElementById('wrap');
+    const nameEl  = document.getElementById('name');
+    const locEl   = document.getElementById('loc');
+    const locText = document.getElementById('locText');
+
+    let last = '';
+
+    async function poll(){
+      try{
+        const r = await fetch(API + '?t=' + Date.now(), { cache:'no-store' });
+        if(!r.ok) return;
+        const d = await r.json();
+        const key = JSON.stringify([d.visible, d.name, d.location]);
+        if(key === last) return;
+        last = key;
+        nameEl.textContent = d.name || '';
+        if(d.location){ locText.textContent = d.location; locEl.classList.remove('empty'); }
+        else { locText.textContent = ''; locEl.classList.add('empty'); }
+        wrap.classList.toggle('hidden', !(d.visible || PREVIEW));
+      }catch(e){}
+    }
+
+    if(PREVIEW){
+      nameEl.textContent  = 'ރިޕޯޓަރުގެ ނަން';
+      locText.textContent = 'މާލެ';
+      locEl.classList.remove('empty');
+      wrap.classList.remove('hidden');
+    }
+
+    poll();
+    setInterval(poll, 1000);
+  </script>
+</body>
+</html>
