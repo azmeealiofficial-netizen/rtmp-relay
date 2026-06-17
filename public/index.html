@@ -341,32 +341,12 @@
         </div>
       </div>
 
-      <div class="sec-hdr"><span class="sec-title">Streamer Tag</span></div>
+      <div class="sec-hdr"><span class="sec-title">Tag Overlay (vMix)</span></div>
       <div class="tk-panel">
-
-        <div id="stPreview" style="display:inline-flex;flex-direction:column;border-radius:8px;overflow:hidden;margin-bottom:12px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.4))">
-          <div id="stPvName" style="background:#16161c;color:#fff;font-family:'MVWaheed',sans-serif;font-size:20px;padding:6px 16px 5px;direction:rtl;text-align:right;white-space:nowrap">ރިޕޯޓަރުގެ ނަން</div>
-          <div id="stPvLoc" style="background:#f5821f;color:#16161c;font-family:'MvEamaan',sans-serif;font-size:13px;font-weight:600;padding:4px 16px 5px;direction:rtl;display:flex;align-items:center;gap:5px;justify-content:flex-start;white-space:nowrap"><svg viewBox="0 0 24 24" style="width:.95em;height:.95em;fill:currentColor;flex:0 0 auto" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg><span id="stPvLocText">މާލެ</span></div>
-        </div>
-
-        <div style="margin-bottom:10px">
-          <div class="tk-label-text">NAME (MVWaheed)</div>
-          <input type="text" id="stName" class="tk-input" placeholder="ރިޕޯޓަރުގެ ނަން" dir="auto" oninput="stPreviewUpdate()">
-        </div>
-
-        <div style="margin-bottom:10px">
-          <div class="tk-label-text">LOCATION (MvEamaan)</div>
-          <input type="text" id="stLoc" class="tk-input" placeholder="މާލެ" dir="auto" oninput="stPreviewUpdate()">
-        </div>
-
-        <div class="tk-actions">
-          <button class="tk-btn show" onclick="stShow()">SHOW</button>
-          <button class="tk-btn hide" onclick="stHide()">HIDE</button>
-        </div>
-
-        <div class="tag-url-box" style="margin-top:10px">
-          <span class="tag-url-text" id="stUrl"></span>
-          <button class="copy-btn" id="stCopyBtn" onclick="stCopyUrl()">Copy</button>
+        <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">One overlay that shows whichever reporter you set <b style="color:var(--t1)">ON AIR</b> from their card below — with their saved photo. Add this once in vMix as a 1920×1080 browser overlay.</div>
+        <div class="tag-url-box">
+          <span class="tag-url-text" id="tagOverlayUrl"></span>
+          <button class="copy-btn" id="tagOverlayCopy" onclick="copyTagOverlay()">Copy</button>
         </div>
       </div>
 
@@ -532,44 +512,13 @@
 
     loadTicker('voice');
 
-    // === STREAMER TAG (single universal lower-third) ===
-    async function stLoad(){
-      try{
-        const r = await fetch('/api/streamer-tag');
-        const d = await r.json();
-        document.getElementById('stName').value = d.name || '';
-        document.getElementById('stLoc').value  = d.location || '';
-      }catch(e){}
-      stPreviewUpdate();
-      document.getElementById('stUrl').textContent = window.location.origin + '/streamer-tag';
-    }
-
-    function stPreviewUpdate(){
-      const n = document.getElementById('stName').value;
-      const l = document.getElementById('stLoc').value;
-      document.getElementById('stPvName').textContent = n || 'ރިޕޯޓަރުގެ ނަން';
-      document.getElementById('stPvLocText').textContent = l || '';
-      document.getElementById('stPvLoc').style.display = l ? 'flex' : 'none';
-    }
-
-    function stData(){
-      return { name: document.getElementById('stName').value, location: document.getElementById('stLoc').value };
-    }
-
-    async function stShow(){
-      const d = stData(); d.visible = true;
-      await fetch('/api/streamer-tag', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
-    }
-    async function stHide(){
-      await fetch('/api/streamer-tag', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visible:false})});
-    }
-    function stCopyUrl(){
+    // === TAG OVERLAY (single — shows whichever reporter is ON AIR) ===
+    document.getElementById('tagOverlayUrl').textContent = window.location.origin + '/streamer-tag';
+    function copyTagOverlay(){
       navigator.clipboard.writeText(window.location.origin + '/streamer-tag');
-      const b = document.getElementById('stCopyBtn');
+      const b = document.getElementById('tagOverlayCopy');
       b.textContent='✓'; setTimeout(()=>b.textContent='Copy',1500);
     }
-
-    stLoad();
 
     // === FEEDS ===
     let feedFailCount={};
@@ -734,10 +683,6 @@
                 <input class="tag-loc-in" id="tagloc-${r.id}" dir="auto" placeholder="Location (ދިވެހި)" value="${(r.location||'').replace(/"/g,'&quot;')}">
                 <label class="tag-photo-lbl">Photo<input type="file" accept="image/*" onchange="pickTagPhoto('${r.id}',this)" hidden></label>
                 <button class="tag-save" id="tagsave-${r.id}" onclick="saveTag('${r.id}')">Save</button>
-              </div>
-              <div class="tag-url-box">
-                <span class="tag-url-text">${window.location.origin}/reporter-tag?id=${r.id}</span>
-                <button class="copy-btn" onclick="copyUrl(this,\`${window.location.origin}/reporter-tag?id=${r.id}\`)">Copy</button>
               </div>
             </div>
           </div>
