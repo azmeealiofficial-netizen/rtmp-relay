@@ -52,9 +52,8 @@
 
   <script>
     const params  = new URLSearchParams(location.search);
-    const ID       = (params.get('id') === 'dhuvas') ? 'dhuvas' : 'voice';
     const PREVIEW  = params.get('preview') === '1';
-    const API      = location.origin + '/api/streamer-tag/' + ID;
+    const API      = location.origin + '/api/streamer-tag';
 
     const wrap    = document.getElementById('wrap');
     const nameEl  = document.getElementById('name');
