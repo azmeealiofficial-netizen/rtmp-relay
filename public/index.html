@@ -343,10 +343,6 @@
 
       <div class="sec-hdr"><span class="sec-title">Streamer Tag</span></div>
       <div class="tk-panel">
-        <div class="tk-tabs">
-          <button class="tk-tab act" id="stTabVoice" onclick="stSwitch('voice')">VOICE</button>
-          <button class="tk-tab" id="stTabDhuvas" onclick="stSwitch('dhuvas')">DHUVAS</button>
-        </div>
 
         <div id="stPreview" style="display:inline-flex;flex-direction:column;border-radius:8px;overflow:hidden;margin-bottom:12px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.4))">
           <div id="stPvName" style="background:#16161c;color:#fff;font-family:'MVWaheed',sans-serif;font-size:20px;padding:6px 16px 5px;direction:rtl;text-align:right;white-space:nowrap">ރިޕޯޓަރުގެ ނަން</div>
@@ -536,25 +532,16 @@
 
     loadTicker('voice');
 
-    // === STREAMER TAG (universal lower-third, one per outlet) ===
-    let stActive = 'voice';
-
-    function stSwitch(tab){
-      stActive = tab;
-      document.getElementById('stTabVoice').className  = 'tk-tab' + (tab==='voice'?' act':'');
-      document.getElementById('stTabDhuvas').className = 'tk-tab' + (tab==='dhuvas'?' act':'');
-      stLoad(tab);
-    }
-
-    async function stLoad(id){
+    // === STREAMER TAG (single universal lower-third) ===
+    async function stLoad(){
       try{
-        const r = await fetch('/api/streamer-tag/'+id);
+        const r = await fetch('/api/streamer-tag');
         const d = await r.json();
         document.getElementById('stName').value = d.name || '';
         document.getElementById('stLoc').value  = d.location || '';
       }catch(e){}
       stPreviewUpdate();
-      document.getElementById('stUrl').textContent = window.location.origin + '/streamer-tag?id=' + stActive;
+      document.getElementById('stUrl').textContent = window.location.origin + '/streamer-tag';
     }
 
     function stPreviewUpdate(){
@@ -571,19 +558,18 @@
 
     async function stShow(){
       const d = stData(); d.visible = true;
-      await fetch('/api/streamer-tag/'+stActive, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+      await fetch('/api/streamer-tag', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
     }
     async function stHide(){
-      await fetch('/api/streamer-tag/'+stActive, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visible:false})});
+      await fetch('/api/streamer-tag', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visible:false})});
     }
     function stCopyUrl(){
-      const u = window.location.origin + '/streamer-tag?id=' + stActive;
-      navigator.clipboard.writeText(u);
+      navigator.clipboard.writeText(window.location.origin + '/streamer-tag');
       const b = document.getElementById('stCopyBtn');
       b.textContent='✓'; setTimeout(()=>b.textContent='Copy',1500);
     }
 
-    stLoad('voice');
+    stLoad();
 
     // === FEEDS ===
     let feedFailCount={};
