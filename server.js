@@ -324,6 +324,24 @@ app.post('/api/ticker/:id', async (req, res) => {
   res.json(tickers[id]);
 });
 
+// ---- Streamer tag (single universal lower-third) ----
+// Free-typed name + location, one on/off. Persisted like the tickers.
+let streamerTag = { visible: false, name: '', location: '' };
+
+app.get('/api/streamer-tag', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.json(streamerTag);
+});
+
+app.post('/api/streamer-tag', async (req, res) => {
+  Object.assign(streamerTag, req.body);
+  if (pool) {
+    try { await pool.query('INSERT INTO streamer_tags (id, data) VALUES ($1,$2) ON CONFLICT (id) DO UPDATE SET data=$2', ['main', streamerTag]); }
+    catch (e) { console.error('streamer-tag save failed:', e.message); }
+  }
+  res.json(streamerTag);
+});
+
 // Pages
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/tv', (req, res) => res.sendFile(path.join(__dirname, 'public', 'tv.html')));
@@ -333,7 +351,7 @@ app.get('/ticker', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ti
 app.get('/go', (req, res) => res.sendFile(path.join(__dirname, 'public', 'go.html')));
 app.get('/live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'live.html')));
 app.get('/reporter-tag', (req, res) => res.sendFile(path.join(__dirname, 'public', 'reporter-tag.html')));
-app.get('/feed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'feed.html')));
+app.get('/streamer-tag', (req, res) => res.sendFile(path.join(__dirname, 'public', 'streamer-tag.html')));
 
 // ---- Load persisted data, then start the server ----
 async function initDB() {
@@ -349,6 +367,7 @@ async function initDB() {
     await pool.query("ALTER TABLE reporters ADD COLUMN IF NOT EXISTS tag_visible boolean DEFAULT false");
     await pool.query("ALTER TABLE reporters ADD COLUMN IF NOT EXISTS pv bigint DEFAULT 0");
     await pool.query('CREATE TABLE IF NOT EXISTS tickers (id text PRIMARY KEY, data jsonb NOT NULL)');
+    await pool.query('CREATE TABLE IF NOT EXISTS streamer_tags (id text PRIMARY KEY, data jsonb NOT NULL)');
 
     const rr = await pool.query('SELECT id, name, location, photo, tag_visible, pv FROM reporters ORDER BY created_at ASC');
     reporters = rr.rows.map(r => ({
@@ -365,6 +384,10 @@ async function initDB() {
       if (tr.rows.length) tickers[id] = tr.rows[0].data;
       else await pool.query('INSERT INTO tickers (id, data) VALUES ($1,$2)', [id, tickers[id]]);
     }
+
+    const sr = await pool.query('SELECT data FROM streamer_tags WHERE id=$1', ['main']);
+    if (sr.rows.length) streamerTag = sr.rows[0].data;
+    else await pool.query('INSERT INTO streamer_tags (id, data) VALUES ($1,$2)', ['main', streamerTag]);
     console.log(`PostgreSQL connected — ${reporters.length} reporters loaded, data persists across deploys`);
   } catch (e) {
     console.error('DB init failed, falling back to in-memory:', e.message);
