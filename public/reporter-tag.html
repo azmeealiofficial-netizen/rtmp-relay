@@ -11,51 +11,39 @@
 
   :root{--accent:#f5821f}
 
-  /* Anchored bottom-RIGHT, sitting ABOVE the ticker (ticker = bottom 0–93px).
-     direction:rtl => first DOM child (photo) renders on the right, panel to its left. */
+  /* Top-LEFT — logos sit top-right, ticker/lower-thirds at the bottom */
   .tag-wrap{
-    position:absolute;bottom:120px;right:90px;
-    display:flex;align-items:center;direction:rtl;gap:16px;
+    position:absolute;top:80px;left:90px;
+    display:flex;align-items:center;direction:rtl;gap:13px;
     transition:opacity .45s ease,transform .45s cubic-bezier(.22,1,.36,1);
     transform:translateY(0);
-    filter:drop-shadow(0 10px 26px rgba(0,0,0,.5));
+    filter:drop-shadow(0 8px 22px rgba(0,0,0,.5));
   }
-  .tag-wrap.hidden{opacity:0;transform:translateY(150%);pointer-events:none}
+  .tag-wrap.hidden{opacity:0;transform:translateY(-150%);pointer-events:none}
 
-  /* Circular photo on the leading (right) edge with orange ring */
   .tag-photo{
-    width:116px;height:116px;flex:0 0 116px;
+    width:93px;height:93px;flex:0 0 93px;
     border-radius:50%;object-fit:cover;display:block;
-    border:4px solid var(--accent);
-    background:#0a0a12;
+    border:3px solid var(--accent);background:#0a0a12;
   }
   .tag-photo.empty{display:none}
 
-  /* Two-tier text panel */
-  .tag-panel{
-    display:flex;flex-direction:column;
-    border-radius:12px;overflow:hidden;
-    min-width:320px;max-width:920px;
-  }
+  .tag-panel{display:flex;flex-direction:column;border-radius:10px;overflow:hidden;min-width:256px;max-width:740px}
 
-  /* Top tier — name on dark bar */
   .tag-name{
     background:#16161c;color:#fff;
     font-family:'MVWaheed','Segoe UI',Arial,sans-serif;
-    font-size:46px;line-height:1.2;
-    padding:12px 30px 10px;
+    font-size:37px;line-height:1.2;padding:10px 24px 8px;
     direction:rtl;text-align:right;white-space:nowrap;
   }
-
-  /* Bottom tier — location on orange bar */
   .tag-loc{
     background:var(--accent);color:#16161c;
     font-family:'MvEamaan','Segoe UI',Arial,sans-serif;
-    font-size:27px;line-height:1.2;font-weight:600;
-    padding:8px 30px 10px;
-    direction:rtl;text-align:right;white-space:nowrap;
+    font-size:22px;line-height:1.2;font-weight:600;padding:6px 24px 8px;
+    display:flex;align-items:center;justify-content:flex-start;gap:7px;direction:rtl;white-space:nowrap;
   }
   .tag-loc.empty{display:none}
+  .loc-icon{width:.95em;height:.95em;fill:currentColor;flex:0 0 auto}
 </style>
 </head>
 <body>
@@ -63,66 +51,61 @@
     <img class="tag-photo empty" id="photo" alt="">
     <div class="tag-panel">
       <div class="tag-name" id="name"></div>
-      <div class="tag-loc empty" id="loc"></div>
+      <div class="tag-loc empty" id="loc">
+        <svg class="loc-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
+        <span id="locText"></span>
+      </div>
     </div>
   </div>
 
   <script>
-    const params  = new URLSearchParams(location.search);
-    const ID       = params.get('id') || '';
-    const PREVIEW  = params.get('preview') === '1'; // force-show for vMix positioning
-    const ORIGIN   = location.origin;
+    const params = new URLSearchParams(location.search);
+    const ID      = params.get('id') || '';
+    const PREVIEW = params.get('preview') === '1';
+    const ORIGIN  = location.origin;
 
-    const wrap   = document.getElementById('wrap');
-    const photo  = document.getElementById('photo');
-    const nameEl = document.getElementById('name');
-    const locEl  = document.getElementById('loc');
+    const wrap    = document.getElementById('wrap');
+    const photo   = document.getElementById('photo');
+    const nameEl  = document.getElementById('name');
+    const locEl   = document.getElementById('loc');
+    const locText = document.getElementById('locText');
 
-    let lastTagKey = '';   // light state diff
-    let lastPv     = -1;   // photo version we've loaded
+    let lastTagKey = '', lastPv = -1;
 
     async function loadPhoto(){
-      if (!ID) return;
+      if(!ID) return;
       try{
         const r = await fetch(`${ORIGIN}/api/reporters/${ID}`);
-        if (!r.ok) return;
+        if(!r.ok) return;
         const data = await r.json();
         const p = data.photo || '';
-        if (p){
-          photo.src = p;
-          photo.classList.remove('empty');
-        }else{
-          photo.removeAttribute('src');
-          photo.classList.add('empty');
-        }
+        if(p){ photo.src = p; photo.classList.remove('empty'); }
+        else { photo.removeAttribute('src'); photo.classList.add('empty'); }
       }catch(e){}
     }
 
     async function poll(){
-      if (!ID) return;
+      if(!ID) return;
       try{
         const r = await fetch(`${ORIGIN}/api/reporters/${ID}/tag?t=${Date.now()}`);
-        if (!r.ok) return;
+        if(!r.ok) return;
         const d = await r.json();
-        if (!d.ok){ wrap.classList.add('hidden'); return; }
-
-        // Heavy photo: fetch only when its version changes
-        if (d.pv !== lastPv){ lastPv = d.pv; loadPhoto(); }
-
+        if(!d.ok){ wrap.classList.add('hidden'); return; }
+        if(d.pv !== lastPv){ lastPv = d.pv; loadPhoto(); }
         const key = JSON.stringify([d.visible, d.name, d.location]);
-        if (key !== lastTagKey){
+        if(key !== lastTagKey){
           lastTagKey = key;
           nameEl.textContent = d.name || '';
-          if (d.location){ locEl.textContent = d.location; locEl.classList.remove('empty'); }
-          else { locEl.textContent = ''; locEl.classList.add('empty'); }
+          if(d.location){ locText.textContent = d.location; locEl.classList.remove('empty'); }
+          else { locText.textContent = ''; locEl.classList.add('empty'); }
           wrap.classList.toggle('hidden', !(d.visible || PREVIEW));
         }
       }catch(e){}
     }
 
-    if (PREVIEW){
+    if(PREVIEW){
       nameEl.textContent = nameEl.textContent || 'ރިޕޯޓަރުގެ ނަން';
-      locEl.textContent  = locEl.textContent  || 'މާލެ';
+      locText.textContent = locText.textContent || 'މާލެ';
       locEl.classList.remove('empty');
       wrap.classList.remove('hidden');
     }
