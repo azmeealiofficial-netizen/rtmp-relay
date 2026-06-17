@@ -2,7 +2,7 @@
 <html dir="rtl" lang="dv">
 <head>
 <meta charset="UTF-8">
-<title>VxD Streamer Tag</title>
+<title>VxD Tag Overlay</title>
 <style>
   @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
   @font-face{font-family:'MvEamaan';src:url('fonts/Mv_Eamaan_XP.otf') format('opentype')}
@@ -14,26 +14,33 @@
   /* Top-LEFT — clear of logos (top-right) and ticker (bottom) */
   .tag-wrap{
     position:absolute;top:80px;left:90px;
-    display:flex;align-items:center;direction:rtl;
+    display:flex;align-items:center;direction:rtl;gap:10px;
     transition:opacity .45s ease,transform .45s cubic-bezier(.22,1,.36,1);
     transform:translateY(0);
     filter:drop-shadow(0 8px 22px rgba(0,0,0,.5));
   }
   .tag-wrap.hidden{opacity:0;transform:translateY(-150%);pointer-events:none}
 
-  .tag-panel{display:flex;flex-direction:column;border-radius:10px;overflow:hidden;min-width:256px;max-width:740px}
+  .tag-photo{
+    width:70px;height:70px;flex:0 0 70px;
+    border-radius:50%;object-fit:cover;display:block;
+    border:3px solid var(--accent);background:#0a0a12;
+  }
+  .tag-photo.empty{display:none}
+
+  .tag-panel{display:flex;flex-direction:column;border-radius:8px;overflow:hidden;min-width:200px;max-width:600px}
 
   .tag-name{
     background:#16161c;color:#fff;
     font-family:'MVWaheed','Segoe UI',Arial,sans-serif;
-    font-size:37px;line-height:1.2;padding:10px 24px 8px;
+    font-size:28px;line-height:1.2;padding:8px 18px 6px;
     direction:rtl;text-align:right;white-space:nowrap;
   }
   .tag-loc{
     background:var(--accent);color:#16161c;
     font-family:'MvEamaan','Segoe UI',Arial,sans-serif;
-    font-size:22px;line-height:1.2;font-weight:600;padding:6px 24px 8px;
-    display:flex;align-items:center;justify-content:flex-start;gap:7px;direction:rtl;white-space:nowrap;
+    font-size:17px;line-height:1.2;font-weight:600;padding:5px 18px 6px;
+    display:flex;align-items:center;justify-content:flex-start;gap:6px;direction:rtl;white-space:nowrap;
   }
   .tag-loc.empty{display:none}
   .loc-icon{width:.95em;height:.95em;fill:currentColor;flex:0 0 auto}
@@ -41,6 +48,7 @@
 </head>
 <body>
   <div class="tag-wrap hidden" id="wrap">
+    <img class="tag-photo empty" id="photo" alt="">
     <div class="tag-panel">
       <div class="tag-name" id="name"></div>
       <div class="tag-loc empty" id="loc">
@@ -51,29 +59,50 @@
   </div>
 
   <script>
-    const params  = new URLSearchParams(location.search);
-    const PREVIEW  = params.get('preview') === '1';
-    const API      = location.origin + '/api/streamer-tag';
+    // Single overlay — shows whichever reporter is currently set ON AIR (most recent wins).
+    const PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
+    const ORIGIN  = location.origin;
 
     const wrap    = document.getElementById('wrap');
+    const photo   = document.getElementById('photo');
     const nameEl  = document.getElementById('name');
     const locEl   = document.getElementById('loc');
     const locText = document.getElementById('locText');
 
-    let last = '';
+    let lastKey = '', lastPhotoId = '', lastPv = -1;
+
+    async function loadPhoto(id){
+      try{
+        const r = await fetch(`${ORIGIN}/api/reporters/${id}`);
+        if(!r.ok) return;
+        const d = await r.json();
+        if(d.photo){ photo.src = d.photo; photo.classList.remove('empty'); }
+        else { photo.removeAttribute('src'); photo.classList.add('empty'); }
+      }catch(e){}
+    }
 
     async function poll(){
       try{
-        const r = await fetch(API + '?t=' + Date.now(), { cache:'no-store' });
+        const r = await fetch(`${ORIGIN}/api/active-tag?t=${Date.now()}`, { cache:'no-store' });
         if(!r.ok) return;
         const d = await r.json();
-        const key = JSON.stringify([d.visible, d.name, d.location]);
-        if(key === last) return;
-        last = key;
-        nameEl.textContent = d.name || '';
-        if(d.location){ locText.textContent = d.location; locEl.classList.remove('empty'); }
-        else { locText.textContent = ''; locEl.classList.add('empty'); }
-        wrap.classList.toggle('hidden', !(d.visible || PREVIEW));
+        if(!d.active){ wrap.classList.add('hidden'); lastKey=''; lastPhotoId=''; lastPv=-1; return; }
+
+        // photo: refetch when the active reporter changes or their photo version bumps
+        if(d.id !== lastPhotoId || d.pv !== lastPv){
+          lastPhotoId = d.id; lastPv = d.pv;
+          photo.classList.add('empty'); photo.removeAttribute('src');
+          loadPhoto(d.id);
+        }
+
+        const key = JSON.stringify([d.id, d.name, d.location]);
+        if(key !== lastKey){
+          lastKey = key;
+          nameEl.textContent = d.name || '';
+          if(d.location){ locText.textContent = d.location; locEl.classList.remove('empty'); }
+          else { locText.textContent = ''; locEl.classList.add('empty'); }
+        }
+        wrap.classList.remove('hidden');
       }catch(e){}
     }
 
