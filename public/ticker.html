@@ -68,6 +68,14 @@
     0%{transform:translateX(0)}
     100%{transform:translateX(-100%)}
   }
+
+  /* ── VOICE: boxed / floating variant (id=voice) ── */
+  .ticker-wrap.boxed{left:48px;right:48px;bottom:40px}
+  .ticker-wrap.boxed .ticker-stripe{display:none}
+  .ticker-wrap.boxed .ticker-bar{border-radius:16px;overflow:hidden;box-shadow:0 14px 40px rgba(0,0,0,.55)}
+  .ticker-wrap.boxed .ticker-label{min-width:240px}
+  .ticker-wrap.boxed .ticker-body{border-left:none}
+  .ticker-wrap.boxed.ltr .ticker-body{border-right:none}
 </style>
 </head>
 <body>
@@ -84,6 +92,7 @@
   <script>
     const params=new URLSearchParams(window.location.search);
     const TICKER_ID=params.get('id')||'voice';
+    const THEME = TICKER_ID==='voice' ? ' boxed' : '';   // VOICE = floating boxed design; others = split-bar
     const API_URL=window.location.origin+'/api/ticker/'+TICKER_ID;
     let current={};
 
@@ -102,7 +111,7 @@
         const stripe=document.getElementById('tickerStripe');
 
         const isLtr=data.direction==='ltr';
-        wrap.className='ticker-wrap'+(data.visible?'':' hidden')+(isLtr?' ltr':'');
+        wrap.className='ticker-wrap'+(data.visible?'':' hidden')+(isLtr?' ltr':'')+THEME;
 
         label.textContent=data.label||'ބްރޭކިންގ';
 
