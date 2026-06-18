@@ -176,6 +176,15 @@
       });
     }
 
+    // Scale each tag to its tile's width (em-based — works on TV browsers that lack container queries)
+    function sizeFeedTags(){
+      document.querySelectorAll('.ftag').forEach(el=>{
+        const w = el.parentElement ? el.parentElement.clientWidth : 0;
+        if(w) el.style.fontSize = Math.max(9, Math.round(w*0.035)) + 'px';
+      });
+    }
+    window.addEventListener('resize', sizeFeedTags);
+
     async function tick(){
       await Promise.all([loadReporters(),pollFeeds()]);
       const sig=signature();
@@ -187,6 +196,7 @@
         renderedKey=sig;
       }
       updateTags();   // refresh tag overlays in place every tick
+      sizeFeedTags(); // and keep them scaled to their tiles
     }
 
     tick();
