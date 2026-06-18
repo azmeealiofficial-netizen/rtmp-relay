@@ -10,10 +10,10 @@
 .tile-media{position:relative}
 
 .ftag{
-  position:absolute;z-index:5;bottom:1.3em;right:1em;
+  position:absolute;z-index:5;top:1.6em;left:1em;
   display:flex;align-items:center;direction:rtl;gap:.5em;
   pointer-events:none;filter:drop-shadow(0 .2em .5em rgba(0,0,0,.5));
-  opacity:0;transform:translateY(10%);
+  opacity:0;transform:translateY(-12%);
   transition:opacity .3s ease,transform .3s cubic-bezier(.22,1,.36,1);
   font-size:16px;   /* JS overrides this per card via sizeFeedTags() */
 }
