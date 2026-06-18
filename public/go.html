@@ -286,7 +286,7 @@
     }
 
     function buildVdoUrl() {
-      return `https://live.vxd.news/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facing=${selectedCam}&width=1280&height=720&autostart&view&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
+      return `https://live.vxd.news/?push=${streamId}&room=${room}&password=${password}&quality=1&codec=h264&label=${encodeURIComponent(reporterName)}&webcam&facing=${selectedCam}&width=1280&height=720&autostart&view=&noaudio=0&cleanoutput&cleanviewer&api=${password}`;
     }
 
     function startLive() {
