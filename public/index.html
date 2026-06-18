@@ -2,995 +2,205 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>VxD Control</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VxD Feeds — TV</title>
   <link rel="stylesheet" href="feedtag.css">
   <style>
-    @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
-    @font-face{font-family:'MvEamaan';src:url('fonts/Mv_Eamaan_XP.otf') format('opentype')}
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Inter',system-ui,sans-serif;background:#09090b;color:#e4e4e7;min-height:100vh;-webkit-tap-highlight-color:transparent}
-    :root{--bg:#09090b;--card:#18181b;--card2:#1f1f23;--bdr:#27272a;--bdr2:#3f3f46;--t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;--red:#ef4444;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b;--radius:8px}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-    @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+    :root{--bg:#000;--card:#0c0d10;--bdr:#1c1d22;--t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;--red:#ef4444;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b}
+    html,body{height:100%;background:#000;color:var(--t1);font-family:'Inter',system-ui,sans-serif;overflow:hidden}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
 
-    .shell{display:grid;grid-template-columns:1fr;min-height:100vh}
-    @media(min-width:1024px){
-      .shell{grid-template-columns:380px 1fr;grid-template-rows:auto 1fr}
-      .topbar{grid-column:1/-1}
-      .sidebar{border-right:1px solid var(--bdr);overflow-y:auto;padding:20px}
-      .main{overflow-y:auto;padding:20px 24px}
-    }
-    @media(max-width:1023px){.sidebar,.main{padding:12px 16px}}
+    .wall{height:100vh;display:flex;flex-direction:column}
+    .bar{display:flex;align-items:center;justify-content:space-between;padding:10px 18px;background:var(--card);border-bottom:1px solid var(--bdr)}
+    .bar-logos{display:flex;align-items:center;gap:10px}
+    .bar-logos img{height:30px;object-fit:contain}
+    .bar-logos span{color:#555;font-size:14px}
+    .bar-right{display:flex;align-items:center;gap:14px;font-size:13px;color:var(--t2)}
+    .bar-clock{font-variant-numeric:tabular-nums;font-weight:600}
 
-    .topbar{background:var(--card);border-bottom:1px solid var(--bdr);padding:10px 20px;display:flex;justify-content:space-between;align-items:center}
-    .topbar-left{display:flex;align-items:center;gap:16px}
-    .logo{font-size:22px;font-weight:900;letter-spacing:-1px}
-    .logo-v{color:var(--red)}.logo-x{color:var(--amb)}.logo-d{color:var(--grn)}
-    .topbar-nav{display:flex;gap:2px;background:var(--bg);border-radius:6px;padding:2px}
-    .topbar-nav a{padding:6px 16px;border-radius:4px;font-size:12px;font-weight:600;text-decoration:none;color:var(--t3);transition:all .15s}
-    .topbar-nav a.act{background:var(--card2);color:var(--t1)}
-    .topbar-nav a:hover:not(.act){color:var(--t2)}
-    .topbar-right{display:flex;align-items:center;gap:12px}
-    .conn-status{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:.3px}
-    .conn-status.on{background:#22c55e12;color:var(--grn);border:1px solid #22c55e25}
-    .conn-status.off{background:#ef444412;color:var(--red);border:1px solid #ef444425}
-    .conn-dot{width:6px;height:6px;border-radius:50%}
-    .conn-status.on .conn-dot{background:var(--grn);box-shadow:0 0 6px var(--grn)}
-    .conn-status.off .conn-dot{background:var(--red)}
-    .gear{background:var(--card2);border:1px solid var(--bdr);border-radius:6px;padding:6px 10px;color:var(--t3);font-size:14px;cursor:pointer;transition:all .15s;text-decoration:none}
-    .gear:hover{background:var(--bdr);color:var(--t1)}
-    .topbar-logos{display:flex;align-items:center;gap:8px}
+    .grid{flex:1;display:grid;gap:10px;padding:10px;align-content:start;overflow-y:auto;grid-template-columns:1fr}
+    @media (min-width:640px){.grid{grid-template-columns:1fr 1fr}}
+    @media (min-width:1100px){.grid{grid-template-columns:1fr 1fr 1fr}}
 
-    /* SOS alerts */
-    .sos-badge{background:#ef4444;color:#fff;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:800;cursor:pointer;animation:sos-pulse 1s infinite;letter-spacing:.5px}
-    @keyframes sos-pulse{0%,100%{opacity:1;box-shadow:0 0 8px #ef444466}50%{opacity:.7;box-shadow:0 0 16px #ef444488}}
-    .sos-alerts{position:fixed;top:50px;right:20px;width:320px;background:#1a1a1a;border:2px solid #ef4444;border-radius:12px;z-index:100;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.5)}
-    .sos-alerts.hidden{display:none}
-    .sos-alerts-hdr{background:#ef4444;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;color:#fff;font-size:12px;font-weight:800;letter-spacing:1px}
-    .sos-alerts-close{background:none;border:none;color:#fff;font-size:16px;cursor:pointer}
-    .sos-alert-item{padding:10px 14px;border-bottom:1px solid #2a2a2a;display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
-    .sos-alert-item:last-child{border-bottom:none}
-    .sos-alert-info{flex:1}
-    .sos-alert-name{font-size:12px;font-weight:700;color:#fafafa;margin-bottom:2px}
-    .sos-alert-msg{font-size:14px;color:#ef4444;font-family:'MvEamaan','Inter',sans-serif;direction:rtl}
-    .sos-alert-time{font-size:10px;color:#555;margin-top:2px}
-    .sos-alert-dismiss{background:none;border:1px solid #333;border-radius:4px;color:#666;font-size:10px;cursor:pointer;padding:2px 8px;font-family:inherit}
-    .sos-alert-dismiss:hover{border-color:#ef4444;color:#ef4444}
+    .tile{position:relative;background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden}
+    .tile.live{border-color:#22c55e40}
+    .tile-media{position:relative;width:100%;height:0;padding-bottom:56.25%;background:#000}
+    .tile-media iframe,.tile-media video{position:absolute;top:0;left:0;width:100%;height:100%;border:none;object-fit:contain;background:#000}
+    .tile-off{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;color:#2a2a2e;font-size:14px;font-weight:600;letter-spacing:1px}
+    .tile-top{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:space-between;
+      padding:8px 12px;background:linear-gradient(180deg,rgba(0,0,0,.75),transparent);pointer-events:none}
+    .tile-name{font-size:15px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+    .tile-tag{font-size:9px;font-weight:700;letter-spacing:1px;color:var(--blu);margin-left:6px}
+    .badge{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:800;letter-spacing:1px;padding:3px 8px;border-radius:4px}
+    .badge.live{background:#22c55e1a;color:var(--grn);border:1px solid #22c55e40;animation:pulse 2s infinite}
+    .badge.off{background:#18181b;color:var(--t3);border:1px solid var(--bdr)}
+    .badge .dot{width:6px;height:6px;border-radius:50%}
+    .badge.live .dot{background:var(--grn);box-shadow:0 0 6px var(--grn)}
+    .badge.off .dot{background:var(--t3)}
 
-    /* SOS on reporter cards */
-    .sos-card-wrap{padding:0 10px 6px}
-    .sos-card-alert{display:flex;align-items:center;gap:8px;background:#ef444418;border:1px solid #ef444430;border-radius:8px;padding:8px 10px;margin-bottom:4px;animation:sos-card-pulse 1.5s infinite}
-    @keyframes sos-card-pulse{0%,100%{border-color:#ef444430}50%{border-color:#ef444466}}
-    .sos-card-icon{font-size:16px}
-    .sos-card-text{flex:1;font-size:12px;font-weight:700;color:#ef4444}
-    .sos-card-time{font-size:9px;color:#888}
-    .sos-card-ack{width:28px;height:28px;border-radius:50%;border:1px solid #22c55e40;background:#22c55e18;color:#22c55e;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;transition:all .15s}
-    .sos-card-ack:hover{background:#22c55e30;border-color:#22c55e}
-
-    /* Quick actions */
-    .quick-bar{display:flex;gap:6px;margin-bottom:20px}
-    .q-btn{flex:1;border:none;border-radius:var(--radius);padding:14px 8px;font-size:13px;font-weight:800;cursor:pointer;color:#fff;font-family:inherit;letter-spacing:.5px;transition:all .15s}
-    .q-btn:hover{opacity:.85}
-    .q-btn.c{background:var(--red)}.q-btn.f{background:var(--blu)}.q-btn.t{background:var(--bdr2)}.q-btn.s{background:#dc2626;font-size:11px}
-
-    /* Section */
-    .sec-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-    .sec-title{color:var(--t3);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
-
-    /* Ticker panel */
-    .tk-panel{background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:16px;margin-bottom:20px}
-    .tk-tabs{display:flex;gap:2px;margin-bottom:14px;background:var(--bg);border-radius:8px;padding:3px}
-    .tk-tab{flex:1;border:none;border-radius:6px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;color:var(--t3);background:transparent;font-family:inherit;transition:all .15s}
-    .tk-tab.act{background:var(--card2);color:var(--t1)}
-    .tk-tab:hover:not(.act){color:var(--t2)}
-
-    .tk-preview{background:#111;border-radius:8px;overflow:hidden;margin-bottom:14px;position:relative;height:80px;display:flex;align-items:flex-end}
-    .tk-preview-stripe{height:4px;position:absolute;top:0;left:0;right:0}
-    .tk-preview-bar{width:100%;height:52px;display:flex;align-items:center}
-    .tk-preview-label{color:#fff;font-family:'MVWaheed',sans-serif;font-size:16px;padding:0 14px;height:100%;display:flex;align-items:center;white-space:nowrap;min-width:90px;justify-content:center}
-    .tk-preview-body{flex:1;height:100%;display:flex;align-items:center;padding:0 14px;overflow:hidden;background:#1a1a2e}
-    .tk-preview-text{color:#fff;font-family:'MvEamaan',sans-serif;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl}
-    .tk-preview-off{color:#444;font-size:11px;font-family:inherit}
-    .tk-preview.rtl .tk-preview-bar{direction:rtl}
-    .tk-preview.rtl .tk-preview-body{border-left:3px solid var(--amb)}
-    .tk-preview.ltr .tk-preview-bar{direction:ltr}
-    .tk-preview.ltr .tk-preview-body{border-right:3px solid var(--amb)}
-    .tk-preview.ltr .tk-preview-text{direction:ltr;font-family:'Inter',sans-serif}
-    .tk-preview.ltr .tk-preview-label{font-family:'Inter',sans-serif;font-weight:800;font-size:13px}
-
-    .tk-row{display:flex;gap:6px;margin-bottom:10px}
-    .tk-row:last-child{margin-bottom:0}
-    .tk-label-text{font-size:11px;color:var(--t3);font-weight:600;margin-bottom:4px}
-    .tk-input{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;color:var(--t1);font-size:14px;font-family:'MVWaheed','MvEamaan','Inter',sans-serif;outline:none;direction:auto}
-    .tk-input:focus{border-color:var(--bdr2)}
-    .tk-input::placeholder{color:var(--t3);font-family:'MvEamaan','Inter',sans-serif;font-size:13px}
-    .tk-textarea{width:100%;padding:12px 14px;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;color:var(--t1);font-size:18px;font-family:'MvEamaan','Inter',sans-serif;outline:none;resize:none;line-height:1.5;direction:auto;min-height:80px}
-    .tk-textarea:focus{border-color:var(--bdr2)}
-    .tk-textarea::placeholder{color:var(--t3);font-size:14px}
-    .tk-select{padding:8px 10px;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;color:var(--t1);font-size:12px;font-family:inherit;outline:none;cursor:pointer;flex:1}
-    .tk-colors{display:flex;gap:4px;margin-bottom:10px}
-    .tk-color{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:all .15s}
-    .tk-color.act{border-color:#fff;transform:scale(1.15)}
-    .tk-color:hover{transform:scale(1.1)}
-    .tk-actions{display:flex;gap:6px}
-    .tk-btn{flex:1;border:none;border-radius:8px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;color:#fff;font-family:inherit;transition:all .15s;letter-spacing:.3px}
-    .tk-btn:hover{opacity:.85}
-    .tk-btn.show{background:var(--grn)}
-    .tk-btn.hide{background:var(--red)}
-    .tk-btn.both-show{background:var(--blu)}
-    .tk-btn.both-hide{background:#52525b}
-
-    /* Feed grid */
-    .feeds-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-    @media(max-width:1023px){.feeds-grid{grid-template-columns:1fr 1fr}}
-    .feed-card{background:var(--card);border:1px solid var(--bdr);border-radius:var(--radius);overflow:hidden;animation:fadeIn .3s ease;transition:all .2s}
-    .feed-card.live{border-color:#22c55e25;background:linear-gradient(180deg,#0a1a14 0%,var(--card) 100%)}
-    .feed-header{padding:6px 10px;display:flex;justify-content:space-between;align-items:center}
-    .feed-left{display:flex;align-items:center;gap:6px}
-    .stream-dot{width:6px;height:6px;border-radius:50%}
-    .stream-dot.on{background:var(--grn);box-shadow:0 0 6px var(--grn)}.stream-dot.off{background:var(--bdr2)}
-    .feed-name{font-size:12px;font-weight:700}
-    .feed-key{font-size:9px;color:var(--t3);margin-left:2px}
-    .feed-badge{font-size:8px;font-weight:800;padding:2px 6px;border-radius:3px;letter-spacing:1.5px}
-    .feed-badge.live{background:#22c55e12;border:1px solid #22c55e30;color:var(--grn);animation:pulse 2s infinite}
-    .feed-badge.off{background:var(--card2);color:var(--t3)}
-    .feed-video{background:#000;width:100%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center}
-    .feed-video video{width:100%;height:100%;object-fit:contain;background:#000}
-    .feed-offline{color:#333;font-size:10px;font-weight:500}
-    .feed-urls{padding:6px 10px;display:flex;flex-direction:column;gap:4px}
-
-    /* Feed director controls */
-    .feed-controls{display:flex;gap:4px;padding:4px 10px;border-top:1px solid var(--bdr)}
-    .fc-btn{flex:1;border:1px solid var(--bdr);border-radius:6px;padding:6px;background:var(--bg);color:var(--t2);font-size:14px;cursor:pointer;font-family:inherit;transition:all .15s;text-align:center}
-    .fc-btn:hover{background:var(--card2);color:var(--t1);border-color:var(--bdr2)}
-    .fc-btn:active{transform:scale(0.95)}
-    .feed-url-row{display:flex;flex-direction:column;gap:1px}
-    .feed-url-label{font-size:8px;color:var(--t3);font-weight:600;letter-spacing:.5px}
-    .feed-url-box{display:flex;align-items:center;gap:3px;background:var(--bg);border-radius:4px;padding:4px 6px;border:1px solid var(--bdr)}
-    .feed-url-text{flex:1;font-size:9px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'SF Mono',SFMono-Regular,ui-monospace,monospace}
-    .copy-btn{background:var(--card2);color:var(--t2);border:1px solid var(--bdr);border-radius:3px;padding:2px 6px;font-size:8px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
-    .copy-btn:hover{background:var(--bdr);color:var(--t1)}
-    .copy-btn.ok{background:var(--grn);color:#fff;border-color:var(--grn)}
-
-    /* Feed comms (message the reporter) */
-    .feed-comms{padding:6px 10px;border-top:1px solid var(--bdr);display:flex;flex-direction:column;gap:6px}
-    .fcm-hdr{font-size:8px;color:var(--t3);font-weight:700;letter-spacing:.5px;text-transform:uppercase}
-    .fcm-chips{display:flex;flex-wrap:wrap;gap:4px}
-    .fcm-chip{font-size:9px;padding:4px 7px;background:var(--bg);color:var(--t2);border:1px solid var(--bdr);border-radius:5px;cursor:pointer;font-family:inherit;line-height:1}
-    .fcm-chip:hover{background:var(--card2);color:var(--t1);border-color:var(--bdr2)}
-    .fcm-row{display:flex;gap:4px}
-    .fcm-input{flex:1;font-size:10px;padding:6px 8px;background:var(--bg);border:1px solid var(--bdr);border-radius:5px;color:var(--t1);font-family:inherit;outline:none}
-    .fcm-input:focus{border-color:var(--bdr2)}
-    .fcm-send{background:var(--amb);color:#000;border:none;border-radius:5px;padding:6px 10px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit}
-    .fcm-status{font-size:9px;padding:5px 8px;border-radius:5px;display:none;align-items:center;gap:6px;line-height:1.3}
-    .fcm-status.on{display:flex}
-    .fcm-status.pending{background:#f59e0b14;color:var(--amb)}
-    .fcm-status.yes{background:#22c55e14;color:var(--grn)}
-    .fcm-status.ignore{background:#ef444414;color:var(--red)}
-
-    /* Field Reporters */
-    .fr-panel{background:var(--card);border:1px solid var(--bdr);border-radius:12px;padding:16px;margin-bottom:20px}
-    .fr-desc{font-size:11px;color:var(--t3);line-height:1.5;margin-bottom:12px}
-    .fr-slots{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
-    .fr-slot{background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px}
-    .fr-slot-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-    .fr-slot-name{font-size:13px;font-weight:700;color:var(--t1)}
-    .fr-slot-rm{background:none;border:none;color:var(--t3);cursor:pointer;font-size:14px;padding:2px 6px}
-    .fr-slot-rm:hover{color:var(--red)}
-    .fr-urls{display:flex;flex-direction:column;gap:6px}
-    .fr-url-row{display:flex;flex-direction:column;gap:2px}
-    .fr-url-label{font-size:9px;color:var(--t3);font-weight:600;letter-spacing:.5px}
-    .fr-url-box{display:flex;align-items:center;gap:4px;background:var(--card);border-radius:5px;padding:5px 8px;border:1px solid var(--bdr)}
-    .fr-url-text{flex:1;font-size:10px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'SF Mono',SFMono-Regular,ui-monospace,monospace}
-    .fr-copy{background:var(--card2);color:var(--t2);border:1px solid var(--bdr);border-radius:3px;padding:2px 8px;font-size:9px;font-weight:600;cursor:pointer;font-family:inherit}
-    .fr-copy:hover{background:var(--bdr);color:var(--t1)}
-    .fr-copy.ok{background:var(--grn);color:#fff;border-color:var(--grn)}
-    .fr-share{background:var(--blu);color:#fff;border:none;border-radius:3px;padding:2px 8px;font-size:9px;font-weight:600;cursor:pointer;font-family:inherit}
-    .fr-share:hover{opacity:.85}
-    .fr-add{display:flex;gap:6px}
-    .fr-input{flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--bdr);border-radius:8px;color:var(--t1);font-size:12px;font-family:inherit;outline:none}
-    .fr-input:focus{border-color:var(--bdr2)}
-    .fr-input::placeholder{color:var(--t3)}
-    .fr-btn{background:var(--blu);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
-    .fr-btn:hover{opacity:.85}
-
-    /* Reporter creator form */
-    .fr-form{display:flex;flex-direction:column;gap:8px}
-    .fr-form-row{display:flex;gap:6px}
-    .fr-photo-pick{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 10px;background:var(--bg);border:1px dashed var(--bdr2);border-radius:8px;color:var(--t2);font-size:11px;font-weight:600;cursor:pointer}
-    .fr-photo-pick:hover{border-color:var(--blu);color:var(--t1)}
-    .fr-photo-pick.has{border-style:solid;border-color:var(--grn);color:var(--grn)}
-
-    /* Lower-third tag box on each reporter card */
-    .tag-box{border-top:1px solid var(--bdr);padding:12px;display:flex;flex-direction:column;gap:10px}
-    .tag-box-hdr{display:flex;justify-content:space-between;align-items:center}
-    .tag-box-title{font-size:10px;font-weight:800;letter-spacing:1px;color:var(--t3)}
-    .tag-toggle{border:none;border-radius:20px;padding:5px 14px;font-size:11px;font-weight:800;letter-spacing:.5px;cursor:pointer;font-family:inherit;transition:all .15s}
-    .tag-toggle.off{background:var(--card2);color:var(--t3);border:1px solid var(--bdr)}
-    .tag-toggle.off:hover{color:var(--t1);border-color:var(--bdr2)}
-    .tag-toggle.on{background:var(--grn);color:#fff;box-shadow:0 0 12px #22c55e55}
-    .tag-edit{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-    .tag-edit .tag-loc-in{flex:1;min-width:120px;padding:7px 10px;background:var(--bg);border:1px solid var(--bdr);border-radius:6px;color:var(--t1);font-size:12px;font-family:inherit;outline:none}
-    .tag-edit .tag-loc-in:focus{border-color:var(--bdr2)}
-    .tag-photo-pick{display:flex;align-items:center;gap:6px}
-    .tag-thumb{width:34px;height:34px;border-radius:6px;object-fit:cover;background:var(--card2);border:1px solid var(--bdr);display:none}
-    .tag-thumb.show{display:block}
-    .tag-photo-lbl{padding:7px 10px;background:var(--card2);border:1px solid var(--bdr);border-radius:6px;color:var(--t2);font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap}
-    .tag-photo-lbl:hover{color:var(--t1);border-color:var(--bdr2)}
-    .tag-save{background:var(--blu);color:#fff;border:none;border-radius:6px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}
-    .tag-save:hover{opacity:.85}
-    .tag-save.ok{background:var(--grn)}
-    .tag-url-box{display:flex;align-items:center;gap:4px;background:var(--bg);border-radius:6px;padding:6px 8px;border:1px solid var(--bdr)}
-    .tag-url-text{flex:1;font-size:10px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'SF Mono',SFMono-Regular,ui-monospace,monospace}
-
-    .footer{padding:12px 0;border-top:1px solid var(--bdr);text-align:center;margin-top:16px}
-    .footer-text{color:var(--bdr2);font-size:10px}
+    .empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--t3);font-size:16px}
   </style>
 </head>
 <body>
-  <div class="shell">
-    <div class="topbar">
-      <div class="topbar-left">
-        <div class="topbar-logos">
-          <img src="img/voice.png" alt="VOICE" style="height:32px;object-fit:contain">
-          <span style="color:#555;font-size:14px;font-weight:300">✕</span>
-          <img src="img/dhuvas.png" alt="DHUVAS" style="height:32px;object-fit:contain">
-        </div>
+  <div class="wall">
+    <div class="bar">
+      <div class="bar-logos">
+        <img src="img/voice.png" alt="VOICE">
+        <span>✕</span>
+        <img src="img/dhuvas.png" alt="DHUVAS">
       </div>
-      <div class="topbar-right">
-        <div class="sos-badge" id="sosBadge" onclick="toggleSosPanel()" style="display:none">🆘 <span id="sosCount">0</span></div>
-        <div id="connStatus" class="conn-status off"><span class="conn-dot"></span>OFFLINE</div>
+      <div class="bar-right">
+        <span id="count">0 feeds</span>
+        <span class="bar-clock" id="clock">--:--:--</span>
       </div>
     </div>
-
-    <div class="sos-alerts hidden" id="sosAlerts">
-      <div class="sos-alerts-hdr">
-        <span>⚠️ SOS ALERTS</span>
-        <button class="sos-alerts-close" onclick="toggleSosPanel()">✕</button>
-      </div>
-      <div id="sosAlertList"></div>
-    </div>
-
-    <div class="sidebar">
-
-      <div class="quick-bar">
-        <button class="q-btn c" onclick="cmd('Cut')">CUT</button>
-        <button class="q-btn f" onclick="cmd('Fade','Duration=500')">FADE</button>
-        <button class="q-btn t" onclick="cmd('FadeToBlack')">FTB</button>
-        <button class="q-btn s" onclick="if(confirm('End all streams?'))cmd('StopStreaming')">END ALL</button>
-      </div>
-
-      <div class="sec-hdr"><span class="sec-title">Live Ticker</span></div>
-      <div class="tk-panel">
-        <div class="tk-tabs">
-          <button class="tk-tab act" id="tabVoice" onclick="switchTab('voice')">VOICE</button>
-          <button class="tk-tab" id="tabDhuvas" onclick="switchTab('dhuvas')">DHUVAS</button>
-        </div>
-
-        <div class="tk-preview rtl" id="tkPreview">
-          <div class="tk-preview-stripe" id="tkPStripe" style="background:linear-gradient(90deg,#ef4444 30%,#f59e0b 100%)"></div>
-          <div class="tk-preview-bar">
-            <div class="tk-preview-label" id="tkPLabel" style="background:#ef4444">ބްރޭކިންގ</div>
-            <div class="tk-preview-body">
-              <span class="tk-preview-text" id="tkPText"><span class="tk-preview-off">Preview will appear here</span></span>
-            </div>
-          </div>
-        </div>
-
-        <div style="margin-bottom:10px">
-          <div class="tk-label-text">DIRECTION</div>
-          <div class="tk-row">
-            <button class="tk-tab act" id="dirRtl" onclick="setDir('rtl')" style="flex:1;font-family:'MvEamaan',sans-serif">ދިވެހި</button>
-            <button class="tk-tab" id="dirLtr" onclick="setDir('ltr')" style="flex:1">English</button>
-          </div>
-        </div>
-
-        <div style="margin-bottom:10px">
-          <div class="tk-label-text">LABEL (MVWaheed)</div>
-          <input type="text" id="tkLabel" class="tk-input" placeholder="ބްރޭކިންގ" dir="auto" oninput="livePreview()">
-        </div>
-
-        <div style="margin-bottom:10px">
-          <div class="tk-label-text">TICKER TEXT (MvEamaan)</div>
-          <textarea id="tkText" class="tk-textarea" placeholder="ޓިކަރ ޓެކްސްޓް ލިޔުއްވާ..." dir="auto" rows="3" oninput="livePreview()"></textarea>
-        </div>
-
-        <div style="margin-bottom:10px">
-          <div class="tk-label-text">COLOR</div>
-          <div class="tk-colors">
-            <div class="tk-color act" style="background:#ef4444" onclick="setColor('#ef4444',this)"></div>
-            <div class="tk-color" style="background:#3b82f6" onclick="setColor('#3b82f6',this)"></div>
-            <div class="tk-color" style="background:#22c55e" onclick="setColor('#22c55e',this)"></div>
-            <div class="tk-color" style="background:#f59e0b" onclick="setColor('#f59e0b',this)"></div>
-            <div class="tk-color" style="background:#8b5cf6" onclick="setColor('#8b5cf6',this)"></div>
-            <div class="tk-color" style="background:#06b6d4" onclick="setColor('#06b6d4',this)"></div>
-            <div class="tk-color" style="background:#ec4899" onclick="setColor('#ec4899',this)"></div>
-            <div class="tk-color" style="background:#ffffff" onclick="setColor('#ffffff',this)"></div>
-          </div>
-        </div>
-
-        <div class="tk-row" style="margin-bottom:12px">
-          <div style="flex:1">
-            <div class="tk-label-text">MODE</div>
-            <select id="tkMode" class="tk-select" onchange="livePreview()">
-              <option value="scroll">Scroll</option>
-              <option value="static">Static</option>
-            </select>
-          </div>
-          <div style="flex:1">
-            <div class="tk-label-text">SPEED</div>
-            <select id="tkSpeed" class="tk-select">
-              <option value="8">Very Slow</option>
-              <option value="12">Slow</option>
-              <option value="15" selected>Normal</option>
-              <option value="20">Fast</option>
-              <option value="30">Very Fast</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="tk-actions">
-          <button class="tk-btn show" onclick="showTicker()">SHOW</button>
-          <button class="tk-btn hide" onclick="hideTicker()">HIDE</button>
-        </div>
-        <div class="tk-actions" style="margin-top:6px">
-          <button class="tk-btn both-show" onclick="showBothTickers()">BOTH SHOW</button>
-          <button class="tk-btn both-hide" onclick="hideBothTickers()">BOTH HIDE</button>
-        </div>
-      </div>
-
-      <div class="sec-hdr"><span class="sec-title">Tag Overlay (vMix)</span></div>
-      <div class="tk-panel">
-        <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">One overlay that shows whichever reporter you set <b style="color:var(--t1)">ON AIR</b> from their card below — with their saved photo. Add this once in vMix as a 1920×1080 browser overlay.</div>
-        <div class="tag-url-box">
-          <span class="tag-url-text" id="tagOverlayUrl"></span>
-          <button class="copy-btn" id="tagOverlayCopy" onclick="copyTagOverlay()">Copy</button>
-        </div>
-      </div>
-
-      <div class="sec-hdr"><span class="sec-title">Field Reporters (WebRTC)</span></div>
-      <div class="fr-panel">
-        <div class="fr-desc">Send a link to anyone — they open it, tap Go Live, and their camera appears here and in vMix. No app needed.</div>
-        <div class="fr-slots" id="frSlots"></div>
-        <div class="fr-form">
-          <input type="text" id="frName" class="fr-input" placeholder="Reporter name (e.g. Ahmed)">
-          <input type="text" id="frLoc" class="fr-input" dir="auto" placeholder="Location (ދިވެހި)">
-          <div class="fr-form-row">
-            <label class="fr-photo-pick" id="frPhotoLbl">
-              <span>+ Photo</span>
-              <input type="file" accept="image/*" onchange="pickNewPhoto(this)" hidden>
-            </label>
-          </div>
-          <button class="fr-btn" style="width:100%" onclick="addReporter()">+ Add Reporter</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="main">
-      <div class="sec-hdr"><span class="sec-title">Live Feeds</span></div>
-      <div id="reporterFeeds" class="feeds-grid" style="margin-bottom:12px"></div>
-      <div id="feedList" class="feeds-grid"></div>
-      <div class="footer"><span class="footer-text" id="fTxt">VxD Broadcast Control</span></div>
-    </div>
+    <div class="grid" id="grid"><div class="empty">Waiting for feeds…</div></div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
   <script>
-    const RTMP_HOST='acela.proxy.rlwy.net:15678';
+    const VDO_ROOM='vxdlive';
+    const VDO_PASS='vxd2026';
     const HLS_HOST=window.location.origin;
-    const FEEDS=[
-      {key:'psm',name:'PSM Live'},
-      {key:'liveu',name:'LiveU'},
-      {key:'yolo',name:'Yolo'}
-    ];
-    let poll=null,feedPoll=null;
-    let hlsPlayers={};
+    const FEEDS=[{key:'psm',name:'PSM Live'},{key:'liveu',name:'LiveU'},{key:'yolo',name:'Yolo'}];
+
+    let reporters=[];
     let liveFeeds={};
-    let s={connected:false};
-    let activeTab='voice';
-    let tkDir='rtl';
-    let tkColor='#ef4444';
+    let failCount={};
+    let hlsPlayers={};
+    let renderedKey='';   // signature of what's currently on screen
 
-    checkUrl();
+    // clock
+    setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString();},1000);
 
-    function checkUrl(){
-      startPolling();
-      pollFeeds();
-      feedPoll=setInterval(pollFeeds,5000);
+    async function loadReporters(){
+      try{const r=await fetch('/api/reporters',{cache:'no-store'});reporters=await r.json();}catch(e){}
     }
-
-    function startPolling(){pollStatus();poll=setInterval(pollStatus,3000);}
-
-    async function cmd(f,p=''){try{await fetch(`/api/vmix-cmd?Function=${f}${p?'&'+p:''}`);setTimeout(pollStatus,500);}catch(e){}}
-
-    async function pollStatus(){
-      try{
-        const r=await fetch('/api/vmix');if(!r.ok)throw 0;
-        s.connected=true;render();
-      }catch(e){s.connected=false;render();}
-    }
-
-    function render(){
-      const cs=document.getElementById('connStatus');
-      cs.className='conn-status '+(s.connected?'on':'off');
-      cs.innerHTML='<span class="conn-dot"></span>'+(s.connected?'CONNECTED':'OFFLINE');
-      document.getElementById('fTxt').textContent='VxD Control • '+new Date().toLocaleTimeString();
-    }
-
-    // === TICKER ===
-    function switchTab(tab){
-      activeTab=tab;
-      document.getElementById('tabVoice').className='tk-tab'+(tab==='voice'?' act':'');
-      document.getElementById('tabDhuvas').className='tk-tab'+(tab==='dhuvas'?' act':'');
-      loadTicker(tab);
-    }
-
-    async function loadTicker(id){
-      try{
-        const r=await fetch('/api/ticker/'+id);
-        const d=await r.json();
-        document.getElementById('tkLabel').value=(d.label==='ބްރޭކިންގ')?'':d.label;
-        document.getElementById('tkText').value=d.text||'';
-        document.getElementById('tkMode').value=d.mode||'scroll';
-        document.getElementById('tkSpeed').value=d.speed||15;
-        tkDir=d.direction||'rtl';
-        tkColor=d.labelColor||'#ef4444';
-        document.getElementById('dirRtl').className='tk-tab'+(tkDir==='rtl'?' act':'');
-        document.getElementById('dirLtr').className='tk-tab'+(tkDir==='ltr'?' act':'');
-        document.querySelectorAll('.tk-color').forEach(c=>{c.className='tk-color'+(c.style.background===tkColor?' act':'');});
-        livePreview();
-      }catch(e){}
-    }
-
-    function setDir(d){
-      tkDir=d;
-      document.getElementById('dirRtl').className='tk-tab'+(d==='rtl'?' act':'');
-      document.getElementById('dirLtr').className='tk-tab'+(d==='ltr'?' act':'');
-      livePreview();
-    }
-
-    function setColor(c,el){
-      tkColor=c;
-      document.querySelectorAll('.tk-color').forEach(e=>e.className='tk-color');
-      if(el)el.className='tk-color act';
-      livePreview();
-    }
-
-    function livePreview(){
-      const label=document.getElementById('tkLabel').value||'ބްރޭކިންގ';
-      const text=document.getElementById('tkText').value;
-      const prev=document.getElementById('tkPreview');
-      const pLabel=document.getElementById('tkPLabel');
-      const pText=document.getElementById('tkPText');
-      const pStripe=document.getElementById('tkPStripe');
-
-      prev.className='tk-preview '+(tkDir==='ltr'?'ltr':'rtl');
-      pLabel.textContent=label;
-      pLabel.style.background=tkColor;
-      pText.innerHTML=text||'<span class="tk-preview-off">Preview will appear here</span>';
-      if(tkDir==='ltr'){
-        pStripe.style.background=`linear-gradient(270deg,${tkColor} 30%,#f59e0b 100%)`;
-      }else{
-        pStripe.style.background=`linear-gradient(90deg,${tkColor} 30%,#f59e0b 100%)`;
-      }
-    }
-
-    function getTickerData(){
-      return {
-        label:document.getElementById('tkLabel').value||'ބްރޭކިންގ',
-        text:document.getElementById('tkText').value,
-        mode:document.getElementById('tkMode').value,
-        speed:parseInt(document.getElementById('tkSpeed').value),
-        direction:tkDir,
-        labelColor:tkColor
-      };
-    }
-
-    async function showTicker(){
-      const data=getTickerData();data.visible=true;
-      await fetch('/api/ticker/'+activeTab,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-    }
-    async function hideTicker(){
-      await fetch('/api/ticker/'+activeTab,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visible:false})});
-    }
-    async function showBothTickers(){
-      const data=getTickerData();data.visible=true;
-      await Promise.all([
-        fetch('/api/ticker/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),
-        fetch('/api/ticker/dhuvas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
-      ]);
-    }
-    async function hideBothTickers(){
-      const h={visible:false};
-      await Promise.all([
-        fetch('/api/ticker/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(h)}),
-        fetch('/api/ticker/dhuvas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(h)})
-      ]);
-    }
-
-    loadTicker('voice');
-
-    // === TAG OVERLAY (single — shows whichever reporter is ON AIR) ===
-    document.getElementById('tagOverlayUrl').textContent = window.location.origin + '/streamer-tag';
-    function copyTagOverlay(){
-      navigator.clipboard.writeText(window.location.origin + '/streamer-tag');
-      const b = document.getElementById('tagOverlayCopy');
-      b.textContent='✓'; setTimeout(()=>b.textContent='Copy',1500);
-    }
-
-    // === FEEDS ===
-    let feedFailCount={};
-    let feedsRendered=false;
 
     async function pollFeeds(){
       const newLive={};
       await Promise.all(FEEDS.map(async f=>{
         try{
           const r=await fetch(`/hls/${f.key}.m3u8`,{cache:'no-store'});
-          if(r.ok){const t=await r.text();if(t.includes('.ts')){newLive[f.key]=true;feedFailCount[f.key]=0;}}
+          if(r.ok){const t=await r.text();if(t.includes('.ts')){newLive[f.key]=true;failCount[f.key]=0;}}
         }catch(e){}
         if(!newLive[f.key]&&liveFeeds[f.key]){
-          feedFailCount[f.key]=(feedFailCount[f.key]||0)+1;
-          if(feedFailCount[f.key]<3)newLive[f.key]=true;
+          failCount[f.key]=(failCount[f.key]||0)+1;
+          if(failCount[f.key]<3)newLive[f.key]=true;
         }
       }));
-      const oldLive=liveFeeds;liveFeeds=newLive;
-      if(!feedsRendered){renderFeeds();feedsRendered=true;}
-      else{updateFeedStatus(oldLive);}
+      liveFeeds=newLive;
     }
 
-    function renderFeeds(){
-      document.getElementById('feedList').innerHTML=FEEDS.map(f=>{
-        const isLive=!!liveFeeds[f.key];
-        const rtmpUrl=`rtmp://${RTMP_HOST}/live/${f.key}`;
-        const hlsUrl=`${HLS_HOST}/hls/${f.key}.m3u8`;
-        return `<div class="feed-card ${isLive?'live':''}" id="card-${f.key}"><div class="feed-header"><div class="feed-left"><span class="stream-dot ${isLive?'on':'off'}" id="dot-${f.key}"></span><span class="feed-name">${f.name}</span><span class="feed-key">/${f.key}</span></div><span class="feed-badge ${isLive?'live':'off'}" id="badge-${f.key}">${isLive?'● LIVE':'OFFLINE'}</span></div><div class="feed-video" id="preview-${f.key}"><video id="vid-${f.key}" muted autoplay playsinline style="display:${isLive?'block':'none'}"></video><span class="feed-offline" id="offline-${f.key}" style="display:${isLive?'none':'block'}">No feed</span></div><div class="feed-urls"><div class="feed-url-row"><span class="feed-url-label">RTMP PUSH</span><div class="feed-url-box"><span class="feed-url-text">${rtmpUrl}</span><button class="copy-btn" onclick="copyUrl(this,'${rtmpUrl}')">Copy</button></div></div><div class="feed-url-row"><span class="feed-url-label">vMix PULL</span><div class="feed-url-box"><span class="feed-url-text">${hlsUrl}</span><button class="copy-btn" onclick="copyUrl(this,'${hlsUrl}')">Copy</button></div></div></div></div>`;
-      }).join('');
-      attachPlayers();
+    function signature(){
+      return reporters.map(r=>r.id).join(',')+'|'+FEEDS.map(f=>f.key+(liveFeeds[f.key]?'1':'0')).join(',');
     }
 
-    function updateFeedStatus(oldLive){
-      FEEDS.forEach(f=>{
-        const isLive=!!liveFeeds[f.key],wasLive=!!oldLive[f.key];
-        const card=document.getElementById('card-'+f.key),dot=document.getElementById('dot-'+f.key),badge=document.getElementById('badge-'+f.key),vid=document.getElementById('vid-'+f.key),offline=document.getElementById('offline-'+f.key);
-        if(card)card.className='feed-card '+(isLive?'live':'');
-        if(dot)dot.className='stream-dot '+(isLive?'on':'off');
-        if(badge){badge.className='feed-badge '+(isLive?'live':'off');badge.textContent=isLive?'● LIVE':'OFFLINE';}
-        if(isLive&&!wasLive){if(vid)vid.style.display='block';if(offline)offline.style.display='none';attachPlayer(f.key);}
-        else if(!isLive&&wasLive){if(vid)vid.style.display='none';if(offline)offline.style.display='block';if(hlsPlayers[f.key]){hlsPlayers[f.key].destroy();delete hlsPlayers[f.key];}}
+    function render(){
+      const grid=document.getElementById('grid');
+      const total=reporters.length+FEEDS.length;
+      document.getElementById('count').textContent=total+(total===1?' feed':' feeds');
+      grid.className='grid'+(total<=4?' few':'');
+
+      let html='';
+      // reporter WebRTC feeds
+      reporters.forEach(r=>{
+        const viewUrl=`https://live.vxd.news/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}&muted&autoplay&cleanoutput`;
+        html+=`<div class="tile live" id="tile-r-${r.id}">
+          <div class="tile-top"><span class="tile-name">${r.name}<span class="tile-tag">WEBRTC</span></span></div>
+          <div class="tile-media">
+            <iframe src="${viewUrl}" allow="autoplay"></iframe>
+            <div class="ftag ${r.tagVisible?'on':''}" id="ftag-${r.id}">
+              <div class="ftag-panel">
+                <div class="ftag-name">${r.name||''}</div>
+                <div class="ftag-loc ${r.location?'':'empty'}">${r.location||''}</div>
+              </div>
+              <img class="ftag-photo ${r.photo?'show':''}" ${r.photo?`src="${r.photo}"`:''} alt="">
+            </div>
+          </div>
+        </div>`;
       });
-    }
+      // RTMP / HLS feeds
+      FEEDS.forEach(f=>{
+        const on=!!liveFeeds[f.key];
+        html+=`<div class="tile ${on?'live':''}" id="tile-f-${f.key}">
+          <div class="tile-top">
+            <span class="tile-name">${f.name}</span>
+            <span class="badge ${on?'live':'off'}"><span class="dot"></span>${on?'LIVE':'OFFLINE'}</span>
+          </div>
+          <div class="tile-media">
+            <video id="vid-${f.key}" muted autoplay playsinline style="display:${on?'block':'none'}"></video>
+            <span class="tile-off" id="off-${f.key}" style="display:${on?'none':'block'}">No feed</span>
+          </div>
+        </div>`;
+      });
+      grid.innerHTML=html||'<div class="empty">No feeds yet</div>';
 
-    function attachPlayers(){FEEDS.forEach(f=>{if(liveFeeds[f.key])attachPlayer(f.key);});}
+      // (re)attach HLS players for live RTMP feeds
+      FEEDS.forEach(f=>{ if(liveFeeds[f.key]) attachPlayer(f.key); });
+    }
 
     function attachPlayer(key){
       const vid=document.getElementById('vid-'+key);
       if(!vid||hlsPlayers[key])return;
-      const hlsUrl=`${HLS_HOST}/hls/${key}.m3u8`;
+      const url=`${HLS_HOST}/hls/${key}.m3u8`;
       if(Hls.isSupported()){
-        const hls=new Hls({liveSyncDuration:2,liveMaxLatencyDuration:5,maxBufferLength:3,maxMaxBufferLength:5,startLevel:-1,capLevelToPlayerSize:true});
-        hls.loadSource(hlsUrl);hls.attachMedia(vid);
+        const hls=new Hls({liveSyncDuration:2,liveMaxLatencyDuration:5,maxBufferLength:3,maxMaxBufferLength:5});
+        hls.loadSource(url);hls.attachMedia(vid);
         hls.on(Hls.Events.MANIFEST_PARSED,()=>{vid.play().catch(()=>{});});
         hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal){hls.destroy();delete hlsPlayers[key];}});
         hlsPlayers[key]=hls;
-      }else if(vid.canPlayType('application/vnd.apple.mpegurl')){vid.src=hlsUrl;vid.play().catch(()=>{});}
+      }else if(vid.canPlayType('application/vnd.apple.mpegurl')){vid.src=url;vid.play().catch(()=>{});}
     }
 
-    function copyUrl(btn,text){navigator.clipboard.writeText(text);btn.textContent='✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2000);}
-
-    // === FIELD REPORTERS (VDO.Ninja WebRTC) ===
-    const VDO_ROOM = 'vxdlive';
-    const VDO_PASS = 'vxd2026';
-    const COMMS_PRESETS = [
-      { label: 'Front of crowd',  text: 'Move to the front of the crowd' },
-      { label: 'Wide shot',       text: 'Step back — get a wider shot' },
-      { label: 'Front cam',       text: 'Switch to the front camera', action: 'front-cam' },
-      { label: 'Rear cam',        text: 'Switch to the rear camera', action: 'rear-cam' },
-      { label: 'Restart (front)', text: 'End and restart with the front camera', action: 'restart-front' },
-      { label: 'Speak up',        text: 'Audio is low — please speak up' },
-      { label: 'Wrap 30s',        text: 'Wrap up in 30 seconds' }
-    ];
-    let reporters = [];
-
-    async function loadReporters() {
-      try {
-        const r = await fetch('/api/reporters');
-        reporters = await r.json();
-        renderReporters();
-      } catch(e) {}
-    }
-
-    function renderReporters(){
-      // Sidebar list
-      const el=document.getElementById('frSlots');
-      if(reporters.length===0){el.innerHTML='<div style="color:var(--t3);font-size:11px;text-align:center;padding:8px">No reporters yet</div>';} 
-      else{
-        el.innerHTML=reporters.map((r,i)=>{
-          const brandedUrl=`${window.location.origin}/go?id=${r.id}&name=${encodeURIComponent(r.name)}`;
-          return `<div class="fr-slot"><div class="fr-slot-hdr"><span class="fr-slot-name">${r.name}</span><button class="fr-slot-rm" onclick="removeReporter(${i})" title="Remove">✕</button></div><div class="fr-url-box"><span class="fr-url-text">${brandedUrl}</span><button class="fr-share" onclick="shareLink('${brandedUrl}','${r.name}')">Share</button><button class="fr-copy" onclick="copyFr(this,'${brandedUrl}')">Copy</button></div></div>`;
-        }).join('');
-      }
-
-      // Main area feed cards with Director controls
-      const grid=document.getElementById('reporterFeeds');
-      const directorUrl=`https://live.vxd.news/?director=${VDO_ROOM}&password=${VDO_PASS}&cleanoutput&autostart`;
-      grid.innerHTML=reporters.map(r=>{
-        const viewUrl=`https://live.vxd.news/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}&muted&autoplay&cleanoutput`;
-        const vmixViewUrl=`https://live.vxd.news/?scene&room=${VDO_ROOM}&password=${VDO_PASS}&codec=h264&buffer=0&streamid=${r.id}`;
-        const brandedUrl=`${window.location.origin}/go?id=${r.id}&name=${encodeURIComponent(r.name)}`;
-        return `
-          <div class="feed-card" id="rcard-${r.id}">
-            <div class="feed-header">
-              <div class="feed-left">
-                <span class="feed-name">${r.name}</span>
-                <span class="feed-key" style="color:var(--blu)">WebRTC</span>
-              </div>
-            </div>
-            <div class="sos-card-wrap" id="sos-card-${r.id}" style="display:none"></div>
-            <div class="feed-video">
-              <iframe id="rvid-${r.id}" src="${viewUrl}" allow="autoplay;camera;microphone" style="width:100%;height:100%;border:none;background:#000"></iframe>
-              <div class="ftag ${r.tagVisible?'on':''}" id="ftag-${r.id}">
-                <div class="ftag-panel">
-                  <div class="ftag-name">${r.name||''}</div>
-                  <div class="ftag-loc ${r.location?'':'empty'}">${r.location||''}</div>
-                </div>
-                <img class="ftag-photo ${r.photo?'show':''}" ${r.photo?`src="${r.photo}"`:''} alt="">
-              </div>
-            </div>
-            <div class="feed-controls">
-              <button class="fc-btn" onclick="dirCmd('${r.id}','zoom','0.1')" title="Zoom In">+</button>
-              <button class="fc-btn" onclick="dirCmd('${r.id}','zoom','-0.1')" title="Zoom Out">−</button>
-              <button class="fc-btn" id="mic-${r.id}" onclick="toggleMicBtn('${r.id}')" title="Mute/Unmute Mic">🎤</button>
-              <button class="fc-btn" id="cam-${r.id}" onclick="flipCam('${r.id}')" title="Flip Camera">🔄</button>
-            </div>
-            <div class="feed-comms">
-              <span class="fcm-hdr">MESSAGE REPORTER</span>
-              <div class="fcm-chips">
-                ${COMMS_PRESETS.map(p=>`<button class="fcm-chip" onclick="commsSend('${r.id}',\`${p.text}\`,'${p.action||''}')">${p.label}</button>`).join('')}
-              </div>
-              <div class="fcm-row">
-                <input class="fcm-input" id="cmsg-${r.id}" type="text" placeholder="Type a message…" onkeydown="if(event.key==='Enter')commsSendInput('${r.id}')">
-                <button class="fcm-send" onclick="commsSendInput('${r.id}')">Send</button>
-              </div>
-              <div class="fcm-status" id="cmst-${r.id}"></div>
-            </div>
-            <div class="feed-urls">
-              <div class="feed-url-row">
-                <span class="feed-url-label">SHARE LINK (send to reporter)</span>
-                <div class="feed-url-box">
-                  <span class="feed-url-text">${brandedUrl}</span>
-                  <button class="fr-share" onclick="shareLink('${brandedUrl}','${r.name}')">Share</button>
-                  <button class="copy-btn" onclick="copyUrl(this,'${brandedUrl}')">Copy</button>
-                </div>
-              </div>
-              <div class="feed-url-row">
-                <span class="feed-url-label">vMix INPUT (Web Browser → 1920x1080)</span>
-                <div class="feed-url-box">
-                  <span class="feed-url-text">${vmixViewUrl}</span>
-                  <button class="copy-btn" onclick="copyUrl(this,\`${vmixViewUrl}\`)">Copy</button>
-                </div>
-              </div>
-            </div>
-            <div class="tag-box">
-              <div class="tag-box-hdr">
-                <span class="tag-box-title">LOWER-THIRD TAG</span>
-                <button class="tag-toggle ${r.tagVisible?'on':'off'}" id="tagtog-${r.id}" onclick="toggleTag('${r.id}')">${r.tagVisible?'● ON AIR':'OFF'}</button>
-              </div>
-              <div class="tag-edit">
-                <img class="tag-thumb ${r.photo?'show':''}" id="tagthumb-${r.id}" ${r.photo?`src="${r.photo}"`:''} alt="">
-                <input class="tag-loc-in" id="tagloc-${r.id}" dir="auto" placeholder="Location (ދިވެހި)" value="${(r.location||'').replace(/"/g,'&quot;')}">
-                <label class="tag-photo-lbl">Photo<input type="file" accept="image/*" onchange="pickTagPhoto('${r.id}',this)" hidden></label>
-                <button class="tag-save" id="tagsave-${r.id}" onclick="saveTag('${r.id}')">Save</button>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    // ---- Reporter photo helpers (downscale client-side to keep payloads small) ----
-    function downscaleImage(file, maxDim=240, quality=0.82){
-      return new Promise((resolve,reject)=>{
-        const fr=new FileReader();
-        fr.onload=()=>{
-          const img=new Image();
-          img.onload=()=>{
-            let w=img.width, h=img.height;
-            if(w>h && w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; }
-            else if(h>=w && h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; }
-            const c=document.createElement('canvas'); c.width=w; c.height=h;
-            c.getContext('2d').drawImage(img,0,0,w,h);
-            resolve(c.toDataURL('image/jpeg',quality));
-          };
-          img.onerror=reject; img.src=fr.result;
-        };
-        fr.onerror=reject; fr.readAsDataURL(file);
+    function destroyDeadPlayers(){
+      Object.keys(hlsPlayers).forEach(key=>{
+        if(!liveFeeds[key]){hlsPlayers[key].destroy();delete hlsPlayers[key];}
       });
     }
 
-    // Creator photo (held until Add Reporter is pressed)
-    let newPhotoData='';
-    async function pickNewPhoto(input){
-      const f=input.files && input.files[0]; if(!f)return;
-      try{
-        newPhotoData=await downscaleImage(f);
-        const lbl=document.getElementById('frPhotoLbl');
-        lbl.classList.add('has'); lbl.querySelector('span').textContent='✓ Photo';
-      }catch(e){ alert('Could not read that image'); }
-    }
-
-    async function addReporter(){
-      const name=document.getElementById('frName').value.trim();
-      if(!name)return;
-      const location=document.getElementById('frLoc').value.trim();
-      try {
-        const r = await fetch('/api/reporters', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name,location,photo:newPhotoData})});
-        reporters = await r.json();
-        document.getElementById('frName').value='';
-        document.getElementById('frLoc').value='';
-        newPhotoData='';
-        const lbl=document.getElementById('frPhotoLbl'); lbl.classList.remove('has'); lbl.querySelector('span').textContent='+ Photo';
-        renderReporters();
-      } catch(e) {}
-    }
-
-    // ---- Lower-third tag: toggle (reload-free) + edit (location/photo) ----
-    const tagPhotoPending={};  // per-id, only sent on Save so pv bumps only when changed
-
-    async function toggleTag(id){
-      const rep=reporters.find(r=>r.id===id); if(!rep)return;
-      const next=!rep.tagVisible;
-      try{
-        const r=await fetch('/api/reporters/'+id+'/tag',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visible:next})});
-        const d=await r.json();
-        rep.tagVisible=!!d.visible;
-        const btn=document.getElementById('tagtog-'+id);
-        if(btn){ btn.classList.toggle('on',rep.tagVisible); btn.classList.toggle('off',!rep.tagVisible); btn.textContent=rep.tagVisible?'● ON AIR':'OFF'; }
-        const ov=document.getElementById('ftag-'+id);
-        if(ov){ ov.classList.toggle('on',rep.tagVisible); }
-      }catch(e){}
-    }
-
-    async function pickTagPhoto(id,input){
-      const f=input.files && input.files[0]; if(!f)return;
-      try{
-        const data=await downscaleImage(f);
-        tagPhotoPending[id]=data;
-        const thumb=document.getElementById('tagthumb-'+id);
-        if(thumb){ thumb.src=data; thumb.classList.add('show'); }
-      }catch(e){ alert('Could not read that image'); }
-    }
-
-    async function saveTag(id){
-      const loc=document.getElementById('tagloc-'+id);
-      const btn=document.getElementById('tagsave-'+id);
-      const body={ location: loc?loc.value:'' };
-      if(tagPhotoPending[id]) body.photo=tagPhotoPending[id];
-      try{
-        const r=await fetch('/api/reporters/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-        reporters=await r.json();   // server returns full list; we do NOT re-render (keeps live iframes alive)
-        delete tagPhotoPending[id];
-        const rep2=reporters.find(x=>x.id===id);
-        const ov=document.getElementById('ftag-'+id);
-        if(ov && rep2){
-          const lc=ov.querySelector('.ftag-loc');
-          if(lc){ lc.textContent=rep2.location||''; lc.classList.toggle('empty', !rep2.location); }
-          const ph=ov.querySelector('.ftag-photo');
-          if(ph){ if(rep2.photo){ ph.src=rep2.photo; ph.classList.add('show'); } else { ph.removeAttribute('src'); ph.classList.remove('show'); } }
-        }
-        if(btn){ btn.classList.add('ok'); btn.textContent='Saved ✓'; setTimeout(()=>{btn.classList.remove('ok');btn.textContent='Save';},1500); }
-      }catch(e){ if(btn){ btn.textContent='Error'; setTimeout(()=>btn.textContent='Save',1500);} }
-    }
-
-    async function removeReporter(i){
-      if(!confirm('Remove '+reporters[i].name+'?'))return;
-      try {
-        const r = await fetch('/api/reporters/'+reporters[i].id, {method:'DELETE'});
-        reporters = await r.json();
-        renderReporters();
-      } catch(e) {}
-    }
-
-    function shareLink(url,name){
-      if(navigator.share){
-        navigator.share({title:'VxD Live — '+name,text:'Open this link to go live as '+name,url:url}).catch(()=>{});
-      }else{
-        navigator.clipboard.writeText(url);
-        alert('Link copied! Share it with '+name);
-      }
-    }
-
-    function copyFr(btn,text){navigator.clipboard.writeText(text);btn.textContent='✓';btn.classList.add('ok');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2000);}
-
-    // VDO.Ninja HTTP API - send commands to reporters remotely
-    let micStates = {};
-    let camStates = {};
-
-    async function dirCmd(streamId, action, value) {
-      try {
-        const url = `https://api.vdo.ninja/${VDO_PASS}/${action}/${value}`;
-        await fetch(url, { mode: 'no-cors' });
-      } catch(e) { console.error('API command failed:', e); }
-    }
-
-    async function toggleMicBtn(id) {
-      micStates[id] = !micStates[id];
-      const btn = document.getElementById('mic-' + id);
-      if (micStates[id]) {
-        btn.innerHTML = '<span style="opacity:.5;text-decoration:line-through">🎤</span>';
-        btn.style.background = 'rgba(239,68,68,0.2)';
-        btn.style.borderColor = '#ef4444';
-      } else {
-        btn.innerHTML = '🎤';
-        btn.style.background = '';
-        btn.style.borderColor = '';
-      }
-      await dirCmd(id, 'mic', 'toggle');
-    }
-
-    async function toggleCamBtn(id) {
-      camStates[id] = !camStates[id];
-      const btn = document.getElementById('cam-' + id);
-      if (camStates[id]) {
-        btn.innerHTML = '<span style="opacity:.5;text-decoration:line-through">📷</span>';
-        btn.style.background = 'rgba(239,68,68,0.2)';
-        btn.style.borderColor = '#ef4444';
-      } else {
-        btn.innerHTML = '📷';
-        btn.style.background = '';
-        btn.style.borderColor = '';
-      }
-      await dirCmd(id, 'camera', 'toggle');
-    }
-
-    let camFacing = {};
-    async function flipCam(id) {
-      camFacing[id] = camFacing[id] === 'front' ? 'rear' : 'front';
-      const action = camFacing[id] === 'front' ? 'front-cam' : 'rear-cam';
-      const text = camFacing[id] === 'front' ? 'Switch to front camera' : 'Switch to rear camera';
-      const btn = document.getElementById('cam-' + id);
-      btn.innerHTML = camFacing[id] === 'front' ? '🤳' : '🔄';
-      await commsSend(id, text, action);
-    }
-
-    // === REPORTER MESSAGES ===
-    async function commsSend(id, text, action) {
-      text = (text || '').trim();
-      if (!text) return;
-      try {
-        await fetch('/api/msg/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, text, action: action || '' })
-        });
-        paintComms(id, { status: 'pending', text });
-      } catch (e) {}
-    }
-    function commsSendInput(id) {
-      const el = document.getElementById('cmsg-' + id);
-      if (!el) return;
-      const v = el.value;
-      el.value = '';
-      commsSend(id, v, '');
-    }
-    function commsAgo(ts) {
-      const sec = Math.max(0, Math.round((Date.now() - ts) / 1000));
-      return sec < 60 ? sec + 's ago' : Math.round(sec / 60) + 'm ago';
-    }
-    function paintComms(id, m) {
-      const el = document.getElementById('cmst-' + id);
-      if (!el) return;
-      if (!m) { el.className = 'fcm-status'; return; }
-      const label = { pending: 'Sent · awaiting reply', yes: 'Accepted', ignore: 'Ignored' }[m.status];
-      const tick  = { pending: '⏳', yes: '✓', ignore: '✕' }[m.status];
-      const when  = m.respAt ? ' · ' + commsAgo(m.respAt) : '';
-      el.className = 'fcm-status on ' + m.status;
-      el.innerHTML = '<span>' + tick + '</span><span>' + label + ' · "' + (m.text || '').slice(0, 32) + '"' + when + '</span>';
-    }
-    async function pollComms() {
-      for (const r of reporters) {
-        try {
-          const res = await fetch('/api/msg/status?id=' + encodeURIComponent(r.id), { cache: 'no-store' });
-          const j = await res.json();
-          paintComms(r.id, j.msg);
-        } catch (e) {}
-      }
-    }
-    setInterval(pollComms, 2000);
-
-    loadReporters();
-    pollSos();
-    setInterval(pollSos, 3000);
-
-    // === SOS ALERTS ===
-    let lastSosCount = 0;
-    let currentSosAlerts = [];
-
-    async function pollSos() {
-      try {
-        const r = await fetch('/api/sos');
-        const alerts = await r.json();
-        currentSosAlerts = alerts;
-        const badge = document.getElementById('sosBadge');
-        const count = document.getElementById('sosCount');
-        const unacked = alerts.filter(a => !a.acknowledged);
-        if (unacked.length > 0) {
-          badge.style.display = 'inline';
-          count.textContent = unacked.length;
-          if (unacked.length > lastSosCount) {
-            try { new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVggoGXq6Z8X0hEXH+Yr6qTZT1CYoGUqqmYg19KRFt8l66rlGpKT2KDlauqm4VkTlNli5aqq5yHaFFXf5Grq52JaVhZdJCmqpyLblxce46iqJqMcWBgeI2gppqNdGRjeYufpJiOd2dme4qcopeQem1rfYiaoJSRfXFvf4eanpKTgHV0gYSYm5CTg3l4hIOVmJCUh314h4KTlY6Wi4B8iYGRk42YjoKAi4CQkYyajYWEjX+OkIqcj4iIkH2Mj4idkouMk3uKjYeck46QlnmIi4afk5KTmHaGiYWflJSXnHOEh4OflpaZn3GChn+flpmcoW+Ahn2fmJufo2yAhHufm52hpWp+g3mfnZ+jpmd8gneenqGmqGV7gXWen6OnqmN5gHOeoKWqrGF4f3Geoqesrl93fm+doqiusF13fG2coqmwtFt1e2ucoquytll0emqboqy0uFdzeWiboquAIWA=').play().catch(()=>{}); } catch(e){}
-          }
-          lastSosCount = unacked.length;
-        } else {
-          badge.style.display = 'none';
-          lastSosCount = 0;
-        }
-        renderSosAlerts(alerts);
-        renderSosOnCards();
-      } catch(e) {}
-    }
-
-    function renderSosAlerts(alerts) {
-      const unacked = alerts.filter(a => !a.acknowledged);
-      document.getElementById('sosAlertList').innerHTML = (unacked.length === 0 ? '<div style="padding:12px;text-align:center;color:#666;font-size:12px">No active alerts</div>' : '') + unacked.map(a => {
-        const time = new Date(a.time);
-        const ago = Math.floor((Date.now() - time.getTime()) / 60000);
-        const agoText = ago < 1 ? 'Just now' : ago + 'm ago';
-        return `
-          <div class="sos-alert-item">
-            <div class="sos-alert-info">
-              <div class="sos-alert-name">${a.reporter}</div>
-              <div class="sos-alert-msg">${a.message}</div>
-              <div class="sos-alert-time">${agoText}</div>
-            </div>
-            <button class="sos-alert-dismiss" onclick="ackSos(${a.id},'${a.reporterId}')">✓ Attend</button>
-          </div>
-        `;
-      }).join('');
-    }
-
-    function renderSosOnCards() {
-      // Show SOS alerts directly on reporter cards
-      reporters.forEach(r => {
-        const cardAlerts = currentSosAlerts.filter(a => a.reporterId === r.id && !a.acknowledged);
-        const el = document.getElementById('sos-card-' + r.id);
-        if (!el) return;
-        if (cardAlerts.length === 0) {
-          el.style.display = 'none';
-          el.innerHTML = '';
-          return;
-        }
-        el.style.display = 'block';
-        el.innerHTML = cardAlerts.map(a => {
-          const ago = Math.floor((Date.now() - new Date(a.time).getTime()) / 60000);
-          const agoText = ago < 1 ? 'Just now' : ago + 'm ago';
-          return `<div class="sos-card-alert">
-            <span class="sos-card-icon">✋</span>
-            <span class="sos-card-text">${a.message}</span>
-            <span class="sos-card-time">${agoText}</span>
-            <button class="sos-card-ack" onclick="ackSos(${a.id},'${a.reporterId}')">✓</button>
-          </div>`;
-        }).join('');
+    // Update each reporter's tag overlay in place — never rebuilds the tile,
+    // so the WebRTC iframe is never reloaded when a tag is toggled/edited.
+    function updateTags(){
+      reporters.forEach(r=>{
+        const ov=document.getElementById('ftag-'+r.id);
+        if(!ov)return;
+        ov.classList.toggle('on', !!r.tagVisible);
+        const nm=ov.querySelector('.ftag-name');
+        if(nm && nm.textContent!==(r.name||'')) nm.textContent=r.name||'';
+        const lc=ov.querySelector('.ftag-loc');
+        if(lc){ const v=r.location||''; if(lc.textContent!==v) lc.textContent=v; lc.classList.toggle('empty', !v); }
+        const ph=ov.querySelector('.ftag-photo');
+        if(ph){ const v=r.photo||''; if((ph.getAttribute('src')||'')!==v){ if(v){ph.src=v;ph.classList.add('show');}else{ph.removeAttribute('src');ph.classList.remove('show');} } }
       });
     }
 
-    function toggleSosPanel() {
-      document.getElementById('sosAlerts').classList.toggle('hidden');
-    }
-
-    async function ackSos(alertId, reporterId) {
-      await fetch('/api/sos/ack', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alertId, reporterId })
+    // Scale each tag to its tile's width (em-based — works on TV browsers that lack container queries)
+    function sizeFeedTags(){
+      document.querySelectorAll('.ftag').forEach(el=>{
+        const w = el.parentElement ? el.parentElement.clientWidth : 0;
+        if(w) el.style.fontSize = Math.max(9, Math.round(w*0.035)) + 'px';
       });
-      pollSos();
+    }
+    window.addEventListener('resize', sizeFeedTags);
+
+    async function tick(){
+      await Promise.all([loadReporters(),pollFeeds()]);
+      const sig=signature();
+      if(sig!==renderedKey){      // only re-render (which reloads iframes) when the set changes
+        destroyDeadPlayers();
+        // wipe player handles for feeds being rebuilt
+        Object.keys(hlsPlayers).forEach(k=>{hlsPlayers[k].destroy();delete hlsPlayers[k];});
+        render();
+        renderedKey=sig;
+      }
+      updateTags();   // refresh tag overlays in place every tick
+      sizeFeedTags(); // and keep them scaled to their tiles
     }
 
-    render();
-    renderFeeds();
+    tick();
+    setInterval(tick,5000);
   </script>
 </body>
 </html>
