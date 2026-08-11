@@ -145,10 +145,15 @@
       if(!vid||hlsPlayers[key])return;
       const url=`${HLS_HOST}/hls/${key}.m3u8`;
       if(Hls.isSupported()){
-        const hls=new Hls({liveSyncDuration:2,liveMaxLatencyDuration:5,maxBufferLength:3,maxMaxBufferLength:5});
+        const hls=new Hls({liveSyncDuration:6,liveMaxLatencyDuration:20,maxBufferLength:12,maxMaxBufferLength:30,manifestLoadingMaxRetry:6,levelLoadingMaxRetry:6,fragLoadingMaxRetry:6});
         hls.loadSource(url);hls.attachMedia(vid);
         hls.on(Hls.Events.MANIFEST_PARSED,()=>{vid.play().catch(()=>{});});
-        hls.on(Hls.Events.ERROR,(e,d)=>{if(d.fatal){hls.destroy();delete hlsPlayers[key];}});
+        hls.on(Hls.Events.ERROR,(e,d)=>{
+          if(!d.fatal)return;
+          if(d.type===Hls.ErrorTypes.NETWORK_ERROR){hls.startLoad();return;}
+          if(d.type===Hls.ErrorTypes.MEDIA_ERROR){hls.recoverMediaError();return;}
+          hls.destroy();delete hlsPlayers[key];
+        });
         hlsPlayers[key]=hls;
       }else if(vid.canPlayType('application/vnd.apple.mpegurl')){vid.src=url;vid.play().catch(()=>{});}
     }
