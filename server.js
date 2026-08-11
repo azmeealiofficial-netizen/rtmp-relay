@@ -83,16 +83,20 @@ app.get('/api/relay-stats', async (req, res) => {
 app.get('/hls/:file', async (req, res) => {
   try {
     const response = await fetch(`http://127.0.0.1:8888/hls/${req.params.file}`);
-    if (!response.ok) throw new Error('Not found');
+    if (!response.ok) {
+      return res.status(response.status).send(`Upstream ${response.status} for ${req.params.file}`);
+    }
     const buffer = await response.arrayBuffer();
     const ext = req.params.file.split('.').pop();
     const types = { m3u8: 'application/vnd.apple.mpegurl', ts: 'video/mp2t' };
     res.set('Content-Type', types[ext] || 'application/octet-stream');
-    res.set('Cache-Control', 'no-cache');
+    // Playlists must never be cached; segments are immutable once written.
+    res.set('Cache-Control', ext === 'ts' ? 'public, max-age=60' : 'no-cache, no-store');
     res.set('Access-Control-Allow-Origin', '*');
     res.send(Buffer.from(buffer));
   } catch (e) {
-    res.status(404).send('Stream not found');
+    console.error('[hls] proxy error for', req.params.file, '-', e.message);
+    res.status(502).send('Relay cannot reach nginx: ' + e.message);
   }
 });
 
