@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VxD Score Bug</title>
+<style>
+  @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
+  @font-face{font-family:'MvEamaan';src:url('fonts/Mv_Eamaan_XP.otf') format('opentype')}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:transparent}
+  body{
+    overflow:hidden;width:1920px;height:1080px;
+    font-family:'Inter','Segoe UI',Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  :root{
+    --panel:#0d1017;
+    --panel2:#161b26;
+    --line:#ffffff14;
+    --muted:#93a0b4;
+    --home:#1d4ed8;
+    --away:#dc2626;
+  }
+
+  /* ── Positioning ───────────────────────────────────────────── */
+  .bug{
+    position:absolute;top:56px;left:64px;
+    display:flex;flex-direction:column;align-items:flex-start;gap:8px;
+    filter:drop-shadow(0 14px 34px rgba(0,0,0,.55));
+    transition:opacity .45s ease, transform .5s cubic-bezier(.22,1,.36,1);
+  }
+  .bug.hidden{opacity:0;transform:translateX(-40px);pointer-events:none}
+
+  body.pos-tc .bug{left:50%;transform:translateX(-50%);align-items:center}
+  body.pos-tc .bug.hidden{transform:translateX(-50%) translateY(-40px)}
+  body.pos-bl .bug{top:auto;bottom:150px}
+
+  /* ── Main bar ──────────────────────────────────────────────── */
+  .bar{
+    display:flex;align-items:stretch;height:62px;
+    background:var(--panel);
+    border-radius:10px;overflow:hidden;
+    border:1px solid var(--line);
+  }
+
+  .team{display:flex;align-items:center;height:100%}
+  .stripe{width:6px;height:100%;flex:0 0 6px;display:block}
+
+  .logo{
+    width:38px;height:38px;object-fit:contain;display:block;
+    margin:0 14px;flex:0 0 38px;
+  }
+  .logo.empty{display:none}
+
+  .tname{
+    font-size:25px;font-weight:800;letter-spacing:.6px;
+    color:#fff;text-transform:uppercase;white-space:nowrap;
+    padding:0 6px;max-width:340px;overflow:hidden;text-overflow:ellipsis;
+  }
+  .home .tname{padding-left:2px;padding-right:18px}
+  .away .tname{padding-left:18px;padding-right:2px}
+  .home .logo{margin-left:14px;margin-right:10px}
+  .away .logo{margin-left:10px;margin-right:14px}
+
+  .score{
+    min-width:56px;height:100%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:29px;font-weight:900;color:#fff;
+    font-variant-numeric:tabular-nums;
+    letter-spacing:.5px;
+  }
+  .home .score{background:var(--home)}
+  .away .score{background:var(--away)}
+  /* Hairline between the two score boxes so 2|1 never reads as "21" */
+  .away .score{box-shadow:inset 2px 0 0 #00000055}
+
+  .clock{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:var(--panel2);min-width:126px;padding:0 18px;height:100%;
+    border-left:1px solid var(--line);gap:1px;
+  }
+  .clock.off{display:none}
+  .per{
+    font-size:10px;font-weight:800;letter-spacing:1.6px;
+    color:var(--muted);text-transform:uppercase;white-space:nowrap;
+  }
+  .time{
+    font-size:24px;font-weight:800;color:#fff;line-height:1.05;
+    font-variant-numeric:tabular-nums;white-space:nowrap;
+  }
+  .time .stop{color:#f59e0b;font-size:18px;margin-left:2px}
+
+  /* ── Cards / fouls strip ───────────────────────────────────── */
+  .stats{
+    display:flex;align-items:stretch;height:28px;
+    background:#0d1017ee;border:1px solid var(--line);
+    border-radius:7px;overflow:hidden;
+  }
+  .stats.hidden{display:none}
+  .shalf{
+    display:flex;align-items:center;gap:9px;padding:0 14px;
+    font-size:12px;font-weight:700;color:#c8d2e0;letter-spacing:.4px;
+  }
+  .shalf + .shalf{border-left:1px solid var(--line)}
+  .shalf.empty{display:none}
+  .scode{font-size:11px;font-weight:900;color:#7d8899;letter-spacing:1px}
+  .chip{display:flex;align-items:center;gap:5px}
+  .card{width:11px;height:15px;border-radius:2px;display:block}
+  .card.y{background:#facc15}
+  .card.r{background:#ef4444}
+  .foul{color:#93a0b4;font-weight:700}
+  .foul b{color:#fff;margin-left:4px}
+
+  /* ── Penalty shootout ──────────────────────────────────────── */
+  .pens{
+    display:flex;flex-direction:column;gap:1px;
+    background:#0d1017f2;border:1px solid var(--line);
+    border-radius:8px;overflow:hidden;padding:8px 14px;
+  }
+  .pens.hidden{display:none}
+  .pens-hdr{
+    font-size:10px;font-weight:900;letter-spacing:2px;color:#f59e0b;
+    margin-bottom:5px;text-transform:uppercase;
+  }
+  .prow{display:flex;align-items:center;gap:10px;height:24px}
+  .pcode{
+    font-size:13px;font-weight:800;color:#fff;
+    min-width:64px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;
+  }
+  .dots{display:flex;gap:6px;align-items:center}
+  .dot{
+    width:13px;height:13px;border-radius:50%;
+    border:2px solid #ffffff35;box-sizing:border-box;display:block;
+  }
+  .dot.goal{background:#22c55e;border-color:#22c55e}
+  .dot.miss{background:transparent;border-color:#ef4444;position:relative}
+  .dot.miss::after{
+    content:'';position:absolute;inset:2px;
+    background:linear-gradient(45deg,transparent 42%,#ef4444 42%,#ef4444 58%,transparent 58%);
+  }
+
+  /* ── Event banner ──────────────────────────────────────────── */
+  .event{
+    display:flex;align-items:stretch;height:56px;
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:9px;overflow:hidden;max-width:820px;
+    transition:opacity .35s ease, transform .4s cubic-bezier(.22,1,.36,1);
+  }
+  .event.hidden{opacity:0;transform:translateX(-30px) scale(.97);pointer-events:none;height:0;border:none;margin-top:-8px}
+  .evtype{
+    display:flex;align-items:center;padding:0 20px;
+    font-size:19px;font-weight:900;letter-spacing:1.5px;
+    color:#fff;white-space:nowrap;text-transform:uppercase;
+  }
+  .evtype.GOAL{background:#16a34a}
+  .evtype.YELLOW{background:#eab308;color:#1a1a1a}
+  .evtype.RED{background:#dc2626}
+  .evtype.SUB{background:#2563eb}
+  .evtype.INFO{background:#475569}
+  .evlogo{width:30px;height:30px;object-fit:contain;align-self:center;margin-left:16px;flex:0 0 30px}
+  .evlogo.empty{display:none}
+  .evbody{display:flex;align-items:center;gap:14px;padding:0 22px;flex:1;min-width:0}
+  .evtext{
+    font-size:23px;font-weight:700;color:#fff;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;
+  }
+  .evsub{
+    font-size:15px;font-weight:800;color:#f59e0b;
+    letter-spacing:.5px;white-space:nowrap;flex:0 0 auto;
+  }
+  .evsub.empty{display:none}
+
+  /* ── Dhivehi / RTL mode ────────────────────────────────────── */
+  body.dv .bar,
+  body.dv .stats,
+  body.dv .prow,
+  body.dv .event{flex-direction:row-reverse}
+  body.dv .bug{align-items:flex-end}
+  body.dv .team{flex-direction:row-reverse}
+  body.dv .tname{
+    font-family:'MVWaheed','Segoe UI',Arial,sans-serif;
+    text-transform:none;font-size:28px;font-weight:400;
+    letter-spacing:0;direction:rtl;padding-top:6px;
+  }
+  body.dv .home .tname{padding-left:18px;padding-right:2px}
+  body.dv .away .tname{padding-left:2px;padding-right:18px}
+  body.dv .home .logo{margin-left:10px;margin-right:14px}
+  body.dv .away .logo{margin-left:14px;margin-right:10px}
+  body.dv .clock{border-left:none;border-right:1px solid var(--line)}
+  body.dv .away .score{box-shadow:inset -2px 0 0 #00000055}
+  body.dv .shalf + .shalf{border-left:none;border-right:1px solid var(--line)}
+  body.dv .pens{direction:rtl}
+  body.dv .pcode,
+  body.dv .per{font-family:'MvEamaan','Segoe UI',Arial,sans-serif;direction:rtl}
+  body.dv .per{letter-spacing:0;font-size:13px;font-weight:400}
+  body.dv .evtext{
+    font-family:'MVWaheed','Segoe UI',Arial,sans-serif;
+    direction:rtl;font-weight:400;padding-top:6px;
+  }
+  body.dv .evtype{font-family:'MvEamaan','Segoe UI',Arial,sans-serif;letter-spacing:0;font-weight:400}
+  body.dv .evlogo{margin-left:0;margin-right:16px}
+  /* Top-left in LTR reads as top-right in an RTL layout */
+  body.dv.pos-tl .bug{left:auto;right:64px}
+  body.dv.pos-tl .bug.hidden{transform:translateX(40px)}
+  body.dv .event.hidden{transform:translateX(30px) scale(.97)}
+</style>
+</head>
+<body>
+  <div class="bug hidden" id="bug">
+
+    <div class="bar">
+      <div class="team home">
+        <span class="stripe" id="stHome"></span>
+        <img class="logo empty" id="lgHome" alt="">
+        <span class="tname" id="nmHome">HOME</span>
+        <span class="score" id="scHome">0</span>
+      </div>
+      <div class="team away">
+        <span class="score" id="scAway">0</span>
+        <span class="tname" id="nmAway">AWAY</span>
+        <img class="logo empty" id="lgAway" alt="">
+        <span class="stripe" id="stAway"></span>
+      </div>
+      <div class="clock off" id="clockBox">
+        <span class="per" id="perLbl"></span>
+        <span class="time" id="timeLbl">00:00</span>
+      </div>
+    </div>
+
+    <div class="stats hidden" id="statStrip">
+      <div class="shalf empty" id="shHome"></div>
+      <div class="shalf empty" id="shAway"></div>
+    </div>
+
+    <div class="pens hidden" id="penStrip">
+      <div class="pens-hdr" id="pensHdr">PENALTIES</div>
+      <div class="prow"><span class="pcode" id="pcHome"></span><span class="dots" id="pdHome"></span></div>
+      <div class="prow"><span class="pcode" id="pcAway"></span><span class="dots" id="pdAway"></span></div>
+    </div>
+
+    <div class="event hidden" id="evBox">
+      <span class="evtype GOAL" id="evType">GOAL</span>
+      <div class="evbody">
+        <img class="evlogo empty" id="evLogo" alt="">
+        <span class="evtext" id="evText"></span>
+        <span class="evsub empty" id="evSub"></span>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+(() => {
+  const P       = new URLSearchParams(location.search);
+  const POS     = (P.get('pos') || 'tl').toLowerCase();      // tl | tc | bl
+  const PREVIEW = P.get('preview') === '1';
+  const ORIGIN  = location.origin;
+
+  document.body.classList.add('pos-' + (['tl','tc','bl'].includes(POS) ? POS : 'tl'));
+
+  const $ = id => document.getElementById(id);
+  const el = {
+    bug: $('bug'),
+    stHome: $('stHome'), stAway: $('stAway'),
+    lgHome: $('lgHome'), lgAway: $('lgAway'),
+    nmHome: $('nmHome'), nmAway: $('nmAway'),
+    scHome: $('scHome'), scAway: $('scAway'),
+    clockBox: $('clockBox'), perLbl: $('perLbl'), timeLbl: $('timeLbl'),
+    statStrip: $('statStrip'), shHome: $('shHome'), shAway: $('shAway'),
+    penStrip: $('penStrip'), pensHdr: $('pensHdr'),
+    pcHome: $('pcHome'), pcAway: $('pcAway'),
+    pdHome: $('pdHome'), pdAway: $('pdAway'),
+    evBox: $('evBox'), evType: $('evType'), evLogo: $('evLogo'),
+    evText: $('evText'), evSub: $('evSub')
+  };
+
+  // Period definitions: where the displayed clock starts, and where regulation
+  // ends (past that we show stoppage as "45:00 +2" like a broadcast clock).
+  const PERIODS = {
+    PRE:  { start: 0,   end: null, clock: false, en: '',            dv: '' },
+    '1H': { start: 0,   end: 45,   clock: true,  en: '1ST HALF',    dv: 'ފުރަތަމަ ހާފް' },
+    HT:   { start: 45,  end: null, clock: true,  en: 'HALF TIME',   dv: 'ހާފް ޓައިމް',  frozen: 45 },
+    '2H': { start: 45,  end: 90,   clock: true,  en: '2ND HALF',    dv: 'ދެވަނަ ހާފް' },
+    FT:   { start: 90,  end: null, clock: true,  en: 'FULL TIME',   dv: 'ފުލް ޓައިމް',  frozen: 90 },
+    ET1:  { start: 90,  end: 105,  clock: true,  en: 'EXTRA TIME 1',dv: 'އިތުރު ވަގުތު 1' },
+    ET2:  { start: 105, end: 120,  clock: true,  en: 'EXTRA TIME 2',dv: 'އިތުރު ވަގުތު 2' },
+    PENS: { start: 0,   end: null, clock: false, en: 'PENALTIES',   dv: 'ޕެނަލްޓީ' }
+  };
+
+  const PENS_HDR = { en: 'PENALTY SHOOTOUT', dv: 'ޕެނަލްޓީ ޝޫޓްއައުޓް' };
+
+  let state    = null;      // last light payload
+  let skew     = 0;         // serverNow - Date.now(), so the clock survives clock drift
+  let lastKey  = '';
+  const lastLv = { home: -1, away: -1 };
+
+  const pad = n => String(n).padStart(2, '0');
+
+  function clockText() {
+    if (!state) return '00:00';
+    const c   = state.clock;
+    const def = PERIODS[c.period] || PERIODS['1H'];
+
+    if (def.frozen !== undefined) return pad(def.frozen) + ':00';
+
+    const elapsed = Math.max(0, c.baseMs + (c.running ? (Date.now() + skew) - c.startedAt : 0));
+    const total   = def.start * 60 + Math.floor(elapsed / 1000);
+
+    if (def.end !== null && total >= def.end * 60) {
+      const over = Math.ceil((total - def.end * 60) / 60) || 1;
+      return `<span>${pad(def.end)}:00</span><span class="stop">+${over}</span>`;
+    }
+    return pad(Math.floor(total / 60)) + ':' + pad(total % 60);
+  }
+
+  function tickClock() {
+    if (!state) return;
+    const def = PERIODS[state.clock.period] || PERIODS['1H'];
+    el.clockBox.classList.toggle('off', !def.clock);
+    if (!def.clock) return;
+    const html = clockText();
+    if (el.timeLbl.innerHTML !== html) el.timeLbl.innerHTML = html;
+  }
+
+  function sideLabel(s) {
+    // Prefer the short code on the penalty rows — full names don't fit
+    return (s.short || s.name || '').trim();
+  }
+
+  function renderStats(d) {
+    const on = (d.showCards || d.showFouls);
+    let any = false;
+
+    for (const side of ['home', 'away']) {
+      const s    = d[side];
+      const node = side === 'home' ? el.shHome : el.shAway;
+      const bits = [`<span class="scode">${escapeHtml(sideLabel(s) || side.toUpperCase())}</span>`];
+
+      if (d.showCards && s.yellow > 0) bits.push(`<span class="chip"><i class="card y"></i>${s.yellow}</span>`);
+      if (d.showCards && s.red    > 0) bits.push(`<span class="chip"><i class="card r"></i>${s.red}</span>`);
+      if (d.showFouls)                 bits.push(`<span class="foul">${d.lang === 'dv' ? 'ފައުލް' : 'FOULS'}<b>${s.fouls || 0}</b></span>`);
+
+      const show = on && bits.length > 1;
+      node.innerHTML = show ? bits.join('') : '';
+      node.classList.toggle('empty', !show);
+      if (show) any = true;
+    }
+    el.statStrip.classList.toggle('hidden', !any);
+  }
+
+  function renderPens(d) {
+    const p = d.pens || { visible: false, home: [], away: [] };
+    el.penStrip.classList.toggle('hidden', !p.visible);
+    if (!p.visible) return;
+
+    el.pensHdr.textContent = PENS_HDR[d.lang] || PENS_HDR.en;
+    el.pcHome.textContent  = sideLabel(d.home) || 'HOME';
+    el.pcAway.textContent  = sideLabel(d.away) || 'AWAY';
+
+    // Both rows padded to the same length so the columns line up
+    const len = Math.max(5, (p.home || []).length, (p.away || []).length);
+    const row = arr => Array.from({ length: len },
+      (_, i) => `<i class="dot ${arr[i] === 'goal' ? 'goal' : arr[i] === 'miss' ? 'miss' : ''}"></i>`).join('');
+
+    el.pdHome.innerHTML = row(p.home || []);
+    el.pdAway.innerHTML = row(p.away || []);
+  }
+
+  function renderEvent(d) {
+    const e = d.event || {};
+    // Expire locally so the banner clears even if the operator never hides it
+    const live = e.visible && (Date.now() + skew) - e.at < e.dur * 1000;
+
+    el.evBox.classList.toggle('hidden', !live);
+    if (!live) return;
+
+    const type = ['GOAL', 'YELLOW', 'RED', 'SUB', 'INFO'].includes(e.type) ? e.type : 'INFO';
+    el.evType.className   = 'evtype ' + type;
+    el.evType.textContent = eventLabel(type, d.lang);
+    el.evText.textContent = e.text || '';
+    el.evSub.textContent  = e.sub || '';
+    el.evSub.classList.toggle('empty', !e.sub);
+
+    const logo = e.side === 'away' ? el.lgAway.src : el.lgHome.src;
+    if (logo) { el.evLogo.src = logo; el.evLogo.classList.remove('empty'); }
+    else      { el.evLogo.removeAttribute('src'); el.evLogo.classList.add('empty'); }
+  }
+
+  const EV_LABEL = {
+    en: { GOAL: 'GOAL', YELLOW: 'YELLOW CARD', RED: 'RED CARD', SUB: 'SUBSTITUTION', INFO: 'INFO' },
+    dv: { GOAL: 'ގޯލް', YELLOW: 'ރީނދޫ ކާޑު', RED: 'ރަތް ކާޑު', SUB: 'ބަދަލު', INFO: 'މައުލޫމާތު' }
+  };
+  const eventLabel = (t, lang) => (EV_LABEL[lang] || EV_LABEL.en)[t] || t;
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  async function loadLogo(side) {
+    try {
+      const r = await fetch(`${ORIGIN}/api/score/logo/${side}`, { cache: 'no-store' });
+      if (!r.ok) return;
+      const d   = await r.json();
+      const img = side === 'home' ? el.lgHome : el.lgAway;
+      if (d.logo) { img.src = d.logo; img.classList.remove('empty'); }
+      else        { img.removeAttribute('src'); img.classList.add('empty'); }
+    } catch (e) {}
+  }
+
+  function render(d) {
+    document.body.classList.toggle('dv', d.lang === 'dv');
+    document.documentElement.style.setProperty('--home', d.home.color || '#1d4ed8');
+    document.documentElement.style.setProperty('--away', d.away.color || '#dc2626');
+
+    el.stHome.style.background = d.home.color || '#1d4ed8';
+    el.stAway.style.background = d.away.color || '#dc2626';
+
+    el.nmHome.textContent = d.home.name || d.home.short || 'HOME';
+    el.nmAway.textContent = d.away.name || d.away.short || 'AWAY';
+    el.scHome.textContent = d.home.score ?? 0;
+    el.scAway.textContent = d.away.score ?? 0;
+
+    const def = PERIODS[d.clock.period] || PERIODS['1H'];
+    el.perLbl.textContent = def[d.lang] || def.en || '';
+
+    renderStats(d);
+    renderPens(d);
+    el.bug.classList.toggle('hidden', !d.visible);
+  }
+
+  async function poll() {
+    try {
+      const r = await fetch(`${ORIGIN}/api/score?t=${Date.now()}`, { cache: 'no-store' });
+      if (!r.ok) return;
+      const d = await r.json();
+
+      skew  = (d.serverNow || Date.now()) - Date.now();
+      state = d;
+
+      for (const side of ['home', 'away']) {
+        if ((d[side].lv || 0) !== lastLv[side]) { lastLv[side] = d[side].lv || 0; loadLogo(side); }
+      }
+
+      // Cheap diff so we're not rewriting the DOM 60 times a minute for nothing.
+      // The event is excluded — it's time-sensitive and handled every tick.
+      const key = JSON.stringify([
+        d.visible, d.lang, d.showCards, d.showFouls,
+        d.home.name, d.home.short, d.home.color, d.home.score, d.home.yellow, d.home.red, d.home.fouls,
+        d.away.name, d.away.short, d.away.color, d.away.score, d.away.yellow, d.away.red, d.away.fouls,
+        d.clock.period, d.pens
+      ]);
+      if (key !== lastKey) { lastKey = key; render(d); }
+
+      renderEvent(d);
+      tickClock();
+    } catch (e) {}
+  }
+
+  if (PREVIEW) {
+    // Static sample so the layout can be eyeballed without touching live state
+    state = {
+      visible: true, lang: 'en', showCards: true, showFouls: true,
+      home: { name: 'MAZIYA', short: 'MZY', color: '#1d4ed8', score: 2, yellow: 1, red: 0, fouls: 7, lv: 0 },
+      away: { name: 'EAGLES', short: 'EGL', color: '#dc2626', score: 1, yellow: 2, red: 1, fouls: 11, lv: 0 },
+      clock: { running: false, baseMs: 47 * 60000, startedAt: 0, period: '2H' },
+      pens: { visible: false, home: [], away: [] },
+      event: { visible: false }
+    };
+    render(state);
+    tickClock();
+  } else {
+    poll();
+    setInterval(poll, 1000);
+    setInterval(tickClock, 200);   // smooth seconds between polls
+  }
+})();
+</script>
+</body>
+</html>

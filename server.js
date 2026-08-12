@@ -289,6 +289,192 @@ app.post('/api/msg/clear', (req, res) => {
   res.json({ ok: true });
 });
 
+// ============================================================
+// SOCCER SCOREBOARD  (/api/score/*)
+// One live match at a time. The overlay polls the LIGHT payload
+// every second; team logos are heavy base64 so they live behind
+// /api/score/logo/:side and are refetched only when that side's
+// logo version (lv) changes.
+//
+// The clock is stored as (baseMs, startedAt, running) rather than
+// a tick count, so the overlay stays smooth and accurate even if a
+// poll is dropped: it computes elapsed itself from serverNow.
+// ============================================================
+const emptySide = (color) => ({
+  name: '', short: '', color,
+  score: 0, yellow: 0, red: 0, fouls: 0,
+  logo: '', lv: 0
+});
+
+const blankScoreboard = () => ({
+  visible: false,
+  lang: 'en',                 // 'en' (LTR, Latin) | 'dv' (RTL, Thaana)
+  showCards: true,
+  showFouls: false,
+  home: emptySide('#1d4ed8'),
+  away: emptySide('#dc2626'),
+  clock: { running: false, baseMs: 0, startedAt: 0, period: 'PRE' },
+  pens: { visible: false, home: [], away: [] },   // arrays of 'goal' | 'miss'
+  event: { visible: false, type: 'GOAL', side: 'home', text: '', sub: '', at: 0, dur: 8 }
+});
+
+let scoreboard = blankScoreboard();
+
+// Everything except the base64 logos, plus the server clock for drift correction.
+function scoreLight() {
+  const strip = (s) => { const { logo, ...rest } = s; return rest; };
+  return {
+    ...scoreboard,
+    home: strip(scoreboard.home),
+    away: strip(scoreboard.away),
+    serverNow: Date.now()
+  };
+}
+
+let scoreSaveTimer = null;
+function saveScoreboard() {
+  if (!pool) return;
+  // Coalesce bursts (holding + on a score button, dragging a colour picker)
+  clearTimeout(scoreSaveTimer);
+  scoreSaveTimer = setTimeout(async () => {
+    // Materialise the running clock into baseMs before writing, so a restore
+    // lands on the real elapsed time instead of the last time someone paused.
+    const snap = { ...scoreboard, clock: { ...scoreboard.clock } };
+    if (snap.clock.running) {
+      snap.clock.baseMs += Date.now() - snap.clock.startedAt;
+      snap.clock.running = false;
+      snap.clock.startedAt = 0;
+    }
+    try {
+      await pool.query(
+        'INSERT INTO scoreboard (id, data) VALUES ($1,$2) ON CONFLICT (id) DO UPDATE SET data=$2',
+        ['match', snap]
+      );
+    } catch (e) { console.error('scoreboard save failed:', e.message); }
+  }, 400);
+}
+
+// While the clock runs nobody may touch the API for minutes at a time — keep a
+// warm snapshot on disk so a mid-half redeploy doesn't lose the running time.
+setInterval(() => { if (scoreboard.clock.running) saveScoreboard(); }, 20000).unref?.();
+
+app.use('/api/score', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  next();
+});
+
+app.get('/api/score', (req, res) => res.json(scoreLight()));
+
+// Heavy logo payload — fetched only when lv changes
+app.get('/api/score/logo/:side', (req, res) => {
+  const s = scoreboard[req.params.side];
+  if (!s) return res.status(404).json({ error: 'Unknown side' });
+  res.json({ logo: s.logo || '', lv: s.lv || 0 });
+});
+
+// Patch any subset of state. Nested objects merge one level deep, so
+// { home: { score: 2 } } leaves the rest of `home` alone.
+app.post('/api/score', (req, res) => {
+  const patch = req.body || {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (k === 'clock') continue;                       // clock only moves via /api/score/clock
+    const cur = scoreboard[k];
+    if (v && typeof v === 'object' && !Array.isArray(v) && cur && typeof cur === 'object' && !Array.isArray(cur)) {
+      // A changed logo bumps that side's version so overlays know to refetch
+      if ((k === 'home' || k === 'away') && typeof v.logo === 'string' && v.logo !== cur.logo) {
+        v.lv = Date.now();
+      }
+      Object.assign(cur, v);
+    } else {
+      scoreboard[k] = v;
+    }
+  }
+  saveScoreboard();
+  res.json(scoreLight());
+});
+
+// Relative score change — safer than sending an absolute value from two
+// browsers at once, and never lets the score go negative.
+app.post('/api/score/goal', (req, res) => {
+  const { side, delta = 1 } = req.body || {};
+  const s = scoreboard[side];
+  if (!s) return res.status(400).json({ error: 'Unknown side' });
+  s.score = Math.max(0, (s.score || 0) + Number(delta));
+  saveScoreboard();
+  res.json(scoreLight());
+});
+
+// Minute the match clock is at right now — used to stamp events automatically
+function currentMatchMinute() {
+  const c = scoreboard.clock;
+  const starts = { PRE: 0, '1H': 0, HT: 45, '2H': 45, FT: 90, ET1: 90, ET2: 105, PENS: 120 };
+  const elapsed = c.baseMs + (c.running ? Date.now() - c.startedAt : 0);
+  return (starts[c.period] || 0) + Math.floor(elapsed / 60000);
+}
+
+app.post('/api/score/clock', (req, res) => {
+  const { action, ms, period } = req.body || {};
+  const c = scoreboard.clock;
+  const now = Date.now();
+
+  if (typeof period === 'string' && period) c.period = period;
+
+  if (action === 'start') {
+    if (!c.running) { c.running = true; c.startedAt = now; }
+  } else if (action === 'pause') {
+    if (c.running) { c.baseMs += now - c.startedAt; c.running = false; c.startedAt = 0; }
+  } else if (action === 'reset') {
+    c.running = false; c.startedAt = 0; c.baseMs = 0;
+  } else if (action === 'set') {
+    c.baseMs = Math.max(0, Number(ms) || 0);
+    if (c.running) c.startedAt = now;               // re-anchor so the jump isn't double-counted
+  }
+
+  saveScoreboard();
+  res.json(scoreLight());
+});
+
+// Fire an announcement banner (goal / card / sub / free text).
+// `at` is stamped server-side so the overlay can expire it on its own.
+app.post('/api/score/event', (req, res) => {
+  const { type = 'GOAL', side = 'home', text = '', sub = '', dur = 8, minute } = req.body || {};
+  const stamp = (minute === undefined || minute === null || minute === '')
+    ? currentMatchMinute() + "'"
+    : String(minute);
+  scoreboard.event = {
+    visible: true,
+    type: String(type),
+    side: side === 'away' ? 'away' : 'home',
+    text: String(text).slice(0, 120),
+    sub: sub ? String(sub).slice(0, 80) : stamp,
+    at: Date.now(),
+    dur: Math.max(2, Number(dur) || 8)
+  };
+  saveScoreboard();
+  res.json(scoreLight());
+});
+
+app.post('/api/score/event/hide', (req, res) => {
+  scoreboard.event.visible = false;
+  saveScoreboard();
+  res.json(scoreLight());
+});
+
+// New match: wipes scores, clock, cards and penalties but KEEPS the two
+// teams (names, colours, logos) so a double-header doesn't mean re-uploading.
+app.post('/api/score/reset', (req, res) => {
+  const keepTeam = (s) => ({ ...emptySide(s.color), name: s.name, short: s.short, logo: s.logo, lv: s.lv });
+  const prev = scoreboard;
+  scoreboard = blankScoreboard();
+  scoreboard.lang = prev.lang;
+  scoreboard.showCards = prev.showCards;
+  scoreboard.showFouls = prev.showFouls;
+  scoreboard.home = keepTeam(prev.home);
+  scoreboard.away = keepTeam(prev.away);
+  saveScoreboard();
+  res.json(scoreLight());
+});
+
 // ---- Ticker states (persisted to Postgres when available) ----
 let tickers = {
   voice: {
@@ -337,6 +523,8 @@ app.get('/ticker', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ti
 app.get('/go', (req, res) => res.sendFile(path.join(__dirname, 'public', 'go.html')));
 app.get('/live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'live.html')));
 app.get('/streamer-tag', (req, res) => res.sendFile(path.join(__dirname, 'public', 'streamer-tag.html')));
+app.get('/scorebug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'scorebug.html')));  // vMix overlay input
+app.get('/score', (req, res) => res.sendFile(path.join(__dirname, 'public', 'score.html')));        // director control
 
 // ---- Load persisted data, then start the server ----
 async function initDB() {
@@ -352,6 +540,7 @@ async function initDB() {
     await pool.query("ALTER TABLE reporters ADD COLUMN IF NOT EXISTS tag_visible boolean DEFAULT false");
     await pool.query("ALTER TABLE reporters ADD COLUMN IF NOT EXISTS pv bigint DEFAULT 0");
     await pool.query('CREATE TABLE IF NOT EXISTS tickers (id text PRIMARY KEY, data jsonb NOT NULL)');
+    await pool.query('CREATE TABLE IF NOT EXISTS scoreboard (id text PRIMARY KEY, data jsonb NOT NULL)');
 
     const rr = await pool.query('SELECT id, name, location, photo, tag_visible, pv FROM reporters ORDER BY created_at ASC');
     reporters = rr.rows.map(r => ({
@@ -367,6 +556,19 @@ async function initDB() {
       const tr = await pool.query('SELECT data FROM tickers WHERE id=$1', [id]);
       if (tr.rows.length) tickers[id] = tr.rows[0].data;
       else await pool.query('INSERT INTO tickers (id, data) VALUES ($1,$2)', [id, tickers[id]]);
+    }
+
+    // Scoreboard — restore the match, but never come back from a deploy with a
+    // clock that "ran" while the service was down.
+    const sr = await pool.query('SELECT data FROM scoreboard WHERE id=$1', ['match']);
+    if (sr.rows.length) {
+      scoreboard = Object.assign(blankScoreboard(), sr.rows[0].data);
+      // Freeze wherever it was last committed rather than crediting downtime,
+      // which could be days. The operator nudges and hits START again.
+      const c = scoreboard.clock;
+      c.running = false; c.startedAt = 0;
+    } else {
+      await pool.query('INSERT INTO scoreboard (id, data) VALUES ($1,$2)', ['match', scoreboard]);
     }
 
     console.log(`PostgreSQL connected — ${reporters.length} reporters loaded, data persists across deploys`);

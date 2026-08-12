@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VxD Scoreboard Control</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
+  @font-face{font-family:'MvEamaan';src:url('fonts/Mv_Eamaan_XP.otf') format('opentype')}
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg:#09090b;--card:#18181b;--card2:#1f1f23;--bdr:#27272a;--bdr2:#3f3f46;
+        --t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;--red:#ef4444;--grn:#22c55e;
+        --blu:#3b82f6;--amb:#f59e0b;--radius:8px}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t1);
+       min-height:100vh;-webkit-tap-highlight-color:transparent;padding-bottom:40px}
+
+  .topbar{background:var(--card);border-bottom:1px solid var(--bdr);padding:10px 20px;
+          display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
+          position:sticky;top:0;z-index:20}
+  .topbar-left{display:flex;align-items:center;gap:14px}
+  .topbar-logos{display:flex;align-items:center;gap:8px}
+  .topbar-logos img{height:28px;object-fit:contain}
+  .ttl{font-size:13px;font-weight:800;letter-spacing:1.5px;color:var(--t3);text-transform:uppercase}
+  .topbar-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .navlink{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;
+           text-decoration:none;color:var(--t3);background:var(--card2);border:1px solid var(--bdr)}
+  .navlink:hover{color:var(--t1)}
+
+  .onair{padding:9px 22px;border-radius:6px;font-size:12px;font-weight:900;letter-spacing:1.5px;
+         border:1px solid var(--bdr2);background:var(--card2);color:var(--t3);cursor:pointer}
+  .onair.live{background:var(--red);border-color:var(--red);color:#fff;animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 #ef444466}50%{box-shadow:0 0 0 7px #ef444400}}
+
+  .wrap{max-width:1500px;margin:0 auto;padding:18px 20px;display:grid;gap:16px;
+        grid-template-columns:1fr}
+  @media(min-width:1180px){.wrap{grid-template-columns:1fr 430px;align-items:start}}
+
+  .col{display:grid;gap:16px;align-content:start}
+
+  .card{background:var(--card);border:1px solid var(--bdr);border-radius:12px;overflow:hidden}
+  .card-hdr{padding:11px 16px;border-bottom:1px solid var(--bdr);display:flex;
+            justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .card-ttl{font-size:11px;font-weight:800;letter-spacing:1.6px;color:var(--t2);text-transform:uppercase}
+  .card-body{padding:16px}
+
+  label.lb{display:block;font-size:10px;font-weight:700;letter-spacing:1.2px;
+           color:var(--t3);text-transform:uppercase;margin-bottom:5px}
+  input[type=text],input[type=number],select{
+    width:100%;background:var(--bg);border:1px solid var(--bdr2);border-radius:6px;
+    color:var(--t1);padding:9px 11px;font-size:14px;font-family:inherit;outline:none}
+  input:focus,select:focus{border-color:var(--blu)}
+  input.dv{font-family:'MVWaheed','Inter',sans-serif;direction:rtl;text-align:right;font-size:17px}
+  input[type=color]{width:44px;height:38px;padding:2px;background:var(--bg);
+                    border:1px solid var(--bdr2);border-radius:6px;cursor:pointer}
+
+  .btn{background:var(--card2);border:1px solid var(--bdr2);border-radius:6px;color:var(--t1);
+       padding:9px 14px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;
+       letter-spacing:.4px;transition:filter .12s}
+  .btn:hover{filter:brightness(1.35)}
+  .btn:active{transform:translateY(1px)}
+  .btn.grn{background:var(--grn);border-color:var(--grn);color:#06210f}
+  .btn.red{background:var(--red);border-color:var(--red);color:#fff}
+  .btn.amb{background:var(--amb);border-color:var(--amb);color:#2a1a00}
+  .btn.blu{background:var(--blu);border-color:var(--blu);color:#fff}
+  .btn.gho{background:transparent}
+  .btn.sm{padding:6px 10px;font-size:11px}
+  .btn.wide{width:100%}
+
+  /* ── Teams ── */
+  .teams{display:grid;grid-template-columns:1fr;gap:14px}
+  @media(min-width:640px){.teams{grid-template-columns:1fr 1fr}}
+  .team-box{border:1px solid var(--bdr);border-radius:10px;padding:13px;background:var(--card2)}
+  .team-box.h{border-top:3px solid var(--blu)}
+  .team-box.a{border-top:3px solid var(--red)}
+  .team-tag{font-size:10px;font-weight:900;letter-spacing:2px;color:var(--t3);margin-bottom:10px}
+  .row{display:flex;gap:8px;align-items:flex-end}
+  .row > *{min-width:0}
+  .f1{flex:1}
+  .mt{margin-top:10px}
+
+  .logo-row{display:flex;align-items:center;gap:10px;margin-top:10px}
+  .logo-prev{width:52px;height:52px;flex:0 0 52px;border-radius:8px;border:1px dashed var(--bdr2);
+             background:#0b0b0e;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .logo-prev img{max-width:100%;max-height:100%;object-fit:contain}
+  .logo-prev span{font-size:9px;color:var(--t3);letter-spacing:.5px}
+  .file-btn{position:relative;overflow:hidden;display:inline-block}
+  .file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+
+  /* ── Score ── */
+  .score-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center}
+  .sc-side{text-align:center}
+  .sc-name{font-size:12px;font-weight:800;color:var(--t2);letter-spacing:.8px;
+           margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sc-num{font-size:52px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;margin-bottom:10px}
+  .sc-btns{display:flex;gap:6px;justify-content:center}
+  .sc-btns .btn{width:52px;font-size:17px;padding:8px 0}
+  .sc-vs{font-size:15px;font-weight:800;color:var(--t3);padding:0 4px}
+
+  /* ── Clock ── */
+  .clockface{font-size:40px;font-weight:900;text-align:center;font-variant-numeric:tabular-nums;
+             letter-spacing:1px;margin-bottom:4px}
+  .clockface .stop{color:var(--amb);font-size:26px}
+  .clock-per{text-align:center;font-size:10px;font-weight:800;letter-spacing:2px;
+             color:var(--t3);margin-bottom:14px;text-transform:uppercase;min-height:13px}
+  .periods{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:12px}
+  .periods .btn{padding:8px 0;font-size:11px}
+  .periods .btn.on{background:var(--blu);border-color:var(--blu);color:#fff}
+  .clock-ctl{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+
+  /* ── Cards / fouls ── */
+  .disc{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .disc-box{background:var(--card2);border:1px solid var(--bdr);border-radius:9px;padding:11px}
+  .disc-name{font-size:10px;font-weight:900;letter-spacing:1.5px;color:var(--t3);margin-bottom:9px;
+             white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .disc-line{display:flex;align-items:center;gap:7px;margin-bottom:7px}
+  .disc-line:last-child{margin-bottom:0}
+  .dcard{width:13px;height:18px;border-radius:2px;flex:0 0 13px}
+  .dcard.y{background:#facc15}.dcard.r{background:#ef4444}
+  .dlbl{font-size:11px;font-weight:700;color:var(--t2);flex:1}
+  .dval{font-size:15px;font-weight:900;min-width:20px;text-align:center;font-variant-numeric:tabular-nums}
+  .disc-line .btn{width:30px;padding:4px 0;font-size:13px}
+
+  .toggles{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .tog{display:flex;align-items:center;gap:7px;background:var(--card2);border:1px solid var(--bdr);
+       border-radius:6px;padding:7px 11px;font-size:11px;font-weight:700;color:var(--t2);cursor:pointer}
+  .tog.on{border-color:var(--grn);color:var(--grn)}
+  .tog i{width:8px;height:8px;border-radius:50%;background:var(--bdr2);display:block}
+  .tog.on i{background:var(--grn)}
+
+  /* ── Penalties ── */
+  .pen-row{display:flex;align-items:center;gap:9px;margin-bottom:9px;flex-wrap:wrap}
+  .pen-name{font-size:11px;font-weight:800;color:var(--t2);min-width:70px;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pen-dots{display:flex;gap:5px;flex:1;min-width:80px;align-items:center}
+  .pdot{width:15px;height:15px;border-radius:50%;border:2px solid var(--bdr2);display:block}
+  .pdot.goal{background:var(--grn);border-color:var(--grn)}
+  .pdot.miss{border-color:var(--red);background:transparent;position:relative}
+  .pdot.miss::after{content:'';position:absolute;inset:2px;
+    background:linear-gradient(45deg,transparent 42%,var(--red) 42%,var(--red) 58%,transparent 58%)}
+
+  /* ── Events ── */
+  .ev-types{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:11px}
+  .ev-types .btn{padding:8px 0;font-size:10px;letter-spacing:.3px}
+  .ev-types .btn.on{outline:2px solid var(--t1);outline-offset:-2px}
+  .ev-sides{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:11px}
+  .ev-sides .btn.on{background:var(--blu);border-color:var(--blu);color:#fff}
+
+  /* ── Preview ── */
+  .prev-stage{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:8px;
+    background:
+      linear-gradient(135deg,#1a2e1a 0%,#132213 100%);
+    border:1px solid var(--bdr)}
+  .prev-stage::before{content:'';position:absolute;inset:0;
+    background:repeating-linear-gradient(90deg,#ffffff08 0 60px,transparent 60px 120px)}
+  .prev-stage iframe{position:absolute;top:0;left:0;width:1920px;height:1080px;
+    transform-origin:top left;border:0;background:transparent}
+
+  .url-box{display:flex;gap:6px;margin-top:10px}
+  .url-box input{font-size:11px;font-family:ui-monospace,monospace;color:var(--t2)}
+
+  .hint{font-size:11px;color:var(--t3);line-height:1.55;margin-top:9px}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(80px);
+    background:var(--grn);color:#06210f;padding:10px 22px;border-radius:8px;font-size:13px;
+    font-weight:800;z-index:99;transition:transform .25s;pointer-events:none}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--red);color:#fff}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-logos">
+      <img src="img/voice.png" alt="VOICE">
+      <span style="color:#555;font-size:14px;font-weight:300">✕</span>
+      <img src="img/dhuvas.png" alt="DHUVAS">
+    </div>
+    <span class="ttl">Scoreboard</span>
+  </div>
+  <div class="topbar-right">
+    <a class="navlink" href="/">Control</a>
+    <a class="navlink" href="/live">Live</a>
+    <a class="navlink" href="/tv">TV Wall</a>
+    <button class="onair" id="onairBtn" onclick="toggleAir()">OFF AIR</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <!-- ══ LEFT COLUMN ══ -->
+  <div class="col">
+
+    <!-- TEAMS -->
+    <div class="card">
+      <div class="card-hdr">
+        <span class="card-ttl">Teams</span>
+        <div style="display:flex;gap:6px">
+          <button class="btn sm" id="langEn" onclick="setLang('en')">EN</button>
+          <button class="btn sm" id="langDv" onclick="setLang('dv')">ދިވެހި</button>
+          <button class="btn sm gho" onclick="swapTeams()" title="Swap home and away">⇄ Swap</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="teams" id="teamsGrid"></div>
+      </div>
+    </div>
+
+    <!-- SCORE -->
+    <div class="card">
+      <div class="card-hdr">
+        <span class="card-ttl">Score</span>
+        <button class="btn sm gho" onclick="newMatch()">New match</button>
+      </div>
+      <div class="card-body">
+        <div class="score-grid">
+          <div class="sc-side">
+            <div class="sc-name" id="scNameH">HOME</div>
+            <div class="sc-num" id="scNumH" style="color:#3b82f6">0</div>
+            <div class="sc-btns">
+              <button class="btn red" onclick="goal('home',-1)">−</button>
+              <button class="btn grn" onclick="goal('home',1)">+</button>
+            </div>
+          </div>
+          <div class="sc-vs">vs</div>
+          <div class="sc-side">
+            <div class="sc-name" id="scNameA">AWAY</div>
+            <div class="sc-num" id="scNumA" style="color:#ef4444">0</div>
+            <div class="sc-btns">
+              <button class="btn red" onclick="goal('away',-1)">−</button>
+              <button class="btn grn" onclick="goal('away',1)">+</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLOCK -->
+    <div class="card">
+      <div class="card-hdr"><span class="card-ttl">Match Clock</span></div>
+      <div class="card-body">
+        <div class="clockface" id="clockFace">00:00</div>
+        <div class="clock-per" id="clockPer">NOT STARTED</div>
+        <div class="periods" id="periodBtns"></div>
+        <div class="clock-ctl">
+          <button class="btn grn" id="startBtn" onclick="clockToggle()">START</button>
+          <button class="btn" onclick="clockNudge(-60000)">−1 min</button>
+          <button class="btn" onclick="clockNudge(60000)">+1 min</button>
+          <button class="btn gho" onclick="clockCmd({action:'reset'})">Reset</button>
+        </div>
+        <div class="hint">Periods set the clock start (2nd half resumes from 45:00). Past regulation it shows stoppage as <b>45:00 +2</b>.</div>
+      </div>
+    </div>
+
+    <!-- DISCIPLINE -->
+    <div class="card">
+      <div class="card-hdr"><span class="card-ttl">Cards &amp; Fouls</span></div>
+      <div class="card-body">
+        <div class="disc" id="discGrid"></div>
+        <div class="toggles">
+          <div class="tog" id="togCards" onclick="toggleFlag('showCards')"><i></i>Show cards</div>
+          <div class="tog" id="togFouls" onclick="toggleFlag('showFouls')"><i></i>Show fouls</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PENALTIES -->
+    <div class="card">
+      <div class="card-hdr">
+        <span class="card-ttl">Penalty Shootout</span>
+        <div style="display:flex;gap:6px">
+          <div class="tog" id="togPens" onclick="togglePens()"><i></i>On air</div>
+          <button class="btn sm gho" onclick="clearPens()">Clear</button>
+        </div>
+      </div>
+      <div class="card-body" id="penBody"></div>
+    </div>
+
+  </div>
+
+  <!-- ══ RIGHT COLUMN ══ -->
+  <div class="col">
+
+    <!-- PREVIEW -->
+    <div class="card">
+      <div class="card-hdr">
+        <span class="card-ttl">Overlay Preview</span>
+        <button class="btn sm gho" onclick="reloadPreview()">↻</button>
+      </div>
+      <div class="card-body">
+        <div class="prev-stage" id="prevStage">
+          <iframe id="prevFrame" src="/scorebug" scrolling="no"></iframe>
+        </div>
+        <div class="url-box">
+          <input type="text" id="bugUrl" readonly>
+          <button class="btn blu" onclick="copyUrl()">Copy</button>
+        </div>
+        <div class="hint">
+          In vMix: <b>Add Input → Web Browser</b>, paste this URL, set <b>1920×1080</b>,
+          then assign it to a free overlay channel. The page background is transparent.
+        </div>
+      </div>
+    </div>
+
+    <!-- EVENTS -->
+    <div class="card">
+      <div class="card-hdr"><span class="card-ttl">Event Banner</span></div>
+      <div class="card-body">
+        <div class="ev-types" id="evTypes"></div>
+        <div class="ev-sides">
+          <button class="btn" id="evSideH" onclick="setEvSide('home')">Home</button>
+          <button class="btn" id="evSideA" onclick="setEvSide('away')">Away</button>
+        </div>
+        <label class="lb">Player / message</label>
+        <input type="text" id="evText" placeholder="Scorer name…">
+        <div class="row mt">
+          <div style="width:104px">
+            <label class="lb">Minute</label>
+            <input type="text" id="evMin" placeholder="auto">
+          </div>
+          <div style="width:92px">
+            <label class="lb">Seconds</label>
+            <input type="number" id="evDur" value="8" min="2" max="60">
+          </div>
+          <button class="btn grn f1" onclick="sendEvent()">SHOW</button>
+          <button class="btn gho" onclick="hideEvent()">Hide</button>
+        </div>
+        <div class="hint">Leave minute blank to stamp the current match minute automatically. The banner clears itself after the set time.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ORIGIN = location.origin;
+const $ = id => document.getElementById(id);
+
+let S = null;            // last state from the server
+let skew = 0;            // serverNow - Date.now()
+let evType = 'GOAL';
+let evSide = 'home';
+let dirty = new Set();   // fields being typed into — don't clobber them on poll
+
+const PERIODS = {
+  PRE:  { lbl:'Pre',  start:0,   end:null, clock:false, name:'NOT STARTED' },
+  '1H': { lbl:'1st',  start:0,   end:45,   clock:true,  name:'1ST HALF' },
+  HT:   { lbl:'HT',   start:45,  end:null, clock:true,  name:'HALF TIME', frozen:45 },
+  '2H': { lbl:'2nd',  start:45,  end:90,   clock:true,  name:'2ND HALF' },
+  FT:   { lbl:'FT',   start:90,  end:null, clock:true,  name:'FULL TIME', frozen:90 },
+  ET1:  { lbl:'ET1',  start:90,  end:105,  clock:true,  name:'EXTRA TIME 1' },
+  ET2:  { lbl:'ET2',  start:105, end:120,  clock:true,  name:'EXTRA TIME 2' },
+  PENS: { lbl:'Pens', start:0,   end:null, clock:false, name:'PENALTIES' }
+};
+const EV_TYPES = [
+  { k:'GOAL',   lbl:'GOAL',   cls:'grn' },
+  { k:'YELLOW', lbl:'YELLOW', cls:'amb' },
+  { k:'RED',    lbl:'RED',    cls:'red' },
+  { k:'SUB',    lbl:'SUB',    cls:'blu' },
+  { k:'INFO',   lbl:'INFO',   cls:'' }
+];
+
+/* ── plumbing ─────────────────────────────────────────── */
+function toast(msg, err){
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(t._t); t._t = setTimeout(() => t.className = 'toast', 1800);
+}
+
+// method defaults to POST when there's a body — pass it explicitly for the
+// body-less POST endpoints (reset, event/hide) or they'd go out as GET.
+async function api(path, body, method){
+  try{
+    const r = await fetch(ORIGIN + path, {
+      method: method || (body ? 'POST' : 'GET'),
+      headers: body ? { 'Content-Type':'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      cache: 'no-store'
+    });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    apply(d);
+    return d;
+  }catch(e){ toast('Failed: ' + e.message, true); }
+}
+
+const patch = (p) => api('/api/score', p);
+
+// Relative, so two open control panels can't fight over an absolute value
+const goal = (side, delta) => api('/api/score/goal', { side, delta });
+
+/* ── clock ────────────────────────────────────────────── */
+const pad = n => String(n).padStart(2,'0');
+
+function clockHtml(){
+  if(!S) return '00:00';
+  const c = S.clock, def = PERIODS[c.period] || PERIODS['1H'];
+  if(def.frozen !== undefined) return pad(def.frozen) + ':00';
+  const elapsed = Math.max(0, c.baseMs + (c.running ? (Date.now()+skew) - c.startedAt : 0));
+  const total = def.start*60 + Math.floor(elapsed/1000);
+  if(def.end !== null && total >= def.end*60){
+    const over = Math.ceil((total - def.end*60)/60) || 1;
+    return `${pad(def.end)}:00<span class="stop">+${over}</span>`;
+  }
+  return pad(Math.floor(total/60)) + ':' + pad(total%60);
+}
+
+function tick(){
+  if(!S) return;
+  const html = clockHtml();
+  if($('clockFace').innerHTML !== html) $('clockFace').innerHTML = html;
+}
+
+const clockCmd = (b) => api('/api/score/clock', b);
+const clockToggle = () => clockCmd({ action: S && S.clock.running ? 'pause' : 'start' });
+
+function clockNudge(ms){
+  if(!S) return;
+  const c = S.clock;
+  const cur = c.baseMs + (c.running ? (Date.now()+skew) - c.startedAt : 0);
+  clockCmd({ action:'set', ms: Math.max(0, cur + ms) });
+}
+
+function setPeriod(k){
+  // Switching period always restarts that period's clock from its own zero
+  clockCmd({ action:'reset', period:k });
+}
+
+/* ── teams ────────────────────────────────────────────── */
+function teamBoxHtml(side){
+  const s = S[side];
+  const isDv = S.lang === 'dv';
+  const tag = side === 'home' ? 'HOME' : 'AWAY';
+  return `
+    <div class="team-box ${side === 'home' ? 'h' : 'a'}">
+      <div class="team-tag">${tag}</div>
+      <label class="lb">Team name</label>
+      <input type="text" class="${isDv?'dv':''}" id="nm_${side}" value="${esc(s.name)}"
+             oninput="mark('nm_${side}')" onchange="saveTeam('${side}')" onblur="unmark('nm_${side}')"
+             placeholder="${isDv ? 'ޓީމުގެ ނަން' : 'Team name'}">
+      <div class="row mt">
+        <div class="f1">
+          <label class="lb">Short code</label>
+          <input type="text" id="sh_${side}" value="${esc(s.short)}" maxlength="6"
+                 oninput="mark('sh_${side}')" onchange="saveTeam('${side}')" onblur="unmark('sh_${side}')"
+                 placeholder="MZY">
+        </div>
+        <div>
+          <label class="lb">Colour</label>
+          <input type="color" id="cl_${side}" value="${s.color || '#1d4ed8'}"
+                 onchange="patch({${side}:{color:this.value}})">
+        </div>
+      </div>
+      <div class="logo-row">
+        <div class="logo-prev" id="lp_${side}"><span>NO LOGO</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex:1">
+          <span class="btn sm file-btn">Upload logo
+            <input type="file" accept="image/*" onchange="uploadLogo('${side}', this)">
+          </span>
+          <button class="btn sm gho" onclick="patch({${side}:{logo:''}})">Remove</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function saveTeam(side){
+  patch({ [side]: { name: $('nm_'+side).value, short: $('sh_'+side).value.toUpperCase() } });
+}
+
+// Downscale before upload — a 4MB club badge would blow the 3MB JSON body limit
+// and nothing on screen is bigger than 38px anyway.
+function uploadLogo(side, input){
+  const f = input.files && input.files[0];
+  if(!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 256;
+      const sc = Math.min(1, MAX / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width  = Math.max(1, Math.round(img.width  * sc));
+      cv.height = Math.max(1, Math.round(img.height * sc));
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      patch({ [side]: { logo: cv.toDataURL('image/png') } }).then(() => toast('Logo updated'));
+      input.value = '';
+    };
+    img.onerror = () => toast('Could not read that image', true);
+    img.src = rd.result;
+  };
+  rd.readAsDataURL(f);
+}
+
+async function refreshLogoPreview(side, lv){
+  const box = $('lp_' + side);
+  if(!box) return;
+  if(box.dataset.lv === String(lv)) return;
+  box.dataset.lv = String(lv);
+  try{
+    const r = await fetch(`${ORIGIN}/api/score/logo/${side}`, { cache:'no-store' });
+    const d = await r.json();
+    box.innerHTML = d.logo ? `<img src="${d.logo}" alt="">` : '<span>NO LOGO</span>';
+  }catch(e){}
+}
+
+function swapTeams(){
+  const h = S.home, a = S.away;
+  patch({
+    home: { name:a.name, short:a.short, color:a.color, logo:a.logo === undefined ? undefined : a.logo,
+            score:a.score, yellow:a.yellow, red:a.red, fouls:a.fouls },
+    away: { name:h.name, short:h.short, color:h.color,
+            score:h.score, yellow:h.yellow, red:h.red, fouls:h.fouls }
+  }).then(swapLogos);
+}
+
+// Logos aren't in the light payload, so a swap has to fetch and re-post them
+async function swapLogos(){
+  try{
+    const [h, a] = await Promise.all([
+      fetch(`${ORIGIN}/api/score/logo/home`, {cache:'no-store'}).then(r => r.json()),
+      fetch(`${ORIGIN}/api/score/logo/away`, {cache:'no-store'}).then(r => r.json())
+    ]);
+    await patch({ home:{ logo:a.logo }, away:{ logo:h.logo } });
+    toast('Teams swapped');
+  }catch(e){ toast('Swapped, but logos failed', true); }
+}
+
+/* ── discipline ───────────────────────────────────────── */
+function discBoxHtml(side){
+  const s = S[side];
+  const nm = s.short || s.name || (side === 'home' ? 'HOME' : 'AWAY');
+  const line = (key, icon, label) => `
+    <div class="disc-line">
+      ${icon}<span class="dlbl">${label}</span>
+      <button class="btn" onclick="bump('${side}','${key}',-1)">−</button>
+      <span class="dval">${s[key] || 0}</span>
+      <button class="btn" onclick="bump('${side}','${key}',1)">+</button>
+    </div>`;
+  return `<div class="disc-box">
+    <div class="disc-name">${esc(nm)}</div>
+    ${line('yellow', '<i class="dcard y"></i>', 'Yellow')}
+    ${line('red',    '<i class="dcard r"></i>', 'Red')}
+    ${line('fouls',  '<i style="width:13px;flex:0 0 13px"></i>', 'Fouls')}
+  </div>`;
+}
+
+function bump(side, key, d){
+  patch({ [side]: { [key]: Math.max(0, (S[side][key] || 0) + d) } });
+}
+
+const toggleFlag = (k) => patch({ [k]: !S[k] });
+const setLang    = (l) => patch({ lang: l });
+
+/* ── penalties ────────────────────────────────────────── */
+function penBodyHtml(){
+  const p = S.pens || { home:[], away:[] };
+  const row = (side) => {
+    const s = S[side];
+    const arr = p[side] || [];
+    const dots = arr.length
+      ? arr.map(v => `<i class="pdot ${v}"></i>`).join('')
+      : '<span style="font-size:11px;color:#52525b">—</span>';
+    return `<div class="pen-row">
+      <span class="pen-name">${esc(s.short || s.name || side.toUpperCase())}</span>
+      <span class="pen-dots">${dots}</span>
+      <button class="btn sm grn" onclick="pen('${side}','goal')">Scored</button>
+      <button class="btn sm red" onclick="pen('${side}','miss')">Miss</button>
+      <button class="btn sm gho" onclick="penUndo('${side}')">↶</button>
+    </div>`;
+  };
+  return row('home') + row('away');
+}
+
+function pen(side, v){
+  const arr = (S.pens[side] || []).slice();
+  arr.push(v);
+  patch({ pens: { [side]: arr, visible: true } });
+}
+function penUndo(side){
+  const arr = (S.pens[side] || []).slice();
+  arr.pop();
+  patch({ pens: { [side]: arr } });
+}
+const clearPens  = () => patch({ pens: { home:[], away:[] } });
+const togglePens = () => patch({ pens: { visible: !S.pens.visible } });
+
+/* ── events ───────────────────────────────────────────── */
+function setEvType(k){ evType = k; paintEvButtons(); }
+function setEvSide(s){ evSide = s; paintEvButtons(); }
+
+function paintEvButtons(){
+  $('evTypes').innerHTML = EV_TYPES.map(t =>
+    `<button class="btn ${t.cls} ${t.k === evType ? 'on' : ''}" onclick="setEvType('${t.k}')">${t.lbl}</button>`
+  ).join('');
+  $('evSideH').className = 'btn' + (evSide === 'home' ? ' on' : '');
+  $('evSideA').className = 'btn' + (evSide === 'away' ? ' on' : '');
+}
+
+function sendEvent(){
+  api('/api/score/event', {
+    type: evType, side: evSide,
+    text: $('evText').value,
+    minute: $('evMin').value.trim(),
+    dur: Number($('evDur').value) || 8
+  }).then(() => toast('Banner on air'));
+}
+const hideEvent = () => api('/api/score/event/hide', null, 'POST');
+
+/* ── whole-board ──────────────────────────────────────── */
+const toggleAir = () => patch({ visible: !S.visible });
+
+function newMatch(){
+  if(!confirm('Reset score, clock, cards and penalties?\n(Team names, colours and logos are kept.)')) return;
+  api('/api/score/reset', null, 'POST').then(() => toast('New match'));
+}
+
+/* ── render ───────────────────────────────────────────── */
+const esc = s => String(s == null ? '' : s)
+  .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const mark   = id => dirty.add(id);
+const unmark = id => { dirty.delete(id); lastTeamKey = ''; };
+let lastTeamKey = '', lastDiscKey = '', lastPenKey = '';
+
+function apply(d){
+  if(!d) return;
+  skew = (d.serverNow || Date.now()) - Date.now();
+  S = d;
+
+  // On air
+  $('onairBtn').className = 'onair' + (d.visible ? ' live' : '');
+  $('onairBtn').textContent = d.visible ? 'ON AIR' : 'OFF AIR';
+
+  // Language buttons
+  $('langEn').className = 'btn sm' + (d.lang === 'en' ? ' blu' : '');
+  $('langDv').className = 'btn sm' + (d.lang === 'dv' ? ' blu' : '');
+
+  // Teams — rebuilt only when something outside the inputs changed, and never
+  // while a field is focused, so typing a name isn't interrupted mid-word.
+  const teamKey = JSON.stringify([d.lang, d.home.name, d.home.short, d.home.color,
+                                          d.away.name, d.away.short, d.away.color]);
+  if(teamKey !== lastTeamKey && dirty.size === 0){
+    lastTeamKey = teamKey;
+    $('teamsGrid').innerHTML = teamBoxHtml('home') + teamBoxHtml('away');
+    $('lp_home').dataset.lv = ''; $('lp_away').dataset.lv = '';
+  }
+  refreshLogoPreview('home', d.home.lv || 0);
+  refreshLogoPreview('away', d.away.lv || 0);
+
+  // Score
+  $('scNameH').textContent = d.home.name || d.home.short || 'HOME';
+  $('scNameA').textContent = d.away.name || d.away.short || 'AWAY';
+  $('scNumH').textContent  = d.home.score || 0;
+  $('scNumA').textContent  = d.away.score || 0;
+  $('scNumH').style.color  = d.home.color || '#3b82f6';
+  $('scNumA').style.color  = d.away.color || '#ef4444';
+
+  // Clock
+  const def = PERIODS[d.clock.period] || PERIODS['1H'];
+  $('clockPer').textContent = def.name;
+  $('startBtn').textContent = d.clock.running ? 'PAUSE' : 'START';
+  $('startBtn').className   = 'btn ' + (d.clock.running ? 'amb' : 'grn');
+  $('periodBtns').innerHTML = Object.entries(PERIODS).map(([k, v]) =>
+    `<button class="btn ${k === d.clock.period ? 'on' : ''}" onclick="setPeriod('${k}')">${v.lbl}</button>`
+  ).join('');
+  tick();
+
+  // Discipline
+  const discKey = JSON.stringify([d.home.short, d.home.name, d.home.yellow, d.home.red, d.home.fouls,
+                                  d.away.short, d.away.name, d.away.yellow, d.away.red, d.away.fouls]);
+  if(discKey !== lastDiscKey){
+    lastDiscKey = discKey;
+    $('discGrid').innerHTML = discBoxHtml('home') + discBoxHtml('away');
+  }
+  $('togCards').className = 'tog' + (d.showCards ? ' on' : '');
+  $('togFouls').className = 'tog' + (d.showFouls ? ' on' : '');
+
+  // Penalties
+  const penKey = JSON.stringify([d.pens, d.home.short, d.away.short, d.home.name, d.away.name]);
+  if(penKey !== lastPenKey){
+    lastPenKey = penKey;
+    $('penBody').innerHTML = penBodyHtml();
+  }
+  $('togPens').className = 'tog' + (d.pens.visible ? ' on' : '');
+}
+
+/* ── preview scaling ──────────────────────────────────── */
+function fitPreview(){
+  const st = $('prevStage');
+  $('prevFrame').style.transform = 'scale(' + (st.clientWidth / 1920) + ')';
+}
+const reloadPreview = () => { $('prevFrame').src = '/scorebug?t=' + Date.now(); };
+
+function copyUrl(){
+  const i = $('bugUrl');
+  i.select(); i.setSelectionRange(0, 999);
+  navigator.clipboard.writeText(i.value).then(() => toast('URL copied'), () => toast('Copy failed', true));
+}
+
+/* ── boot ─────────────────────────────────────────────── */
+$('bugUrl').value = ORIGIN + '/scorebug';
+paintEvButtons();
+fitPreview();
+addEventListener('resize', fitPreview);
+
+api('/api/score');
+setInterval(() => api('/api/score'), 2000);
+setInterval(tick, 200);
+</script>
+</body>
+</html>
