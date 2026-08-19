@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#09090b">
+  <title>VxD Scoreboard — Match Control</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{
+    --bg:#09090b;--card:#18181b;--card2:#232327;--bdr:#2e2e33;--bdr2:#45454d;
+    --t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;
+    --red:#ef4444;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b;
+    --pad:env(safe-area-inset-bottom,0px);
+  }
+  html,body{height:100%;overscroll-behavior:none}
+  body{
+    font-family:'Inter',-apple-system,system-ui,sans-serif;
+    background:var(--bg);color:var(--t1);
+    padding:0 0 calc(10px + var(--pad));
+    touch-action:manipulation;             /* kills the 300ms double-tap zoom */
+    user-select:none;-webkit-user-select:none;
+  }
+
+  /* ── top bar ── */
+  .top{
+    position:sticky;top:0;z-index:30;
+    display:flex;align-items:center;gap:10px;
+    padding:9px 12px;background:#131316;border-bottom:1px solid var(--bdr);
+  }
+  .brand{font-size:12px;font-weight:900;letter-spacing:1.6px;color:var(--t3);
+         text-transform:uppercase;white-space:nowrap;margin-right:auto}
+  .air{
+    flex:0 0 auto;min-height:52px;padding:0 20px;border-radius:11px;
+    border:2px solid var(--bdr2);background:var(--card2);color:var(--t2);
+    font-family:inherit;font-size:13px;font-weight:900;letter-spacing:1.1px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .air.live{background:var(--red);border-color:var(--red);color:#fff}
+  .air.dim{opacity:.35}
+  .lang{min-height:52px;padding:0 14px;border-radius:11px;border:2px solid var(--bdr2);
+        background:var(--card2);color:var(--t2);font-family:inherit;font-size:13px;font-weight:800}
+  .lang.on{background:var(--blu);border-color:var(--blu);color:#fff}
+  .lang.dv{font-family:'MVWaheed','Inter',sans-serif;font-size:17px;padding-top:5px}
+
+  /* ── layout ── */
+  .grid{display:grid;grid-template-columns:1fr;gap:10px;padding:10px}
+  @media(min-width:900px){
+    .grid{grid-template-columns:1fr 1fr}
+    .span2{grid-column:1/-1}
+  }
+
+  .card{background:var(--card);border:1px solid var(--bdr);border-radius:14px;padding:12px}
+  .ttl{font-size:10px;font-weight:900;letter-spacing:1.7px;color:var(--t3);
+       text-transform:uppercase;margin-bottom:10px;display:flex;
+       justify-content:space-between;align-items:center;gap:8px}
+
+  /* Every tappable thing is at least 56px tall — thumb-sized on a tablet */
+  .b{
+    min-height:56px;border-radius:11px;border:1px solid var(--bdr2);
+    background:var(--card2);color:var(--t1);font-family:inherit;
+    font-size:15px;font-weight:800;letter-spacing:.4px;
+    display:flex;align-items:center;justify-content:center;gap:6px;padding:0 10px;
+  }
+  .b:active{filter:brightness(1.5);transform:scale(.97)}
+  .b.grn{background:var(--grn);border-color:var(--grn);color:#06210f}
+  .b.red{background:var(--red);border-color:var(--red);color:#fff}
+  .b.amb{background:var(--amb);border-color:var(--amb);color:#2a1a00}
+  .b.blu{background:var(--blu);border-color:var(--blu);color:#fff}
+  .b.on{background:var(--blu);border-color:var(--blu);color:#fff}
+  .b.big{font-size:26px;min-height:66px}
+  .b.sm{min-height:46px;font-size:13px}
+
+  /* ── score ── */
+  .scline{display:grid;grid-template-columns:1fr 62px 66px 66px;gap:8px;
+          align-items:center;margin-bottom:9px}
+  .scline:last-child{margin-bottom:0}
+  .scname{font-size:16px;font-weight:800;color:var(--t1);white-space:nowrap;
+          overflow:hidden;text-overflow:ellipsis;padding-left:4px}
+  .scname.dv{font-family:'MVWaheed','Inter',sans-serif;direction:rtl;text-align:right;
+             font-weight:400;font-size:20px;padding-top:4px}
+  .scnum{font-size:38px;font-weight:900;text-align:center;font-variant-numeric:tabular-nums;line-height:1}
+
+  /* ── clock ── */
+  .face{font-size:60px;font-weight:900;text-align:center;line-height:1;
+        font-variant-numeric:tabular-nums;letter-spacing:1px}
+  .face .stop{color:var(--amb);font-size:36px}
+  .faceper{text-align:center;font-size:11px;font-weight:900;letter-spacing:2px;
+           color:var(--t3);text-transform:uppercase;margin:6px 0 12px;min-height:14px}
+  .periods{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:9px}
+  .clockctl{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:7px}
+
+  /* ── cards & fouls ── */
+  .disc{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .dbox{background:var(--card2);border:1px solid var(--bdr);border-radius:11px;padding:10px}
+  .dname{font-size:10px;font-weight:900;letter-spacing:1.3px;color:var(--t3);
+         margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dline{display:grid;grid-template-columns:22px 1fr 46px 34px 46px;gap:6px;
+         align-items:center;margin-bottom:6px}
+  .dline:last-child{margin-bottom:0}
+  .dline .b{min-height:46px;font-size:19px;padding:0}
+  .dcard{width:15px;height:20px;border-radius:3px}
+  .dcard.y{background:#facc15}.dcard.r{background:#ef4444}
+  .dlbl{font-size:12px;font-weight:700;color:var(--t2)}
+  .dval{font-size:19px;font-weight:900;text-align:center;font-variant-numeric:tabular-nums}
+
+  /* ── penalties ── */
+  .penrow{display:grid;grid-template-columns:74px 1fr 84px 84px 56px;gap:7px;
+          align-items:center;margin-bottom:8px}
+  .penrow:last-child{margin-bottom:0}
+  .penname{font-size:13px;font-weight:800;color:var(--t2);white-space:nowrap;
+           overflow:hidden;text-overflow:ellipsis}
+  .pendots{display:flex;gap:5px;flex-wrap:wrap;align-items:center;min-height:18px}
+  .pdot{width:16px;height:16px;border-radius:50%;border:2px solid var(--bdr2)}
+  .pdot.goal{background:var(--grn);border-color:var(--grn)}
+  .pdot.miss{background:var(--red);border-color:var(--red)}
+  .pendash{font-size:12px;color:#52525b}
+
+  /* ── banner ── */
+  .evtypes{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:8px}
+  .evtypes .b{font-size:12px;letter-spacing:.2px;padding:0 4px}
+  .evsides{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:8px}
+  .evsend{display:grid;grid-template-columns:1fr 92px 100px 84px;gap:7px}
+  input[type=text]{
+    width:100%;min-height:56px;background:#0d0d10;border:1px solid var(--bdr2);
+    border-radius:11px;color:var(--t1);padding:0 14px;font-size:16px;
+    font-family:inherit;font-weight:700;outline:none;
+  }
+  input:focus{border-color:var(--blu)}
+  input.dv{font-family:'MVWaheed','Inter',sans-serif;direction:rtl;text-align:right;font-size:20px}
+
+  .toast{
+    position:fixed;left:50%;bottom:calc(18px + var(--pad));
+    transform:translateX(-50%) translateY(90px);
+    background:var(--grn);color:#06210f;padding:12px 26px;border-radius:11px;
+    font-size:15px;font-weight:900;z-index:60;transition:transform .22s;pointer-events:none;
+  }
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--red);color:#fff}
+
+  .offline{
+    position:fixed;top:0;left:0;right:0;z-index:50;background:var(--red);color:#fff;
+    font-size:12px;font-weight:900;letter-spacing:1px;text-align:center;padding:6px;
+    transform:translateY(-100%);transition:transform .2s;
+  }
+  .offline.show{transform:translateY(0)}
+
+  /* Landscape iPad is only ~768–820px tall. Tighten everything just enough that
+     the whole match control fits without scrolling mid-game, while keeping every
+     target at Apple's 44pt minimum. Portrait keeps the roomier sizes above. */
+  @media(min-width:900px) and (max-height:900px){
+    .top{padding:7px 10px}
+    .air,.lang{min-height:46px}
+    .grid{gap:8px;padding:8px}
+    .card{padding:9px}
+    .ttl{margin-bottom:8px}
+    .b{min-height:48px;font-size:14px}
+    .b.sm{min-height:44px}
+    .b.big{min-height:58px;font-size:22px}
+    .face{font-size:46px}
+    .face .stop{font-size:30px}
+    .faceper{margin:4px 0 8px}
+    .scnum{font-size:32px}
+    .scline{margin-bottom:7px}
+    .dline .b{min-height:44px;font-size:17px}
+    .dline{margin-bottom:5px}
+    input[type=text]{min-height:50px}
+  }
+</style>
+</head>
+<body>
+
+<div class="offline" id="offline">NO CONNECTION TO RELAY — CHANGES NOT SAVING</div>
+
+<div class="top">
+  <span class="brand">Match Control</span>
+  <button class="lang" id="langEn" onclick="setLang('en')">EN</button>
+  <button class="lang dv" id="langDv" onclick="setLang('dv')">ދިވެހި</button>
+  <button class="air" id="mainBtn" onclick="toggleMain()">MAIN BOARD</button>
+  <button class="air" id="bugBtn" onclick="toggleAir()">CORNER BUG</button>
+</div>
+
+<div class="grid">
+
+  <!-- SCORE -->
+  <div class="card">
+    <div class="ttl"><span>Score</span><button class="b sm" onclick="newMatch()">New match</button></div>
+    <div class="scline">
+      <span class="scname" id="nH">HOME</span>
+      <span class="scnum"  id="vH">0</span>
+      <button class="b red" onclick="goal('home',-1)">−</button>
+      <button class="b grn" onclick="goal('home',1)">+</button>
+    </div>
+    <div class="scline">
+      <span class="scname" id="nA">AWAY</span>
+      <span class="scnum"  id="vA">0</span>
+      <button class="b red" onclick="goal('away',-1)">−</button>
+      <button class="b grn" onclick="goal('away',1)">+</button>
+    </div>
+  </div>
+
+  <!-- CLOCK -->
+  <div class="card">
+    <div class="ttl"><span>Match Clock</span></div>
+    <div class="face" id="face">00:00</div>
+    <div class="faceper" id="facePer">NOT STARTED</div>
+    <div class="periods" id="periods"></div>
+    <div class="clockctl">
+      <button class="b grn" id="startBtn" onclick="clockToggle()">START</button>
+      <button class="b" onclick="nudge(-60000)">−1m</button>
+      <button class="b" onclick="nudge(60000)">+1m</button>
+      <button class="b" onclick="clockCmd({action:'reset'})">↺</button>
+    </div>
+  </div>
+
+  <!-- CARDS & FOULS -->
+  <div class="card span2">
+    <div class="ttl">
+      <span>Cards &amp; Fouls</span>
+      <span style="display:flex;gap:7px">
+        <button class="b sm" id="togCards" onclick="toggleFlag('showCards')">Cards</button>
+        <button class="b sm" id="togFouls" onclick="toggleFlag('showFouls')">Fouls</button>
+      </span>
+    </div>
+    <div class="disc" id="disc"></div>
+  </div>
+
+  <!-- PENALTIES -->
+  <div class="card">
+    <div class="ttl">
+      <span>Penalty Shootout</span>
+      <span style="display:flex;gap:7px">
+        <button class="b sm" id="togPens" onclick="togglePens()">On air</button>
+        <button class="b sm" onclick="clearPens()">Clear</button>
+      </span>
+    </div>
+    <div id="penBody"></div>
+  </div>
+
+  <!-- BANNER -->
+  <div class="card">
+    <div class="ttl"><span>Event Banner</span></div>
+    <div class="evtypes" id="evTypes"></div>
+    <div class="evsides">
+      <button class="b" id="evSideH" onclick="setEvSide('home')">Home</button>
+      <button class="b" id="evSideA" onclick="setEvSide('away')">Away</button>
+    </div>
+    <div class="evsend">
+      <input type="text" id="evText" placeholder="Player name…" autocomplete="off">
+      <input type="text" id="evMin"  placeholder="min" autocomplete="off">
+      <button class="b grn" onclick="sendEvent()">SHOW</button>
+      <button class="b"     onclick="hideEvent()">Hide</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ORIGIN = location.origin;
+const $ = id => document.getElementById(id);
+
+let S = null, skew = 0, evType = 'GOAL', evSide = 'home';
+let typing = false;                 // don't repaint inputs mid-entry
+let lastDisc = '', lastPen = '', lastNames = '';
+
+const PERIODS = {
+  PRE:  { lbl:'Pre',  start:0,   end:null, name:'NOT STARTED' },
+  '1H': { lbl:'1st',  start:0,   end:45,   name:'1ST HALF' },
+  HT:   { lbl:'HT',   start:45,  end:null, name:'HALF TIME', frozen:45 },
+  '2H': { lbl:'2nd',  start:45,  end:90,   name:'2ND HALF' },
+  FT:   { lbl:'FT',   start:90,  end:null, name:'FULL TIME', frozen:90 },
+  ET1:  { lbl:'ET1',  start:90,  end:105,  name:'EXTRA TIME 1' },
+  ET2:  { lbl:'ET2',  start:105, end:120,  name:'EXTRA TIME 2' },
+  PENS: { lbl:'Pens', start:0,   end:null, name:'PENALTIES' }
+};
+const EV_TYPES = [
+  { k:'GOAL', lbl:'GOAL', cls:'grn' }, { k:'YELLOW', lbl:'YEL', cls:'amb' },
+  { k:'RED',  lbl:'RED',  cls:'red' }, { k:'SUB',    lbl:'SUB', cls:'blu' },
+  { k:'INFO', lbl:'INFO', cls:'' }
+];
+
+const esc = s => String(s == null ? '' : s)
+  .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function toast(msg, err){
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(t._t); t._t = setTimeout(() => t.className = 'toast', 1500);
+}
+
+// method defaults to POST when there's a body — pass it explicitly for the
+// body-less POST endpoints or they'd go out as GET.
+async function api(path, body, method){
+  try{
+    const r = await fetch(ORIGIN + path, {
+      method: method || (body ? 'POST' : 'GET'),
+      headers: body ? { 'Content-Type':'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      cache: 'no-store'
+    });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    $('offline').classList.remove('show');
+    apply(await r.json());
+    return true;
+  }catch(e){
+    $('offline').classList.add('show');
+    return false;
+  }
+}
+
+const patch = p => api('/api/score', p);
+const goal  = (side, delta) => api('/api/score/goal', { side, delta });
+
+/* ── clock ── */
+const pad = n => String(n).padStart(2,'0');
+
+function clockHtml(){
+  if(!S) return '00:00';
+  const c = S.clock, def = PERIODS[c.period] || PERIODS['1H'];
+  if(def.frozen !== undefined) return pad(def.frozen) + ':00';
+  const elapsed = Math.max(0, c.baseMs + (c.running ? (Date.now()+skew) - c.startedAt : 0));
+  const total = def.start*60 + Math.floor(elapsed/1000);
+  if(def.end !== null && total >= def.end*60){
+    const over = Math.ceil((total - def.end*60)/60) || 1;
+    return `${pad(def.end)}:00<span class="stop">+${over}</span>`;
+  }
+  return pad(Math.floor(total/60)) + ':' + pad(total%60);
+}
+function tick(){
+  if(!S) return;
+  const h = clockHtml();
+  if($('face').innerHTML !== h) $('face').innerHTML = h;
+}
+
+const clockCmd   = b => api('/api/score/clock', b);
+const clockToggle= () => clockCmd({ action: S && S.clock.running ? 'pause' : 'start' });
+const setPeriod  = k => clockCmd({ action:'reset', period:k });   // period restarts its own clock
+
+function nudge(ms){
+  if(!S) return;
+  const c = S.clock;
+  const cur = c.baseMs + (c.running ? (Date.now()+skew) - c.startedAt : 0);
+  clockCmd({ action:'set', ms: Math.max(0, cur + ms) });
+}
+
+/* ── cards & fouls ── */
+function discHtml(side){
+  const s = S[side];
+  const nm = s.short || s.name || (side === 'home' ? 'HOME' : 'AWAY');
+  const line = (key, icon, label) => `
+    <div class="dline">
+      ${icon}<span class="dlbl">${label}</span>
+      <button class="b" onclick="bump('${side}','${key}',-1)">−</button>
+      <span class="dval">${s[key] || 0}</span>
+      <button class="b" onclick="bump('${side}','${key}',1)">+</button>
+    </div>`;
+  return `<div class="dbox">
+    <div class="dname">${esc(nm)}</div>
+    ${line('yellow','<i class="dcard y"></i>','Yellow')}
+    ${line('red','<i class="dcard r"></i>','Red')}
+    ${line('fouls','<i></i>','Fouls')}
+  </div>`;
+}
+const bump = (side, key, d) => patch({ [side]: { [key]: Math.max(0, (S[side][key] || 0) + d) } });
+const toggleFlag = k => patch({ [k]: !S[k] });
+const setLang = l => patch({ lang: l });
+
+/* ── penalties ── */
+function penHtml(){
+  const p = S.pens || { home:[], away:[] };
+  const row = side => {
+    const arr = p[side] || [];
+    const dots = arr.length
+      ? arr.map(v => `<i class="pdot ${v}"></i>`).join('')
+      : '<span class="pendash">—</span>';
+    return `<div class="penrow">
+      <span class="penname">${esc(S[side].short || S[side].name || side.toUpperCase())}</span>
+      <span class="pendots">${dots}</span>
+      <button class="b grn sm" onclick="pen('${side}','goal')">Score</button>
+      <button class="b red sm" onclick="pen('${side}','miss')">Miss</button>
+      <button class="b sm" onclick="penUndo('${side}')">↶</button>
+    </div>`;
+  };
+  return row('home') + row('away');
+}
+const pen = (side, v) => patch({ pens: { [side]: [...(S.pens[side] || []), v], visible:true } });
+const penUndo = side => patch({ pens: { [side]: (S.pens[side] || []).slice(0,-1) } });
+const clearPens = () => patch({ pens: { home:[], away:[] } });
+const togglePens = () => patch({ pens: { visible: !S.pens.visible } });
+
+/* ── banner ── */
+const setEvType = k => { evType = k; paintEv(); };
+const setEvSide = s => { evSide = s; paintEv(); };
+function paintEv(){
+  $('evTypes').innerHTML = EV_TYPES.map(t =>
+    `<button class="b ${t.k === evType ? (t.cls || 'on') : ''}" onclick="setEvType('${t.k}')">${t.lbl}</button>`
+  ).join('');
+  $('evSideH').className = 'b' + (evSide === 'home' ? ' on' : '');
+  $('evSideA').className = 'b' + (evSide === 'away' ? ' on' : '');
+}
+function sendEvent(){
+  api('/api/score/event', {
+    type: evType, side: evSide,
+    text: $('evText').value, minute: $('evMin').value.trim(), dur: 8
+  }).then(ok => { if(ok) toast('Banner on air'); });
+}
+const hideEvent = () => api('/api/score/event/hide', null, 'POST');
+
+/* ── whole board ── */
+const toggleAir  = () => patch({ visible: !S.visible });
+const toggleMain = () => patch({ mainVisible: !S.mainVisible });
+function newMatch(){
+  if(!confirm('Reset score, clock, cards and penalties?\n(Teams are kept.)')) return;
+  api('/api/score/reset', null, 'POST').then(ok => { if(ok) toast('New match'); });
+}
+
+/* ── render ── */
+function apply(d){
+  if(!d) return;
+  skew = (d.serverNow || Date.now()) - Date.now();
+  S = d;
+  const dv = d.lang === 'dv';
+
+  // The main board suppresses the corner bug in the overlay, so never let this
+  // button read ON AIR while that's true.
+  $('mainBtn').className   = 'air' + (d.mainVisible ? ' live' : '');
+  $('mainBtn').textContent = d.mainVisible ? 'MAIN ON AIR' : 'MAIN BOARD';
+  $('bugBtn').className    = 'air' + (d.visible && !d.mainVisible ? ' live' : '')
+                                   + (d.mainVisible ? ' dim' : '');
+  $('bugBtn').textContent  = d.mainVisible ? 'BUG HIDDEN'
+                           : d.visible ? 'BUG ON AIR' : 'CORNER BUG';
+
+  $('langEn').className = 'lang' + (d.lang === 'en' ? ' on' : '');
+  $('langDv').className = 'lang dv' + (dv ? ' on' : '');
+
+  const hN = d.home.name || d.home.short || 'HOME';
+  const aN = d.away.name || d.away.short || 'AWAY';
+  const nameKey = hN + '|' + aN + '|' + d.lang;
+  if(nameKey !== lastNames){
+    lastNames = nameKey;
+    $('nH').textContent = hN; $('nA').textContent = aN;
+    $('nH').className = 'scname' + (dv ? ' dv' : '');
+    $('nA').className = 'scname' + (dv ? ' dv' : '');
+    $('evText').className = dv ? 'dv' : '';
+  }
+  $('vH').textContent = d.home.score || 0;
+  $('vA').textContent = d.away.score || 0;
+
+  const def = PERIODS[d.clock.period] || PERIODS['1H'];
+  $('facePer').textContent  = def.name;
+  $('startBtn').textContent = d.clock.running ? 'PAUSE' : 'START';
+  $('startBtn').className   = 'b ' + (d.clock.running ? 'amb' : 'grn');
+  $('periods').innerHTML    = Object.entries(PERIODS).map(([k,v]) =>
+    `<button class="b ${k === d.clock.period ? 'on' : ''}" onclick="setPeriod('${k}')">${v.lbl}</button>`).join('');
+  tick();
+
+  const discKey = JSON.stringify([d.home.short,d.home.name,d.home.yellow,d.home.red,d.home.fouls,
+                                  d.away.short,d.away.name,d.away.yellow,d.away.red,d.away.fouls]);
+  if(discKey !== lastDisc){ lastDisc = discKey; $('disc').innerHTML = discHtml('home') + discHtml('away'); }
+  $('togCards').className = 'b sm' + (d.showCards ? ' on' : '');
+  $('togFouls').className = 'b sm' + (d.showFouls ? ' on' : '');
+
+  const penKey = JSON.stringify([d.pens, d.home.short, d.away.short, d.home.name, d.away.name]);
+  if(penKey !== lastPen){ lastPen = penKey; $('penBody').innerHTML = penHtml(); }
+  $('togPens').className = 'b sm' + (d.pens.visible ? ' on' : '');
+}
+
+/* ── boot ── */
+for(const id of ['evText','evMin']){
+  $(id).addEventListener('focus', () => typing = true);
+  $(id).addEventListener('blur',  () => typing = false);
+}
+paintEv();
+api('/api/score');
+setInterval(() => api('/api/score'), 2000);
+setInterval(tick, 200);
+// iOS Safari pauses timers in a background tab — resync the moment it comes back
+document.addEventListener('visibilitychange', () => { if(!document.hidden) api('/api/score'); });
+</script>
+</body>
+</html>

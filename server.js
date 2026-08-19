@@ -526,7 +526,8 @@ app.get('/go', (req, res) => res.sendFile(path.join(__dirname, 'public', 'go.htm
 app.get('/live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'live.html')));
 app.get('/streamer-tag', (req, res) => res.sendFile(path.join(__dirname, 'public', 'streamer-tag.html')));
 app.get('/scorebug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'scorebug.html')));  // vMix overlay input
-app.get('/score', (req, res) => res.sendFile(path.join(__dirname, 'public', 'score.html')));        // director control
+app.get('/score', (req, res) => res.sendFile(path.join(__dirname, 'public', 'score.html')));        // director control (desktop setup)
+app.get('/control', (req, res) => res.sendFile(path.join(__dirname, 'public', 'control.html')));    // iPad match control (controls only)
 
 // ---- Load persisted data, then start the server ----
 async function initDB() {

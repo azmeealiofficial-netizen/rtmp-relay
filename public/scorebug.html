@@ -49,6 +49,9 @@
     width:694px;height:58px;padding:0 9px;
     background:var(--white);border-radius:14px;
     box-shadow:var(--shadow);
+    /* reserves the clock pill's overhang so whatever follows never collides
+       with it, whether or not the cards/fouls row is showing */
+    margin-bottom:56px;
   }
 
   .team{flex:1;display:flex;align-items:center;justify-content:space-between;min-width:0}
@@ -74,22 +77,26 @@
   /* Hangs off the bottom of the score box, so it tracks the centre exactly */
   .clockpill{
     position:absolute;top:100%;left:50%;transform:translateX(-50%);
-    margin-top:2px;height:40px;min-width:116px;padding:0 15px;
-    display:flex;align-items:center;justify-content:center;
+    margin-top:2px;height:52px;min-width:132px;padding:6px 15px 7px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
     background:var(--orange);border-radius:6px 6px 14px 14px;
     box-shadow:0 6px 14px rgba(0,0,0,.3);
-    font-size:27px;font-weight:700;color:#fff;line-height:1;padding-top:3px;
     white-space:nowrap;
   }
   .clockpill.off{display:none}
-  .clockpill .stop{font-size:19px;margin-left:3px;color:#fff2}
-  .clockpill .stop{color:#ffffffdd}
+  .clockper{
+    font-size:10px;font-weight:800;letter-spacing:1.2px;color:#ffffffe6;
+    text-transform:uppercase;line-height:1;margin-bottom:3px;
+  }
+  .clockper.empty{display:none}
+  .clocktime{font-size:25px;font-weight:700;color:#fff;line-height:1}
+  .clocktime .stop{font-size:18px;margin-left:3px;color:#ffffffdd}
 
   /* Cards + fouls, tucked under the bar either side of the clock */
   .statsrow{
     display:grid;grid-template-columns:auto 130px auto;
     justify-content:center;align-items:start;
-    width:100%;margin-top:6px;
+    width:100%;margin-top:-50px;
   }
   .statsrow.hidden{display:none}
   .spill{
@@ -117,7 +124,7 @@
 
   /* ══ PENALTY SHOOTOUT ════════════════════════════════════ */
   .pens{
-    margin-top:22px;padding:10px 15px 11px;
+    margin-top:26px;padding:10px 15px 11px;
     background:#f3f3f3;border-radius:10px;box-shadow:var(--shadow);
   }
   .pens.hidden{display:none}
@@ -206,8 +213,10 @@
   body.dv .main .tname{font-size:33px}
   body.dv .pcode,
   body.dv .fouls,
+  body.dv .clockper,
   body.dv .mper{font-family:'MvEamaan','Segoe UI',Arial,sans-serif;direction:rtl;font-weight:400}
   body.dv .mper{letter-spacing:0;font-size:17px}
+  body.dv .clockper{letter-spacing:0;font-size:12px}
   body.dv .pens-hdr{font-family:'MvEamaan','Segoe UI',Arial,sans-serif;letter-spacing:0;font-weight:400;direction:rtl}
   body.dv .evtext{
     font-family:'MVWaheed','Segoe UI',Arial,sans-serif;
@@ -233,7 +242,10 @@
         <span class="sc num" id="scHome">0</span>
         <span class="dash num">–</span>
         <span class="sc num" id="scAway">0</span>
-        <div class="clockpill num off" id="clockPill">00:00</div>
+        <div class="clockpill off" id="clockPill">
+          <span class="clockper" id="clockPer"></span>
+          <span class="clocktime num" id="clockTime">00:00</span>
+        </div>
       </div>
 
       <div class="team away">
@@ -298,7 +310,8 @@
   const el = {
     bug:$('bug'), main:$('mainBoard'),
     lgHome:$('lgHome'), lgAway:$('lgAway'), nmHome:$('nmHome'), nmAway:$('nmAway'),
-    scHome:$('scHome'), scAway:$('scAway'), clockPill:$('clockPill'),
+    scHome:$('scHome'), scAway:$('scAway'),
+    clockPill:$('clockPill'), clockPer:$('clockPer'), clockTime:$('clockTime'),
     statsRow:$('statsRow'), spHome:$('spHome'), spAway:$('spAway'),
     penStrip:$('penStrip'), pensHdr:$('pensHdr'),
     pcHome:$('pcHome'), pcAway:$('pcAway'), pdHome:$('pdHome'), pdAway:$('pdAway'),
@@ -355,8 +368,16 @@
     const def = PERIODS[state.clock.period] || PERIODS['1H'];
     el.clockPill.classList.toggle('off', !def.clock);
     if(!def.clock) return;
+
+    // Half / period sits above the time in the same orange pill
+    const per = (state.lang === 'dv' ? def.dv : def.en) || '';
+    if(el.clockPer.textContent !== per){
+      el.clockPer.textContent = per;
+      el.clockPer.classList.toggle('empty', !per);
+    }
+
     const html = clockHtml();
-    if(el.clockPill.innerHTML !== html) el.clockPill.innerHTML = html;
+    if(el.clockTime.innerHTML !== html) el.clockTime.innerHTML = html;
   }
 
   const sideLabel = s => (s.short || s.name || '').trim();
