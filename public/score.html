@@ -30,6 +30,7 @@
   .onair{padding:9px 22px;border-radius:6px;font-size:12px;font-weight:900;letter-spacing:1.5px;
          border:1px solid var(--bdr2);background:var(--card2);color:var(--t3);cursor:pointer}
   .onair.live{background:var(--red);border-color:var(--red);color:#fff;animation:pulse 1.4s infinite}
+  .onair.dimmed{opacity:.4}
   @keyframes pulse{0%,100%{box-shadow:0 0 0 0 #ef444466}50%{box-shadow:0 0 0 7px #ef444400}}
 
   .wrap{max-width:1500px;margin:0 auto;padding:18px 20px;display:grid;gap:16px;
@@ -182,7 +183,8 @@
     <a class="navlink" href="/">Control</a>
     <a class="navlink" href="/live">Live</a>
     <a class="navlink" href="/tv">TV Wall</a>
-    <button class="onair" id="onairBtn" onclick="toggleAir()">OFF AIR</button>
+    <button class="onair" id="mainBtn" onclick="toggleMain()">MAIN BOARD</button>
+    <button class="onair" id="onairBtn" onclick="toggleAir()">CORNER BUG</button>
   </div>
 </div>
 
@@ -609,7 +611,8 @@ function sendEvent(){
 const hideEvent = () => api('/api/score/event/hide', null, 'POST');
 
 /* ── whole-board ──────────────────────────────────────── */
-const toggleAir = () => patch({ visible: !S.visible });
+const toggleAir  = () => patch({ visible: !S.visible });
+const toggleMain = () => patch({ mainVisible: !S.mainVisible });
 
 function newMatch(){
   if(!confirm('Reset score, clock, cards and penalties?\n(Team names, colours and logos are kept.)')) return;
@@ -629,9 +632,14 @@ function apply(d){
   skew = (d.serverNow || Date.now()) - Date.now();
   S = d;
 
-  // On air
-  $('onairBtn').className = 'onair' + (d.visible ? ' live' : '');
-  $('onairBtn').textContent = d.visible ? 'ON AIR' : 'OFF AIR';
+  // On air. The main board wins — when it's up the corner bug is suppressed by
+  // the overlay, so dim its button rather than leave it reading a false ON AIR.
+  $('mainBtn').className    = 'onair' + (d.mainVisible ? ' live' : '');
+  $('mainBtn').textContent  = d.mainVisible ? 'MAIN ON AIR' : 'MAIN BOARD';
+  $('onairBtn').className   = 'onair' + (d.visible && !d.mainVisible ? ' live' : '')
+                                      + (d.mainVisible ? ' dimmed' : '');
+  $('onairBtn').textContent = d.mainVisible ? 'BUG HIDDEN'
+                            : d.visible ? 'BUG ON AIR' : 'CORNER BUG';
 
   // Language buttons
   $('langEn').className = 'btn sm' + (d.lang === 'en' ? ' blu' : '');

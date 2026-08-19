@@ -307,7 +307,8 @@ const emptySide = (color) => ({
 });
 
 const blankScoreboard = () => ({
-  visible: false,
+  visible: false,             // corner bug (top-left by default)
+  mainVisible: false,         // big centre board — when on, everything else hides
   lang: 'en',                 // 'en' (LTR, Latin) | 'dv' (RTL, Thaana)
   showCards: true,
   showFouls: false,
@@ -467,6 +468,7 @@ app.post('/api/score/reset', (req, res) => {
   const prev = scoreboard;
   scoreboard = blankScoreboard();
   scoreboard.lang = prev.lang;
+  scoreboard.visible = prev.visible;          // don't yank the bug off air mid-broadcast
   scoreboard.showCards = prev.showCards;
   scoreboard.showFouls = prev.showFouls;
   scoreboard.home = keepTeam(prev.home);
