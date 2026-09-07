@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VxD Volleyball Scoreboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
+  @font-face{font-family:'MvEamaan';src:url('fonts/Mv_Eamaan_XP.otf') format('opentype')}
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg:#09090b;--card:#18181b;--card2:#1f1f23;--bdr:#27272a;--bdr2:#3f3f46;
+        --t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;--red:#ef4444;--grn:#22c55e;
+        --blu:#3b82f6;--amb:#f59e0b;--org:#ff7a18;--radius:8px}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t1);
+       min-height:100vh;-webkit-tap-highlight-color:transparent;padding-bottom:40px}
+
+  .topbar{background:var(--card);border-bottom:1px solid var(--bdr);padding:10px 20px;
+          display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
+          position:sticky;top:0;z-index:20}
+  .topbar-left{display:flex;align-items:center;gap:14px}
+  .topbar-logos{display:flex;align-items:center;gap:8px}
+  .topbar-logos img{height:28px;object-fit:contain}
+  .ttl{font-size:13px;font-weight:800;letter-spacing:1.5px;color:var(--t3);text-transform:uppercase}
+  .topbar-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .navlink{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;
+           text-decoration:none;color:var(--t3);background:var(--card2);border:1px solid var(--bdr)}
+  .navlink:hover{color:var(--t1)}
+
+  .onair{padding:9px 22px;border-radius:6px;font-size:12px;font-weight:900;letter-spacing:1.5px;
+         border:1px solid var(--bdr2);background:var(--card2);color:var(--t3);cursor:pointer}
+  .onair.live{background:var(--red);border-color:var(--red);color:#fff;animation:pulse 1.4s infinite}
+  .onair.dimmed{opacity:.4}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 #ef444466}50%{box-shadow:0 0 0 7px #ef444400}}
+
+  .wrap{max-width:1500px;margin:0 auto;padding:18px 20px;display:grid;gap:16px;
+        grid-template-columns:1fr}
+  @media(min-width:1180px){.wrap{grid-template-columns:1fr 430px;align-items:start}}
+  .col{display:grid;gap:16px;align-content:start}
+
+  .card{background:var(--card);border:1px solid var(--bdr);border-radius:12px;overflow:hidden}
+  .card-hdr{padding:11px 16px;border-bottom:1px solid var(--bdr);display:flex;
+            justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .card-ttl{font-size:11px;font-weight:800;letter-spacing:1.6px;color:var(--t2);text-transform:uppercase}
+  .card-body{padding:16px}
+
+  label.lb{display:block;font-size:10px;font-weight:700;letter-spacing:1.2px;
+           color:var(--t3);text-transform:uppercase;margin-bottom:5px}
+  input[type=text],input[type=number],select{
+    width:100%;background:var(--bg);border:1px solid var(--bdr2);border-radius:6px;
+    color:var(--t1);padding:9px 11px;font-size:14px;font-family:inherit;outline:none}
+  input:focus,select:focus{border-color:var(--blu)}
+  input.dv{font-family:'MVWaheed','Inter',sans-serif;direction:rtl;text-align:right;font-size:17px}
+  input[type=color]{width:44px;height:38px;padding:2px;background:var(--bg);
+                    border:1px solid var(--bdr2);border-radius:6px;cursor:pointer}
+
+  .btn{background:var(--card2);border:1px solid var(--bdr2);border-radius:6px;color:var(--t1);
+       padding:9px 14px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;
+       letter-spacing:.4px;transition:filter .12s}
+  .btn:hover{filter:brightness(1.35)}
+  .btn:active{transform:translateY(1px)}
+  .btn.grn{background:var(--grn);border-color:var(--grn);color:#06210f}
+  .btn.red{background:var(--red);border-color:var(--red);color:#fff}
+  .btn.amb{background:var(--amb);border-color:var(--amb);color:#2a1a00}
+  .btn.blu{background:var(--blu);border-color:var(--blu);color:#fff}
+  .btn.org{background:var(--org);border-color:var(--org);color:#2a1200}
+  .btn.gho{background:transparent}
+  .btn.sm{padding:6px 10px;font-size:11px}
+  .btn.wide{width:100%}
+  .btn.on{background:var(--blu);border-color:var(--blu);color:#fff}
+
+  /* ── Teams ── */
+  .teams{display:grid;grid-template-columns:1fr;gap:14px}
+  @media(min-width:640px){.teams{grid-template-columns:1fr 1fr}}
+  .team-box{border:1px solid var(--bdr);border-radius:10px;padding:13px;background:var(--card2)}
+  .team-box.h{border-top:3px solid var(--blu)}
+  .team-box.a{border-top:3px solid var(--red)}
+  .team-tag{font-size:10px;font-weight:900;letter-spacing:2px;color:var(--t3);margin-bottom:10px}
+  .row{display:flex;gap:8px;align-items:flex-end}
+  .row > *{min-width:0}
+  .f1{flex:1}
+  .mt{margin-top:10px}
+
+  .logo-row{display:flex;align-items:center;gap:10px;margin-top:10px}
+  .logo-prev{width:52px;height:52px;flex:0 0 52px;border-radius:8px;border:1px dashed var(--bdr2);
+             background:#0b0b0e;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .logo-prev img{max-width:100%;max-height:100%;object-fit:contain}
+  .logo-prev span{font-size:9px;color:var(--t3);letter-spacing:.5px}
+  .file-btn{position:relative;overflow:hidden;display:inline-block;text-align:center}
+  .file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+
+  /* ── Format ── */
+  .fmt{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:10px}
+
+  /* ── Rally score ── */
+  .score-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center}
+  .sc-side{text-align:center}
+  .sc-name{font-size:12px;font-weight:800;color:var(--t2);letter-spacing:.8px;
+           margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sc-sets{font-size:10px;font-weight:900;letter-spacing:1.4px;color:var(--t3);margin-bottom:6px}
+  .sc-sets b{font-size:15px;color:var(--t1)}
+  .sc-num{font-size:52px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;margin-bottom:10px}
+  .sc-btns{display:flex;gap:6px;justify-content:center}
+  .sc-btns .btn{width:56px;font-size:19px;padding:10px 0}
+  .sc-vs{font-size:15px;font-weight:800;color:var(--t3);padding:0 4px}
+  .serve-row{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-top:14px}
+  .undo-row{display:grid;grid-template-columns:1fr;gap:6px;margin-top:8px}
+
+  /* ── Set state ── */
+  .setface{display:flex;align-items:baseline;justify-content:center;gap:9px}
+  .setface .n{font-size:40px;font-weight:900;line-height:1}
+  .setface .t{font-size:12px;font-weight:900;letter-spacing:1.8px;color:var(--t3)}
+  .statusline{text-align:center;font-size:10px;font-weight:900;letter-spacing:2px;
+              color:var(--t3);text-transform:uppercase;margin:7px 0 13px;min-height:13px}
+  .statusline.hot{color:var(--org)}
+  .statusline.done{color:var(--grn)}
+  .set-ctl{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:6px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+  .chip{background:var(--card2);border:1px solid var(--bdr);border-radius:7px;
+        padding:6px 10px;font-size:13px;font-weight:900;
+        display:flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums}
+  .chip i{font-style:normal;font-size:9px;color:var(--t3);letter-spacing:1px}
+  .chip.live{border-color:var(--org)}
+  .chip.live i{color:var(--org)}
+
+  /* ── Timeouts ── */
+  .to-row{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+  .to-name{font-size:11px;font-weight:800;color:var(--t2);min-width:78px;
+           white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .to-dots{display:flex;gap:5px;flex:1;align-items:center}
+  .tod{width:15px;height:15px;border-radius:50%;border:2px solid var(--bdr2);display:block}
+  .tod.used{background:var(--org);border-color:var(--org)}
+  .to-row .btn{width:32px;padding:5px 0;font-size:13px}
+
+  .toggles{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .tog{display:flex;align-items:center;gap:7px;background:var(--card2);border:1px solid var(--bdr);
+       border-radius:6px;padding:7px 11px;font-size:11px;font-weight:700;color:var(--t2);cursor:pointer}
+  .tog.on{border-color:var(--grn);color:var(--grn)}
+  .tog i{width:8px;height:8px;border-radius:50%;background:var(--bdr2);display:block}
+  .tog.on i{background:var(--grn)}
+
+  /* ── Events ── */
+  .ev-types{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:11px}
+  .ev-types .btn{padding:8px 0;font-size:10px;letter-spacing:.3px}
+  .ev-types .btn.on{outline:2px solid var(--t1);outline-offset:-2px}
+  .ev-sides{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:11px}
+  .ev-sides .btn.on{background:var(--blu);border-color:var(--blu);color:#fff}
+
+  /* ── Preview ── */
+  .prev-stage{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:8px;
+    background:linear-gradient(135deg,#2a2418 0%,#1c1a12 100%);
+    border:1px solid var(--bdr)}
+  .prev-stage::before{content:'';position:absolute;inset:0;
+    background:repeating-linear-gradient(90deg,#ffffff08 0 60px,transparent 60px 120px)}
+  .prev-stage iframe{position:absolute;top:0;left:0;width:1920px;height:1080px;
+    transform-origin:top left;border:0;background:transparent}
+
+  .url-box{display:flex;gap:6px;margin-top:10px}
+  .url-box input{font-size:11px;font-family:ui-monospace,monospace;color:var(--t2)}
+
+  .hint{font-size:11px;color:var(--t3);line-height:1.55;margin-top:9px}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(80px);
+    background:var(--grn);color:#06210f;padding:10px 22px;border-radius:8px;font-size:13px;
+    font-weight:800;z-index:99;transition:transform .25s;pointer-events:none}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--red);color:#fff}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-logos">
+      <img src="img/voice.png" alt="VOICE">
+      <span style="color:#555;font-size:14px;font-weight:300">✕</span>
+      <img src="img/dhuvas.png" alt="DHUVAS">
+    </div>
+    <span class="ttl">Volleyball</span>
+  </div>
+  <div class="topbar-right">
+    <a class="navlink" href="/vcontrol" style="border-color:var(--blu);color:#93c5fd">📱 iPad Control</a>
+    <a class="navlink" href="/score">⚽ Football</a>
+    <a class="navlink" href="/">Control</a>
+    <a class="navlink" href="/live">Live</a>
+    <button class="onair" id="mainBtn" onclick="toggleMain()">MAIN BOARD</button>
+    <button class="onair" id="onairBtn" onclick="toggleAir()">CORNER BUG</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <!-- ══ LEFT COLUMN ══ -->
+  <div class="col">
+
+    <!-- TEAMS -->
+    <div class="card">
+      <div class="card-hdr">
+        <span class="card-ttl">Teams</span>
+        <div style="display:flex;gap:6px">
+          <button class="btn sm" id="langEn" onclick="patch({lang:'en'})">EN</button>
+          <button class="btn sm" id="langDv" onclick="patch({lang:'dv'})">ދިވެހި</button>
+          <button class="btn sm gho" onclick="swapTeams()">⇄ Swap</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="teams" id="teams"></div>
+      </div>
+    </div>
+
+    <!-- FORMAT -->
+    <div class="card">
+      <div class="card-hdr"><span class="card-ttl">Match format</span>
+        <span class="card-ttl" id="fmtSummary" style="color:var(--org)"></span>
+      </div>
+      <div class="card-body">
+        <div class="fmt">
+          <div>
+            <label class="lb">Best of</label>
+            <select id="bestOf" onchange="patch({bestOf:+this.value})">
+              <option value="3">3 sets</option>
+              <option value="5">5 sets</option>
+            </select>
+          </div>
+          <div>
+            <label class="lb">Points to</label>
+            <input type="number" id="pointsTo" min="5" max="99" onchange="patch({pointsTo:+this.value})">
+          </div>
+          <div>
+            <label class="lb">Deciding set</label>
+            <input type="number" id="decidingTo" min="5" max="99" onchange="patch({decidingTo:+this.value})">
+          </div>
+          <div>
+            <label class="lb">Hard cap</label>
+            <input type="number" id="cap" min="0" max="99" onchange="patch({cap:+this.value})">
+          </div>
+          <div>
+            <label class="lb">Timeouts / set</label>
+            <input type="number" id="maxTo" min="0" max="6" onchange="patch({maxTo:+this.value})">
+          </div>
+        </div>
+        <div class="toggles">
+          <span class="tog" id="togAuto" onclick="toggleFlag('autoSet')"><i></i>Close sets automatically</span>
+          <span class="tog" id="togTo"   onclick="toggleFlag('showTimeouts')"><i></i>Show timeouts</span>
+          <span class="tog" id="togHist" onclick="toggleFlag('showHistory')"><i></i>Show set-by-set</span>
+        </div>
+        <div class="hint">Hard cap 0 means the set runs on until a team is two clear. Set it to 27 for a
+          capped 25-point set. The deciding set is whichever set equals "best of" — set 5 in a best-of-5.</div>
+      </div>
+    </div>
+
+    <!-- RALLY SCORE -->
+    <div class="card">
+      <div class="card-hdr">
+        <span class="card-ttl">Rally score</span>
+        <button class="btn sm red gho" onclick="newMatch()">New match</button>
+      </div>
+      <div class="card-body">
+        <div class="score-grid">
+          <div class="sc-side">
+            <div class="sc-name" id="scNameH">HOME</div>
+            <div class="sc-sets" id="scSetsH">SETS <b>0</b></div>
+            <div class="sc-num"  id="scPtsH">0</div>
+            <div class="sc-btns">
+              <button class="btn red" onclick="point('home',-1)">−</button>
+              <button class="btn grn" onclick="point('home',1)">+</button>
+            </div>
+          </div>
+          <div class="sc-vs">vs</div>
+          <div class="sc-side">
+            <div class="sc-name" id="scNameA">AWAY</div>
+            <div class="sc-sets" id="scSetsA">SETS <b>0</b></div>
+            <div class="sc-num"  id="scPtsA">0</div>
+            <div class="sc-btns">
+              <button class="btn red" onclick="point('away',-1)">−</button>
+              <button class="btn grn" onclick="point('away',1)">+</button>
+            </div>
+          </div>
+        </div>
+        <div class="serve-row">
+          <button class="btn" id="srvH" onclick="serveTo('home')">Serve ◂ Home</button>
+          <button class="btn" id="srvA" onclick="serveTo('away')">Serve ▸ Away</button>
+          <button class="btn gho" onclick="serveTo('')">Clear</button>
+        </div>
+        <div class="undo-row">
+          <button class="btn amb wide" id="undoBtn" onclick="undo()">↶ Undo last action</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETS -->
+    <div class="card">
+      <div class="card-hdr"><span class="card-ttl">Sets</span></div>
+      <div class="card-body">
+        <div class="setface"><span class="t">SET</span><span class="n" id="setNo">1</span></div>
+        <div class="statusline" id="statusLine">WARM UP</div>
+        <div class="set-ctl">
+          <button class="btn blu" onclick="endSet()">End set</button>
+          <button class="btn gho" onclick="setCmd({action:'reopen'})">↶ Reopen last</button>
+          <button class="btn gho" onclick="setCmd({action:'resume'})">Resume play</button>
+        </div>
+        <div class="chips" id="chips"></div>
+      </div>
+    </div>
+
+    <!-- TIMEOUTS -->
+    <div class="card">
+      <div class="card-hdr"><span class="card-ttl">Timeouts (this set)</span></div>
+      <div class="card-body" id="toBody"></div>
+    </div>
+
+    <!-- BANNER -->
+    <div class="card">
+      <div class="card-hdr"><span class="card-ttl">Event banner</span>
+        <button class="btn sm gho" onclick="hideEvent()">Hide</button>
+      </div>
+      <div class="card-body">
+        <div class="ev-types" id="evTypes"></div>
+        <div class="ev-sides">
+          <button class="btn" id="evSideH" onclick="setEvSide('home')">Home</button>
+          <button class="btn" id="evSideA" onclick="setEvSide('away')">Away</button>
+        </div>
+        <div class="row">
+          <div class="f1"><label class="lb">Player / headline</label>
+            <input type="text" id="evText" placeholder="Player name…"></div>
+          <div style="width:120px"><label class="lb">Note</label>
+            <input type="text" id="evSub" placeholder="e.g. 12th pt"></div>
+          <button class="btn grn" onclick="sendEvent()">Show</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══ RIGHT COLUMN ══ -->
+  <div class="col">
+    <div class="card">
+      <div class="card-hdr">
+        <span class="card-ttl">Overlay preview</span>
+        <button class="btn sm gho" onclick="reloadPreview()">↻ Reload</button>
+      </div>
+      <div class="card-body">
+        <div class="prev-stage" id="stage"><iframe id="prev" src="/volleybug?pos=tl"></iframe></div>
+
+        <label class="lb" style="margin-top:14px">vMix web browser input — overlay</label>
+        <div class="url-box">
+          <input type="text" id="urlBug" readonly>
+          <button class="btn sm" onclick="copy('urlBug')">Copy</button>
+        </div>
+
+        <label class="lb" style="margin-top:12px">iPad match control</label>
+        <div class="url-box">
+          <input type="text" id="urlCtl" readonly>
+          <button class="btn sm" onclick="copy('urlCtl')">Copy</button>
+        </div>
+
+        <div class="hint">
+          Add as a <b>Web Browser</b> input at 1920×1080 on a free overlay channel.
+          Position with <code>?pos=tl</code> (default), <code>?pos=tc</code> or <code>?pos=bl</code> —
+          <code>tl</code> collides with the reporter lower-third, so move one if both go on air.
+          The main board sits at the bottom centre, which clears the boxed VOICE ticker but
+          <b>not</b> the full-width Dhuvas ticker.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ORIGIN = location.origin;
+const $ = id => document.getElementById(id);
+
+let S = null, evType = 'POINT', evSide = 'home';
+let dirty = new Set(), lastTeams = '', lastChips = '', lastTo = '';
+
+const EV_TYPES = [
+  { k:'POINT', lbl:'POINT', cls:'grn' }, { k:'ACE',   lbl:'ACE',   cls:'blu' },
+  { k:'BLOCK', lbl:'BLOCK', cls:'blu' }, { k:'SPIKE', lbl:'SPIKE', cls:'org' },
+  { k:'TIMEOUT', lbl:'T/O', cls:'amb' }, { k:'SUB',   lbl:'SUB',   cls:'blu' },
+  { k:'INFO',  lbl:'INFO',  cls:'' }
+];
+
+const esc = s => String(s == null ? '' : s)
+  .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function toast(msg, err){
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(t._t); t._t = setTimeout(() => t.className = 'toast', 1600);
+}
+
+async function api(path, body, method){
+  try{
+    const r = await fetch(ORIGIN + path, {
+      method: method || (body ? 'POST' : 'GET'),
+      headers: body ? { 'Content-Type':'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      cache: 'no-store'
+    });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    apply(await r.json());
+    return true;
+  }catch(e){ toast('Relay not reachable', true); return false; }
+}
+
+const patch    = p => api('/api/volley', p);
+const setCmd   = b => api('/api/volley/set', b);
+const serveTo  = side => api('/api/volley/serve', { side });
+const bumpTo   = (side, delta) => api('/api/volley/timeout', { side, delta });
+const toggleFlag = k => patch({ [k]: !S[k] });
+const toggleAir  = () => patch({ visible: !S.visible });
+const toggleMain = () => patch({ mainVisible: !S.mainVisible });
+const undo = () => api('/api/volley/undo', null, 'POST').then(ok => { if(ok) toast('Undone'); });
+
+function point(side, delta){
+  const before = S ? S.set : 1;
+  api('/api/volley/point', { side, delta }).then(ok => {
+    if(!ok || !S) return;
+    if(S.status === 'FINAL') toast('Match complete');
+    else if(S.set !== before) toast('Set ' + before + ' complete');
+  });
+}
+
+function endSet(){
+  if(!S) return;
+  if(S.home.pts === S.away.pts) return toast('Scores are level — no set winner', true);
+  if(!confirm(`End set ${S.set} at ${S.home.pts} : ${S.away.pts}?`)) return;
+  setCmd({ action:'end' });
+}
+
+function newMatch(){
+  if(!confirm('Reset points, sets, timeouts and set history?\n(Team names, colours, logos and format are kept.)')) return;
+  api('/api/volley/reset', null, 'POST').then(ok => { if(ok) toast('New match'); });
+}
+
+/* ── teams ───────────────────────────────────────────── */
+const mark   = id => dirty.add(id);
+const unmark = id => dirty.delete(id);
+
+function teamBoxHtml(side){
+  const s = S[side], isDv = S.lang === 'dv';
+  const tag = side === 'home' ? 'HOME / LEFT' : 'AWAY / RIGHT';
+  return `
+    <div class="team-box ${side === 'home' ? 'h' : 'a'}">
+      <div class="team-tag">${tag}</div>
+      <label class="lb">Team name</label>
+      <input type="text" class="${isDv?'dv':''}" id="nm_${side}" value="${esc(s.name)}"
+             oninput="mark('nm_${side}')" onchange="saveTeam('${side}')" onblur="unmark('nm_${side}')"
+             placeholder="${isDv ? 'ޓީމުގެ ނަން' : 'Team name'}">
+      <div class="row mt">
+        <div class="f1">
+          <label class="lb">Short code</label>
+          <input type="text" id="sh_${side}" value="${esc(s.short)}" maxlength="6"
+                 oninput="mark('sh_${side}')" onchange="saveTeam('${side}')" onblur="unmark('sh_${side}')"
+                 placeholder="MAF">
+        </div>
+        <div>
+          <label class="lb">Colour</label>
+          <input type="color" id="cl_${side}" value="${s.color || '#1d4ed8'}"
+                 onchange="patch({${side}:{color:this.value}})">
+        </div>
+      </div>
+      <div class="logo-row">
+        <div class="logo-prev" id="lp_${side}"><span>NO LOGO</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex:1">
+          <span class="btn sm file-btn">Upload logo
+            <input type="file" accept="image/*" onchange="uploadLogo('${side}', this)">
+          </span>
+          <button class="btn sm gho" onclick="patch({${side}:{logo:''}})">Remove</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function saveTeam(side){
+  patch({ [side]: { name: $('nm_'+side).value, short: $('sh_'+side).value.toUpperCase() } });
+}
+
+// Downscale before upload — a full-size club badge would blow the JSON body
+// limit and nothing on screen renders larger than 60px anyway.
+function uploadLogo(side, input){
+  const f = input.files && input.files[0];
+  if(!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 256;
+      const sc = Math.min(1, MAX / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width  = Math.max(1, Math.round(img.width  * sc));
+      cv.height = Math.max(1, Math.round(img.height * sc));
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      patch({ [side]: { logo: cv.toDataURL('image/png') } }).then(() => toast('Logo updated'));
+      input.value = '';
+    };
+    img.onerror = () => toast('Could not read that image', true);
+    img.src = rd.result;
+  };
+  rd.readAsDataURL(f);
+}
+
+async function refreshLogoPreview(side, lv){
+  const box = $('lp_' + side);
+  if(!box) return;
+  if(box.dataset.lv === String(lv)) return;
+  box.dataset.lv = String(lv);
+  try{
+    const r = await fetch(`${ORIGIN}/api/volley/logo/${side}`, { cache:'no-store' });
+    const d = await r.json();
+    box.innerHTML = d.logo ? `<img src="${d.logo}" alt="">` : '<span>NO LOGO</span>';
+  }catch(e){}
+}
+
+function swapTeams(){
+  const h = S.home, a = S.away;
+  patch({
+    home: { name:a.name, short:a.short, color:a.color, pts:a.pts, sets:a.sets, to:a.to },
+    away: { name:h.name, short:h.short, color:h.color, pts:h.pts, sets:h.sets, to:h.to },
+    serve: S.serve === 'home' ? 'away' : S.serve === 'away' ? 'home' : '',
+    history: (S.history || []).map(s => ({ h:s.a, a:s.h }))
+  }).then(swapLogos);
+}
+
+// Logos aren't in the light payload, so a swap has to fetch and re-post them
+async function swapLogos(){
+  try{
+    const [h, a] = await Promise.all([
+      fetch(`${ORIGIN}/api/volley/logo/home`, {cache:'no-store'}).then(r => r.json()),
+      fetch(`${ORIGIN}/api/volley/logo/away`, {cache:'no-store'}).then(r => r.json())
+    ]);
+    await patch({ home:{ logo:a.logo }, away:{ logo:h.logo } });
+    toast('Teams swapped');
+  }catch(e){ toast('Swapped, but logos failed', true); }
+}
+
+/* ── banner ──────────────────────────────────────────── */
+const setEvType = k => { evType = k; paintEv(); };
+const setEvSide = s => { evSide = s; paintEv(); };
+function paintEv(){
+  $('evTypes').innerHTML = EV_TYPES.map(t =>
+    `<button class="btn ${t.cls} ${t.k === evType ? 'on' : ''}" onclick="setEvType('${t.k}')">${t.lbl}</button>`
+  ).join('');
+  $('evSideH').className = 'btn' + (evSide === 'home' ? ' on' : '');
+  $('evSideA').className = 'btn' + (evSide === 'away' ? ' on' : '');
+}
+function sendEvent(){
+  api('/api/volley/event', {
+    type: evType, side: evSide,
+    text: $('evText').value, sub: $('evSub').value.trim(), dur: 8
+  }).then(ok => { if(ok) toast('Banner on air'); });
+}
+const hideEvent = () => api('/api/volley/event/hide', null, 'POST');
+
+/* ── derived, mirrored from the overlay so both agree ── */
+const target = d => ((d.set >= d.bestOf ? d.decidingTo : d.pointsTo) || 25);
+function pointFlag(d){
+  if(d.status === 'FINAL') return null;
+  const t = target(d);
+  for(const side of ['home','away']){
+    const me = d[side].pts, other = d[side === 'home' ? 'away' : 'home'].pts;
+    const near = (me >= t - 1 && me - other >= 1) || (d.cap > 0 && me >= d.cap - 1);
+    if(near) return { side, match: d[side].sets >= Math.floor(d.bestOf/2) };
+  }
+  return null;
+}
+
+/* ── preview scaling ─────────────────────────────────── */
+function fitPreview(){
+  const stage = $('stage');
+  if(!stage) return;
+  $('prev').style.transform = 'scale(' + (stage.clientWidth / 1920) + ')';
+}
+const reloadPreview = () => { $('prev').src = '/volleybug?pos=tl&r=' + Date.now(); };
+function copy(id){
+  const i = $(id); i.select(); i.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(i.value).then(() => toast('Copied')).catch(() => toast('Copy failed', true));
+}
+
+/* ── render ──────────────────────────────────────────── */
+function apply(d){
+  if(!d) return;
+  S = d;
+  const hN = d.home.name || d.home.short || 'HOME';
+  const aN = d.away.name || d.away.short || 'AWAY';
+
+  $('mainBtn').className   = 'onair' + (d.mainVisible ? ' live' : '');
+  $('mainBtn').textContent = d.mainVisible ? 'MAIN ON AIR' : 'MAIN BOARD';
+  $('onairBtn').className  = 'onair' + (d.visible && !d.mainVisible ? ' live' : '')
+                                     + (d.mainVisible ? ' dimmed' : '');
+  $('onairBtn').textContent = d.mainVisible ? 'BUG HIDDEN' : d.visible ? 'BUG ON AIR' : 'CORNER BUG';
+
+  $('langEn').className = 'btn sm' + (d.lang === 'en' ? ' on' : '');
+  $('langDv').className = 'btn sm' + (d.lang === 'dv' ? ' on' : '');
+
+  // Rebuild the team inputs only when something outside them changed, so typing
+  // is never interrupted mid-word.
+  const teamKey = JSON.stringify([d.home.name, d.home.short, d.home.color,
+                                  d.away.name, d.away.short, d.away.color, d.lang]);
+  if(teamKey !== lastTeams && dirty.size === 0){
+    lastTeams = teamKey;
+    $('teams').innerHTML = teamBoxHtml('home') + teamBoxHtml('away');
+  }
+  refreshLogoPreview('home', d.home.lv || 0);
+  refreshLogoPreview('away', d.away.lv || 0);
+
+  // Format inputs — same rule, don't fight the operator's cursor
+  const fmt = { bestOf:d.bestOf, pointsTo:d.pointsTo, decidingTo:d.decidingTo, cap:d.cap, maxTo:d.maxTo };
+  for(const [k, v] of Object.entries(fmt)){
+    const node = $(k);
+    if(node && document.activeElement !== node) node.value = v;
+  }
+  $('fmtSummary').textContent = `BEST OF ${d.bestOf} · SET TO ${target(d)}` + (d.cap ? ` · CAP ${d.cap}` : '');
+  $('togAuto').className = 'tog' + (d.autoSet ? ' on' : '');
+  $('togTo').className   = 'tog' + (d.showTimeouts ? ' on' : '');
+  $('togHist').className = 'tog' + (d.showHistory ? ' on' : '');
+
+  $('scNameH').textContent = hN;  $('scNameA').textContent = aN;
+  $('scSetsH').innerHTML = 'SETS <b>' + (d.home.sets || 0) + '</b>';
+  $('scSetsA').innerHTML = 'SETS <b>' + (d.away.sets || 0) + '</b>';
+  $('scPtsH').textContent = d.home.pts || 0;
+  $('scPtsA').textContent = d.away.pts || 0;
+  $('srvH').className = 'btn' + (d.serve === 'home' ? ' org' : '');
+  $('srvA').className = 'btn' + (d.serve === 'away' ? ' org' : '');
+  $('undoBtn').className = 'btn wide' + (d.canUndo ? ' amb' : ' gho');
+
+  $('setNo').textContent = d.set;
+  const pf = pointFlag(d);
+  let st = 'IN PLAY', cls = 'statusline';
+  if(d.status === 'FINAL'){ st = 'MATCH COMPLETE'; cls += ' done'; }
+  else if(pf){
+    st = (pf.match ? 'MATCH POINT — ' : 'SET POINT — ') +
+         String(pf.side === 'home' ? (d.home.short || hN) : (d.away.short || aN)).toUpperCase();
+    cls += ' hot';
+  }
+  else if(d.status === 'TO')    st = 'TIMEOUT';
+  else if(d.status === 'BREAK') st = 'SET BREAK';
+  else if(d.status === 'PRE')   st = 'WARM UP';
+  $('statusLine').textContent = st;
+  $('statusLine').className = cls;
+
+  const chipKey = JSON.stringify([d.history, d.set, d.home.pts, d.away.pts, d.status]);
+  if(chipKey !== lastChips){
+    lastChips = chipKey;
+    const done = (d.history || []).map((s,i) => `<span class="chip"><i>S${i+1}</i>${s.h} – ${s.a}</span>`).join('');
+    const live = d.status === 'FINAL' ? ''
+      : `<span class="chip live"><i>S${d.set}</i>${d.home.pts} – ${d.away.pts}</span>`;
+    $('chips').innerHTML = done + live;
+  }
+
+  const toKey = JSON.stringify([d.home.to, d.away.to, d.maxTo, hN, aN, d.home.short, d.away.short]);
+  if(toKey !== lastTo){
+    lastTo = toKey;
+    $('toBody').innerHTML = ['home','away'].map(side => {
+      const s = d[side], nm = s.short || s.name || side.toUpperCase();
+      const dots = Array.from({length:d.maxTo || 2},
+        (_,i) => `<i class="tod ${i < (s.to||0) ? 'used' : ''}"></i>`).join('');
+      return `<div class="to-row">
+        <span class="to-name">${esc(nm)}</span>
+        <span class="to-dots">${dots}</span>
+        <button class="btn" onclick="bumpTo('${side}',-1)">−</button>
+        <button class="btn amb" onclick="bumpTo('${side}',1)">+</button>
+      </div>`;
+    }).join('');
+  }
+}
+
+/* ── boot ────────────────────────────────────────────── */
+$('urlBug').value = ORIGIN + '/volleybug';
+$('urlCtl').value = ORIGIN + '/vcontrol';
+paintEv();
+fitPreview();
+addEventListener('resize', fitPreview);
+api('/api/volley');
+setInterval(() => api('/api/volley'), 2000);
+</script>
+</body>
+</html>

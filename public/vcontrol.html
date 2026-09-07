@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#09090b">
+  <title>VxD Volleyball — Match Control</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{
+    --bg:#09090b;--card:#18181b;--card2:#232327;--bdr:#2e2e33;--bdr2:#45454d;
+    --t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;
+    --red:#ef4444;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b;--org:#ff7a18;
+    --pad:env(safe-area-inset-bottom,0px);
+  }
+  html,body{height:100%;overscroll-behavior:none}
+  body{
+    font-family:'Inter',-apple-system,system-ui,sans-serif;
+    background:var(--bg);color:var(--t1);
+    padding:0 0 calc(10px + var(--pad));
+    touch-action:manipulation;            /* kills the 300ms double-tap zoom */
+    user-select:none;-webkit-user-select:none;
+  }
+
+  /* ── top bar ── */
+  .top{
+    position:sticky;top:0;z-index:30;
+    display:flex;align-items:center;gap:10px;
+    padding:9px 12px;background:#131316;border-bottom:1px solid var(--bdr);
+  }
+  .brand{font-size:12px;font-weight:900;letter-spacing:1.6px;color:var(--t3);
+         text-transform:uppercase;white-space:nowrap;margin-right:auto}
+  .air{
+    flex:0 0 auto;min-height:52px;padding:0 20px;border-radius:11px;
+    border:2px solid var(--bdr2);background:var(--card2);color:var(--t2);
+    font-family:inherit;font-size:13px;font-weight:900;letter-spacing:1.1px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .air.live{background:var(--red);border-color:var(--red);color:#fff}
+  .air.dim{opacity:.35}
+  .lang{min-height:52px;padding:0 14px;border-radius:11px;border:2px solid var(--bdr2);
+        background:var(--card2);color:var(--t2);font-family:inherit;font-size:13px;font-weight:800}
+  .lang.on{background:var(--blu);border-color:var(--blu);color:#fff}
+  .lang.dv{font-family:'MVWaheed','Inter',sans-serif;font-size:17px;padding-top:5px}
+
+  /* ── layout ── */
+  .grid{display:grid;grid-template-columns:1fr;gap:10px;padding:10px}
+  @media(min-width:900px){
+    .grid{grid-template-columns:1fr 1fr}
+    .span2{grid-column:1/-1}
+  }
+  /* Landscape tablet: three columns so set, timeouts and the banner sit on one
+     row and the whole panel fits above the fold. */
+  @media(min-width:1100px){
+    .grid{grid-template-columns:1fr 1fr 1fr}
+  }
+  .card{background:var(--card);border:1px solid var(--bdr);border-radius:14px;padding:12px}
+  .ttl{font-size:10px;font-weight:900;letter-spacing:1.7px;color:var(--t3);
+       text-transform:uppercase;margin-bottom:10px;display:flex;
+       justify-content:space-between;align-items:center;gap:8px}
+
+  /* Every tappable thing is at least 56px tall — thumb-sized on a tablet */
+  .b{
+    min-height:56px;border-radius:11px;border:1px solid var(--bdr2);
+    background:var(--card2);color:var(--t1);font-family:inherit;
+    font-size:15px;font-weight:800;letter-spacing:.4px;
+    display:flex;align-items:center;justify-content:center;gap:6px;padding:0 10px;
+  }
+  .b:active{filter:brightness(1.5);transform:scale(.97)}
+  .b.grn{background:var(--grn);border-color:var(--grn);color:#06210f}
+  .b.red{background:var(--red);border-color:var(--red);color:#fff}
+  .b.amb{background:var(--amb);border-color:var(--amb);color:#2a1a00}
+  .b.blu{background:var(--blu);border-color:var(--blu);color:#fff}
+  .b.org{background:var(--org);border-color:var(--org);color:#2a1200}
+  .b.on{background:var(--blu);border-color:var(--blu);color:#fff}
+  .b.sm{min-height:46px;font-size:13px}
+  .b.xl{min-height:84px;font-size:40px;font-weight:900}
+
+  /* ── rally scoring — the part that gets hammered ── */
+  .rally{display:grid;grid-template-columns:1fr;gap:9px}
+  .rrow{display:grid;grid-template-columns:1fr 70px 84px 96px 1.2fr;gap:8px;align-items:center}
+  .rname{font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;
+         text-overflow:ellipsis;padding-left:4px;display:flex;align-items:center;gap:8px}
+  .rname.dv{font-family:'MVWaheed','Inter',sans-serif;direction:rtl;text-align:right;
+            font-weight:400;font-size:21px;padding-top:4px}
+  .swatch{width:6px;height:26px;border-radius:3px;flex:0 0 6px}
+  .rpts{font-size:46px;font-weight:900;text-align:center;font-variant-numeric:tabular-nums;line-height:1}
+  .rsets{display:flex;align-items:center;justify-content:center;gap:6px;
+         font-size:11px;font-weight:900;letter-spacing:1px;color:var(--t3)}
+  .rsets b{font-size:24px;color:var(--t1)}
+  .undorow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:9px}
+
+  /* ── set state ── */
+  .setface{display:flex;align-items:baseline;justify-content:center;gap:10px;margin-bottom:2px}
+  .setface .n{font-size:44px;font-weight:900;line-height:1}
+  .setface .t{font-size:13px;font-weight:900;letter-spacing:1.6px;color:var(--t3);text-transform:uppercase}
+  .statusline{text-align:center;font-size:11px;font-weight:900;letter-spacing:2px;
+              color:var(--t3);text-transform:uppercase;margin:6px 0 12px;min-height:14px}
+  .statusline.hot{color:var(--org)}
+  .statusline.done{color:var(--grn)}
+  .setctl{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:8px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{background:var(--card2);border:1px solid var(--bdr);border-radius:8px;
+        padding:6px 10px;font-size:13px;font-weight:900;
+        display:flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums}
+  .chip i{font-style:normal;font-size:9px;color:var(--t3);letter-spacing:1px}
+  .chip.live{border-color:var(--org)}
+  .chip.live i{color:var(--org)}
+
+  /* ── serve + timeouts ── */
+  .serverow{display:grid;grid-template-columns:1fr 1fr 88px;gap:8px;margin-bottom:10px}
+  .torow{display:grid;grid-template-columns:1fr 76px 60px 60px;gap:8px;align-items:center;margin-bottom:8px}
+  .torow:last-child{margin-bottom:0}
+  .toname{font-size:13px;font-weight:800;color:var(--t2);white-space:nowrap;
+          overflow:hidden;text-overflow:ellipsis}
+  .todots{display:flex;gap:6px;justify-content:center}
+  .tod{width:16px;height:16px;border-radius:50%;border:2px solid var(--bdr2)}
+  .tod.used{background:var(--org);border-color:var(--org)}
+  .flags{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}
+
+  /* ── banner ── */
+  .evtypes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+  .evtypes .b{font-size:12px;letter-spacing:.2px;padding:0 4px}
+  .evsides{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:8px}
+  .evsend{display:grid;grid-template-columns:1fr 90px;gap:7px}
+  .evsend input:nth-child(2){grid-column:1}
+  .evsend .b{grid-row:1/3;grid-column:2}
+  input[type=text]{
+    width:100%;min-height:56px;background:#0d0d10;border:1px solid var(--bdr2);
+    border-radius:11px;color:var(--t1);padding:0 14px;font-size:16px;
+    font-family:inherit;font-weight:700;outline:none;
+  }
+  input:focus{border-color:var(--blu)}
+  input.dv{font-family:'MVWaheed','Inter',sans-serif;direction:rtl;text-align:right;font-size:20px}
+
+  .toast{
+    position:fixed;left:50%;bottom:calc(18px + var(--pad));
+    transform:translateX(-50%) translateY(90px);
+    background:var(--grn);color:#06210f;padding:12px 26px;border-radius:11px;
+    font-size:15px;font-weight:900;z-index:60;transition:transform .22s;pointer-events:none;
+  }
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--red);color:#fff}
+
+  .offline{
+    position:fixed;top:0;left:0;right:0;z-index:50;background:var(--red);color:#fff;
+    font-size:12px;font-weight:900;letter-spacing:1px;text-align:center;padding:6px;
+    transform:translateY(-100%);transition:transform .2s;
+  }
+  .offline.show{transform:translateY(0)}
+
+  /* Landscape iPad is only ~768–820px tall — tighten just enough to fit the
+     whole panel without scrolling mid-set, keeping every target at 44pt+. */
+  @media(min-width:900px) and (max-height:900px){
+    .top{padding:7px 10px}
+    .air,.lang{min-height:46px}
+    .grid{gap:8px;padding:8px}
+    .card{padding:9px}
+    .ttl{margin-bottom:8px}
+    .b{min-height:48px;font-size:14px}
+    .b.sm{min-height:44px}
+    .b.xl{min-height:70px;font-size:34px}
+    .rpts{font-size:38px}
+    .setface .n{font-size:36px}
+    .statusline{margin:4px 0 8px}
+    input[type=text]{min-height:50px}
+  }
+</style>
+</head>
+<body>
+
+<div class="offline" id="offline">NO CONNECTION TO RELAY — CHANGES NOT SAVING</div>
+
+<div class="top">
+  <span class="brand">Volleyball Control</span>
+  <button class="lang" id="langEn" onclick="setLang('en')">EN</button>
+  <button class="lang dv" id="langDv" onclick="setLang('dv')">ދިވެހި</button>
+  <button class="air" id="mainBtn" onclick="toggleMain()">MAIN BOARD</button>
+  <button class="air" id="bugBtn" onclick="toggleAir()">CORNER BUG</button>
+</div>
+
+<div class="grid">
+
+  <!-- RALLY SCORING -->
+  <div class="card span2">
+    <div class="ttl">
+      <span>Rally Score — tap the team that won the point</span>
+      <button class="b sm" onclick="newMatch()">New match</button>
+    </div>
+    <div class="rally">
+      <div class="rrow">
+        <span class="rname" id="nH"><i class="swatch" id="swH"></i><span>HOME</span></span>
+        <span class="rsets" id="stH">SETS <b>0</b></span>
+        <span class="rpts"  id="pH">0</span>
+        <button class="b red" onclick="point('home',-1)">−</button>
+        <button class="b grn xl" onclick="point('home',1)">+</button>
+      </div>
+      <div class="rrow">
+        <span class="rname" id="nA"><i class="swatch" id="swA"></i><span>AWAY</span></span>
+        <span class="rsets" id="stA">SETS <b>0</b></span>
+        <span class="rpts"  id="pA">0</span>
+        <button class="b red" onclick="point('away',-1)">−</button>
+        <button class="b grn xl" onclick="point('away',1)">+</button>
+      </div>
+    </div>
+    <div class="undorow">
+      <button class="b amb" id="undoBtn" onclick="undo()">↶ UNDO LAST</button>
+      <button class="b" onclick="serveTo('home')" id="srvH">SERVE ◂ HOME</button>
+      <button class="b" onclick="serveTo('away')" id="srvA">SERVE ▸ AWAY</button>
+    </div>
+  </div>
+
+  <!-- SET STATE -->
+  <div class="card">
+    <div class="ttl"><span>Set</span><span id="fmtLbl">BEST OF 5 · TO 25</span></div>
+    <div class="setface"><span class="t">SET</span><span class="n" id="setNo">1</span></div>
+    <div class="statusline" id="statusLine">WARM UP</div>
+    <div class="setctl">
+      <button class="b blu" onclick="endSet()">END SET</button>
+      <button class="b" onclick="setCmd({action:'reopen'})">↶ Reopen</button>
+      <button class="b" onclick="setCmd({action:'resume'})">Resume</button>
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <!-- SERVE + TIMEOUTS -->
+  <div class="card">
+    <div class="ttl">
+      <span>Timeouts</span>
+      <button class="b sm" onclick="serveTo('')">Clear serve</button>
+    </div>
+    <div id="toBody"></div>
+    <div class="flags">
+      <button class="b sm" id="togTo"   onclick="toggleFlag('showTimeouts')">Show TO</button>
+      <button class="b sm" id="togHist" onclick="toggleFlag('showHistory')">Show sets</button>
+      <button class="b sm" id="togAuto" onclick="toggleFlag('autoSet')">Auto set</button>
+    </div>
+  </div>
+
+  <!-- BANNER -->
+  <div class="card">
+    <div class="ttl"><span>Event Banner</span></div>
+    <div class="evtypes" id="evTypes"></div>
+    <div class="evsides">
+      <button class="b" id="evSideH" onclick="setEvSide('home')">Home</button>
+      <button class="b" id="evSideA" onclick="setEvSide('away')">Away</button>
+    </div>
+    <div class="evsend">
+      <input type="text" id="evText" placeholder="Player name…" autocomplete="off">
+      <input type="text" id="evSub"  placeholder="note" autocomplete="off">
+      <button class="b grn" onclick="sendEvent()">SHOW</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ORIGIN = location.origin;
+const $ = id => document.getElementById(id);
+
+let S = null, evType = 'POINT', evSide = 'home';
+let lastChips = '', lastTo = '', lastNames = '';
+
+const EV_TYPES = [
+  { k:'POINT', lbl:'POINT', cls:'grn' }, { k:'ACE',   lbl:'ACE',   cls:'blu' },
+  { k:'BLOCK', lbl:'BLOCK', cls:'blu' }, { k:'SPIKE', lbl:'SPIKE', cls:'org' },
+  { k:'TIMEOUT', lbl:'T/O', cls:'amb' }, { k:'SUB',   lbl:'SUB',   cls:'blu' },
+  { k:'INFO',  lbl:'INFO',  cls:'' }
+];
+
+const esc = s => String(s == null ? '' : s)
+  .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function toast(msg, err){
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(t._t); t._t = setTimeout(() => t.className = 'toast', 1400);
+}
+
+// method defaults to POST when there's a body — pass it explicitly for the
+// body-less POST endpoints or they'd go out as GET.
+async function api(path, body, method){
+  try{
+    const r = await fetch(ORIGIN + path, {
+      method: method || (body ? 'POST' : 'GET'),
+      headers: body ? { 'Content-Type':'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      cache: 'no-store'
+    });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    $('offline').classList.remove('show');
+    apply(await r.json());
+    return true;
+  }catch(e){
+    $('offline').classList.add('show');
+    return false;
+  }
+}
+
+const patch   = p => api('/api/volley', p);
+const setCmd  = b => api('/api/volley/set', b);
+const serveTo = side => api('/api/volley/serve', { side });
+const toggleFlag = k => patch({ [k]: !S[k] });
+const setLang = l => patch({ lang: l });
+const toggleAir  = () => patch({ visible: !S.visible });
+const toggleMain = () => patch({ mainVisible: !S.mainVisible });
+
+// A won rally: the server takes the serve and closes the set if it's over.
+function point(side, delta){
+  const wasSet = S ? S.set : 1;
+  api('/api/volley/point', { side, delta }).then(ok => {
+    if(ok && S && S.set !== wasSet) toast(S.status === 'FINAL' ? 'MATCH COMPLETE' : 'Set ' + wasSet + ' complete');
+    else if(ok && S && S.status === 'FINAL' && wasSet === S.set) toast('MATCH COMPLETE');
+  });
+}
+const bumpTo = (side, delta) => api('/api/volley/timeout', { side, delta });
+const undo = () => api('/api/volley/undo', null, 'POST').then(ok => { if(ok) toast('Undone'); });
+
+function endSet(){
+  if(!S) return;
+  if(S.home.pts === S.away.pts) return toast('Scores are level — no set winner', true);
+  const w = S.home.pts > S.away.pts ? S.home : S.away;
+  if(!confirm(`End set ${S.set} — ${S.home.pts} : ${S.away.pts} to ${(w.name || w.short || 'the leader')}?`)) return;
+  setCmd({ action:'end' });
+}
+
+function newMatch(){
+  if(!confirm('Reset points, sets, timeouts and set history?\n(Teams and format are kept.)')) return;
+  api('/api/volley/reset', null, 'POST').then(ok => { if(ok) toast('New match'); });
+}
+
+/* ── banner ── */
+const setEvType = k => { evType = k; paintEv(); };
+const setEvSide = s => { evSide = s; paintEv(); };
+function paintEv(){
+  $('evTypes').innerHTML = EV_TYPES.map(t =>
+    `<button class="b ${t.k === evType ? (t.cls || 'on') : ''}" onclick="setEvType('${t.k}')">${t.lbl}</button>`
+  ).join('');
+  $('evSideH').className = 'b' + (evSide === 'home' ? ' on' : '');
+  $('evSideA').className = 'b' + (evSide === 'away' ? ' on' : '');
+}
+function sendEvent(){
+  api('/api/volley/event', {
+    type: evType, side: evSide,
+    text: $('evText').value, sub: $('evSub').value.trim(), dur: 8
+  }).then(ok => { if(ok) toast('Banner on air'); });
+}
+
+/* ── derived state, mirrored from the overlay so both agree ── */
+const target  = d => ((d.set >= d.bestOf ? d.decidingTo : d.pointsTo) || 25);
+function pointFlag(d){
+  if(d.status === 'FINAL') return null;
+  const t = target(d);
+  for(const side of ['home','away']){
+    const me = d[side].pts, other = d[side === 'home' ? 'away' : 'home'].pts;
+    const near = (me >= t - 1 && me - other >= 1) || (d.cap > 0 && me >= d.cap - 1);
+    if(near) return { side, match: d[side].sets >= Math.floor(d.bestOf/2) };
+  }
+  return null;
+}
+
+/* ── render ── */
+function apply(d){
+  if(!d) return;
+  S = d;
+  const dv = d.lang === 'dv';
+
+  $('mainBtn').className   = 'air' + (d.mainVisible ? ' live' : '');
+  $('mainBtn').textContent = d.mainVisible ? 'MAIN ON AIR' : 'MAIN BOARD';
+  $('bugBtn').className    = 'air' + (d.visible && !d.mainVisible ? ' live' : '')
+                                   + (d.mainVisible ? ' dim' : '');
+  $('bugBtn').textContent  = d.mainVisible ? 'BUG HIDDEN'
+                           : d.visible ? 'BUG ON AIR' : 'CORNER BUG';
+
+  $('langEn').className = 'lang' + (d.lang === 'en' ? ' on' : '');
+  $('langDv').className = 'lang dv' + (dv ? ' on' : '');
+
+  const hN = d.home.name || d.home.short || 'HOME';
+  const aN = d.away.name || d.away.short || 'AWAY';
+  const nameKey = hN + '|' + aN + '|' + d.lang + '|' + d.home.color + '|' + d.away.color;
+  if(nameKey !== lastNames){
+    lastNames = nameKey;
+    $('nH').innerHTML = `<i class="swatch" style="background:${esc(d.home.color)}"></i><span>${esc(hN)}</span>`;
+    $('nA').innerHTML = `<i class="swatch" style="background:${esc(d.away.color)}"></i><span>${esc(aN)}</span>`;
+    $('nH').className = 'rname' + (dv ? ' dv' : '');
+    $('nA').className = 'rname' + (dv ? ' dv' : '');
+    $('evText').className = dv ? 'dv' : '';
+    $('srvH').textContent = 'SERVE ◂ ' + (d.home.short || hN).slice(0,10).toUpperCase();
+    $('srvA').textContent = 'SERVE ▸ ' + (d.away.short || aN).slice(0,10).toUpperCase();
+  }
+
+  $('pH').textContent = d.home.pts || 0;
+  $('pA').textContent = d.away.pts || 0;
+  $('stH').innerHTML = 'SETS <b>' + (d.home.sets || 0) + '</b>';
+  $('stA').innerHTML = 'SETS <b>' + (d.away.sets || 0) + '</b>';
+
+  $('srvH').className = 'b' + (d.serve === 'home' ? ' org' : '');
+  $('srvA').className = 'b' + (d.serve === 'away' ? ' org' : '');
+  $('undoBtn').className = 'b' + (d.canUndo ? ' amb' : '');
+
+  $('setNo').textContent = d.set;
+  $('fmtLbl').textContent = `BEST OF ${d.bestOf} · TO ${target(d)}`;
+
+  const pf = pointFlag(d);
+  let st = '', cls = 'statusline';
+  if(d.status === 'FINAL'){ st = 'MATCH COMPLETE'; cls += ' done'; }
+  else if(pf){ st = (pf.match ? 'MATCH POINT — ' : 'SET POINT — ') +
+                    ((pf.side === 'home' ? (d.home.short || hN) : (d.away.short || aN)) || '').toUpperCase();
+               cls += ' hot'; }
+  else if(d.status === 'TO'){ st = 'TIMEOUT'; }
+  else if(d.status === 'BREAK'){ st = 'SET BREAK'; }
+  else if(d.status === 'PRE'){ st = 'WARM UP'; }
+  else { st = 'IN PLAY'; }
+  $('statusLine').textContent = st;
+  $('statusLine').className = cls;
+
+  const chipKey = JSON.stringify([d.history, d.set, d.home.pts, d.away.pts, d.status]);
+  if(chipKey !== lastChips){
+    lastChips = chipKey;
+    const done = (d.history || []).map((s,i) =>
+      `<span class="chip"><i>S${i+1}</i>${s.h} – ${s.a}</span>`).join('');
+    const live = d.status === 'FINAL' ? ''
+      : `<span class="chip live"><i>S${d.set}</i>${d.home.pts} – ${d.away.pts}</span>`;
+    $('chips').innerHTML = done + live;
+  }
+
+  const toKey = JSON.stringify([d.home.to, d.away.to, d.maxTo, d.home.short, d.away.short, hN, aN]);
+  if(toKey !== lastTo){
+    lastTo = toKey;
+    $('toBody').innerHTML = ['home','away'].map(side => {
+      const s = d[side], nm = s.short || s.name || side.toUpperCase();
+      const dots = Array.from({length:d.maxTo || 2},
+        (_,i) => `<i class="tod ${i < (s.to||0) ? 'used' : ''}"></i>`).join('');
+      return `<div class="torow">
+        <span class="toname">${esc(nm)}</span>
+        <span class="todots">${dots}</span>
+        <button class="b sm" onclick="bumpTo('${side}',-1)">−</button>
+        <button class="b sm amb" onclick="bumpTo('${side}',1)">+</button>
+      </div>`;
+    }).join('');
+  }
+
+  $('togTo').className   = 'b sm' + (d.showTimeouts ? ' on' : '');
+  $('togHist').className = 'b sm' + (d.showHistory ? ' on' : '');
+  $('togAuto').className = 'b sm' + (d.autoSet ? ' on' : '');
+}
+
+/* ── boot ── */
+paintEv();
+api('/api/volley');
+setInterval(() => api('/api/volley'), 2000);
+// iOS Safari pauses timers in a background tab — resync the moment it comes back
+document.addEventListener('visibilitychange', () => { if(!document.hidden) api('/api/volley'); });
+</script>
+</body>
+</html>

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VxD Volleyball Bug</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  @font-face{font-family:'MVWaheed';src:url('fonts/MVWaheed.otf') format('opentype')}
+  @font-face{font-family:'MvEamaan';src:url('fonts/Mv_Eamaan_XP.otf') format('opentype')}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:transparent}
+  body{
+    overflow:hidden;width:1920px;height:1080px;
+    font-family:'Inter','Segoe UI',Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  :root{
+    --white:#ffffff;
+    --dark:#2b2b2b;
+    --ink:#16181c;
+    --orange:#ff7a18;
+    --green:#16a34a;
+    --red:#ef2b2b;
+    --shadow:0 8px 22px rgba(0,0,0,.38);
+  }
+
+  /* Condensed numerals, same as the football bug */
+  .num{font-family:'Barlow Condensed','Arial Narrow','Segoe UI',Arial,sans-serif}
+
+  /* ══ CORNER BUG ══════════════════════════════════════════ */
+  .bug{
+    position:absolute;top:56px;left:64px;
+    display:flex;flex-direction:column;align-items:flex-start;
+    transition:opacity .4s ease, transform .5s cubic-bezier(.22,1,.36,1);
+  }
+  .bug.hidden{opacity:0;transform:translateX(-40px);pointer-events:none}
+  body.pos-tc .bug{left:50%;transform:translateX(-50%);align-items:center}
+  body.pos-tc .bug.hidden{transform:translateX(-50%) translateY(-40px)}
+  body.pos-bl .bug{top:auto;bottom:210px}
+
+  .bar{
+    display:flex;align-items:center;
+    width:694px;height:58px;padding:0 9px;
+    background:var(--white);border-radius:14px;
+    box-shadow:var(--shadow);
+    /* reserves the set pill's overhang so the rows below never collide with it */
+    margin-bottom:56px;
+  }
+
+  .team{flex:1;display:flex;align-items:center;justify-content:space-between;min-width:0}
+  .logo{width:42px;height:42px;flex:0 0 42px;object-fit:contain;display:block}
+  .logo.empty{visibility:hidden}
+  .tname{
+    font-size:25px;font-weight:800;color:var(--ink);
+    text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;padding:0 12px;
+  }
+  /* Serve indicator — the one thing a volleyball viewer can't infer */
+  .serve{
+    width:15px;height:15px;flex:0 0 15px;border-radius:50%;
+    background:var(--orange);box-shadow:0 0 0 3px #ff7a1833;
+  }
+  .serve.off{visibility:hidden}
+
+  /* Raised dark centre block: sets on top, rally points below */
+  .scorebox{
+    position:relative;align-self:stretch;margin:-11px 0;
+    flex:0 0 auto;min-width:150px;padding:0 16px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:var(--dark);border-radius:12px;
+    box-shadow:0 6px 16px rgba(0,0,0,.34);
+  }
+  .setline{
+    display:flex;align-items:center;gap:6px;
+    font-size:13px;font-weight:900;letter-spacing:1.1px;
+    color:#ffffff9e;line-height:1;margin-bottom:1px;text-transform:uppercase;
+  }
+  .setline b{color:#fff;font-size:15px;font-weight:900}
+  .setline.empty{display:none}
+  .ptrow{display:flex;align-items:center;gap:9px}
+  .pt{font-size:40px;font-weight:700;color:#fff;line-height:1}
+  .dash{font-size:28px;font-weight:600;color:#ffffffcc;line-height:1;padding-top:2px}
+
+  /* Hangs off the bottom of the centre block, so it tracks the centre exactly */
+  .setpill{
+    position:absolute;top:100%;left:50%;transform:translateX(-50%);
+    margin-top:2px;height:52px;min-width:132px;padding:6px 15px 7px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:var(--orange);border-radius:6px 6px 14px 14px;
+    box-shadow:0 6px 14px rgba(0,0,0,.3);
+    white-space:nowrap;transition:background .25s ease;
+  }
+  .setpill.off{display:none}
+  .setpill.hot{background:var(--red)}          /* set point */
+  .setpill.match{background:#b30000}           /* match point */
+  .setpill.done{background:var(--green)}       /* final */
+  .flag{
+    font-size:10px;font-weight:800;letter-spacing:1.2px;color:#ffffffe6;
+    text-transform:uppercase;line-height:1;margin-bottom:3px;
+  }
+  .flag.empty{display:none}
+  .setno{font-size:25px;font-weight:700;color:#fff;line-height:1;letter-spacing:.5px}
+
+  /* Timeouts, tucked under the bar either side of the set pill */
+  .statsrow{
+    display:grid;grid-template-columns:auto 130px auto;
+    justify-content:center;align-items:start;
+    width:100%;margin-top:-50px;
+  }
+  .statsrow.hidden{display:none}
+  .spill{
+    display:flex;align-items:center;gap:7px;height:30px;
+    padding:0 12px;background:var(--dark);border-radius:8px;
+    box-shadow:0 4px 12px rgba(0,0,0,.28);
+    font-size:12px;font-weight:800;color:#fff;letter-spacing:.6px;white-space:nowrap;
+  }
+  .spill.left{justify-self:end;margin-right:9px}
+  .spill.right{justify-self:start;margin-left:9px}
+  .spill.right .cap{order:1}
+  /* Team colour lives here so the white bar stays exactly like the football bug */
+  .cap{width:5px;height:16px;border-radius:3px;flex:0 0 5px;display:block}
+  .tos{display:flex;gap:4px;align-items:center}
+  .to{width:9px;height:9px;border-radius:50%;background:#ffffff36;display:block}
+  .to.used{background:var(--orange)}
+
+  /* ══ SET-BY-SET CHIPS ════════════════════════════════════ */
+  .hist{
+    margin-top:24px;display:flex;gap:7px;flex-wrap:wrap;
+  }
+  .hist.hidden{display:none}
+  .chip{
+    display:flex;align-items:center;gap:7px;height:30px;padding:0 11px;
+    background:#f3f3f3;border-radius:8px;box-shadow:var(--shadow);
+    font-size:13px;font-weight:900;color:var(--ink);letter-spacing:.4px;white-space:nowrap;
+  }
+  .chip i{font-style:normal;font-size:10px;font-weight:900;color:#8a8a8a;letter-spacing:1px}
+  .chip.live{background:var(--dark);color:#fff}
+  .chip.live i{color:var(--orange)}
+
+  /* ══ EVENT BANNER ════════════════════════════════════════ */
+  .event{
+    margin-top:14px;display:flex;align-items:center;
+    height:52px;padding:6px;background:var(--dark);
+    border-radius:12px;box-shadow:var(--shadow);max-width:840px;
+    transition:opacity .3s ease, transform .35s cubic-bezier(.22,1,.36,1);
+  }
+  .event.hidden{opacity:0;transform:translateX(-26px) scale(.97);pointer-events:none;
+                height:0;margin-top:0;padding:0;overflow:hidden}
+  .evtype{
+    display:flex;align-items:center;height:100%;padding:0 22px;
+    border-radius:999px;font-size:21px;font-weight:900;letter-spacing:.6px;
+    color:#fff;white-space:nowrap;text-transform:uppercase;
+  }
+  .evtype.POINT{background:var(--green)}
+  .evtype.ACE{background:#7c3aed}
+  .evtype.BLOCK{background:#0891b2}
+  .evtype.SPIKE{background:#ea580c}
+  .evtype.TIMEOUT{background:#f7c600;color:#1a1a1a}
+  .evtype.SUB{background:#2563eb}
+  .evtype.INFO{background:#5b6472}
+  .evbody{display:flex;align-items:center;gap:16px;padding:0 20px;min-width:0}
+  .evtext{
+    font-size:24px;font-weight:800;color:#fff;letter-spacing:.4px;
+    text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .evsub{font-size:19px;font-weight:900;color:var(--orange);white-space:nowrap;flex:0 0 auto}
+  .evsub.empty{display:none}
+
+  /* ══ MAIN CENTRE BOARD ═══════════════════════════════════ */
+  .mainwrap{
+    position:absolute;bottom:112px;left:50%;transform:translateX(-50%);
+    display:flex;flex-direction:column;align-items:center;
+    transition:opacity .45s ease, transform .5s cubic-bezier(.22,1,.36,1);
+  }
+  .mainwrap.hidden{opacity:0;transform:translateX(-50%) translateY(46px);pointer-events:none}
+  .main{
+    display:flex;align-items:center;
+    width:852px;height:68px;padding:0 10px;
+    background:var(--white);border-radius:18px;box-shadow:var(--shadow);
+  }
+  .main .logo{width:60px;height:60px;flex:0 0 60px}
+  .main .tname{font-size:30px;padding:0 16px}
+  .main .serve{width:17px;height:17px;flex:0 0 17px}
+  .main .scorebox{margin:-15px 0;min-width:186px;padding:0 22px;border-radius:13px}
+  .main .mper{
+    font-size:15px;font-weight:800;letter-spacing:1.3px;color:#fff;
+    text-transform:uppercase;line-height:1;margin-bottom:3px;white-space:nowrap;
+  }
+  .main .pt{font-size:44px}
+  .main .dash{font-size:31px}
+  /* the main board carries its set chips below the bar, centred */
+  .mainwrap .hist{margin-top:14px;justify-content:center}
+
+  /* ══ DHIVEHI / RTL ═══════════════════════════════════════ */
+  body.dv .bar,
+  body.dv .main,
+  body.dv .event,
+  body.dv .hist{flex-direction:row-reverse}
+  body.dv .team{flex-direction:row-reverse}
+  body.dv .bug{align-items:flex-end}
+  body.dv .spill{flex-direction:row-reverse}
+  body.dv .spill.left{justify-self:start;margin-right:0;margin-left:9px}
+  body.dv .spill.right{justify-self:end;margin-left:0;margin-right:9px}
+  body.dv .chip{flex-direction:row-reverse}
+  body.dv .tname{
+    font-family:'MVWaheed','Segoe UI',Arial,sans-serif;
+    text-transform:none;font-weight:400;font-size:28px;
+    letter-spacing:0;direction:rtl;padding-top:7px;
+  }
+  body.dv .main .tname{font-size:33px}
+  body.dv .flag,
+  body.dv .setline,
+  body.dv .spill,
+  body.dv .chip i,
+  body.dv .mper{font-family:'MvEamaan','Segoe UI',Arial,sans-serif;direction:rtl;font-weight:400;letter-spacing:0}
+  body.dv .setno{font-family:'MvEamaan','Segoe UI',Arial,sans-serif;font-weight:400;font-size:20px;direction:rtl}
+  body.dv .mper{font-size:17px}
+  body.dv .flag{font-size:12px}
+  body.dv .evtext{
+    font-family:'MVWaheed','Segoe UI',Arial,sans-serif;
+    direction:rtl;font-weight:400;text-transform:none;padding-top:7px;
+  }
+  body.dv .evtype{font-family:'MvEamaan','Segoe UI',Arial,sans-serif;letter-spacing:0;font-weight:400}
+  body.dv.pos-tl .bug{left:auto;right:64px}
+  body.dv.pos-tl .bug.hidden{transform:translateX(40px)}
+  body.dv .event.hidden{transform:translateX(26px) scale(.97)}
+</style>
+</head>
+<body>
+
+  <!-- ── corner bug ── -->
+  <div class="bug hidden" id="bug">
+    <div class="bar">
+      <div class="team home">
+        <img class="logo empty" id="lgHome" alt="">
+        <span class="tname" id="nmHome">HOME</span>
+        <i class="serve off" id="svHome"></i>
+      </div>
+
+      <div class="scorebox">
+        <span class="setline" id="setLine"></span>
+        <span class="ptrow">
+          <span class="pt num" id="ptHome">0</span>
+          <span class="dash num">–</span>
+          <span class="pt num" id="ptAway">0</span>
+        </span>
+        <div class="setpill" id="setPill">
+          <span class="flag empty" id="setFlag"></span>
+          <span class="setno" id="setNo">SET 1</span>
+        </div>
+      </div>
+
+      <div class="team away">
+        <i class="serve off" id="svAway"></i>
+        <span class="tname" id="nmAway">AWAY</span>
+        <img class="logo empty" id="lgAway" alt="">
+      </div>
+    </div>
+
+    <div class="statsrow hidden" id="statsRow">
+      <div class="spill left" id="spHome"></div>
+      <div></div>
+      <div class="spill right" id="spAway"></div>
+    </div>
+
+    <div class="hist hidden" id="histRow"></div>
+
+    <div class="event hidden" id="evBox">
+      <span class="evtype POINT" id="evType">POINT</span>
+      <div class="evbody">
+        <span class="evtext" id="evText"></span>
+        <span class="evsub empty" id="evSub"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── main centre board ── -->
+  <div class="mainwrap hidden" id="mainWrap">
+    <div class="main">
+      <div class="team home">
+        <img class="logo empty" id="mLgHome" alt="">
+        <span class="tname" id="mNmHome">HOME</span>
+        <i class="serve off" id="mSvHome"></i>
+      </div>
+
+      <div class="scorebox">
+        <span class="mper" id="mPer">SET 1</span>
+        <span class="ptrow">
+          <span class="pt num" id="mStHome">0</span>
+          <span class="dash num">–</span>
+          <span class="pt num" id="mStAway">0</span>
+        </span>
+      </div>
+
+      <div class="team away">
+        <i class="serve off" id="mSvAway"></i>
+        <span class="tname" id="mNmAway">AWAY</span>
+        <img class="logo empty" id="mLgAway" alt="">
+      </div>
+    </div>
+    <div class="hist" id="mHistRow"></div>
+  </div>
+
+<script>
+(() => {
+  const P       = new URLSearchParams(location.search);
+  const POS     = (P.get('pos') || 'tl').toLowerCase();      // tl | tc | bl
+  const PREVIEW = P.get('preview') === '1';
+  const ORIGIN  = location.origin;
+
+  document.body.classList.add('pos-' + (['tl','tc','bl'].includes(POS) ? POS : 'tl'));
+
+  const $ = id => document.getElementById(id);
+  const el = {
+    bug:$('bug'), mainWrap:$('mainWrap'),
+    lgHome:$('lgHome'), lgAway:$('lgAway'), nmHome:$('nmHome'), nmAway:$('nmAway'),
+    svHome:$('svHome'), svAway:$('svAway'),
+    setLine:$('setLine'), ptHome:$('ptHome'), ptAway:$('ptAway'),
+    setPill:$('setPill'), setFlag:$('setFlag'), setNo:$('setNo'),
+    statsRow:$('statsRow'), spHome:$('spHome'), spAway:$('spAway'),
+    histRow:$('histRow'), mHistRow:$('mHistRow'),
+    evBox:$('evBox'), evType:$('evType'), evText:$('evText'), evSub:$('evSub'),
+    mLgHome:$('mLgHome'), mLgAway:$('mLgAway'), mNmHome:$('mNmHome'), mNmAway:$('mNmAway'),
+    mSvHome:$('mSvHome'), mSvAway:$('mSvAway'),
+    mStHome:$('mStHome'), mStAway:$('mStAway'), mPer:$('mPer')
+  };
+
+  const T = {
+    en:{
+      set:'SET', sets:'SETS', final:'FINAL', setPoint:'SET POINT', matchPoint:'MATCH POINT',
+      timeout:'TIMEOUT', break:'SET BREAK', warmup:'WARM UP', to:'TO',
+      ev:{ POINT:'POINT', ACE:'ACE', BLOCK:'BLOCK', SPIKE:'SPIKE', TIMEOUT:'TIMEOUT', SUB:'SUB', INFO:'INFO' }
+    },
+    dv:{
+      set:'ސެޓް', sets:'ސެޓް', final:'ނިމުނީ', setPoint:'ސެޓް ޕޮއިންޓް', matchPoint:'މެޗް ޕޮއިންޓް',
+      timeout:'ޓައިމް އައުޓް', break:'ސެޓް ބްރޭކް', warmup:'ފެށޭ', to:'ޓީ.އޯ',
+      ev:{ POINT:'ޕޮއިންޓް', ACE:'އޭސް', BLOCK:'ބްލޮކް', SPIKE:'ސްޕައިކް', TIMEOUT:'ޓައިމް އައުޓް', SUB:'ބަދަލު', INFO:'މައުލޫމާތު' }
+    }
+  };
+  const tr = d => T[d && d.lang === 'dv' ? 'dv' : 'en'];
+
+  let skew = 0, lastKey = '';
+  const lastLv = { home:-1, away:-1 };
+
+  const escapeHtml = s => String(s == null ? '' : s)
+    .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  const target  = d => ((d.set >= d.bestOf ? d.decidingTo : d.pointsTo) || 25);
+  const setsWin = d => Math.floor((d.bestOf || 5) / 2) + 1;
+
+  // Is a side one rally from taking the set — and would that also take the match?
+  function pointFlag(d){
+    if(d.status === 'FINAL') return null;
+    const t = target(d);
+    for(const side of ['home','away']){
+      const me = d[side].pts, other = d[side === 'home' ? 'away' : 'home'].pts;
+      const near = (me >= t - 1 && me - other >= 1) || (d.cap > 0 && me >= d.cap - 1);
+      if(near) return { side, match: d[side].sets >= setsWin(d) - 1 };
+    }
+    return null;
+  }
+
+  function chipsHtml(d, includeLive){
+    const L = tr(d);
+    const done = (d.history || []).map((s, i) =>
+      `<span class="chip"><i>${L.set} ${i+1}</i>${s.h} – ${s.a}</span>`).join('');
+    if(!includeLive || d.status === 'FINAL') return done;
+    return done + `<span class="chip live"><i>${L.set} ${d.set}</i>${d.home.pts} – ${d.away.pts}</span>`;
+  }
+
+  function render(d){
+    const L = tr(d);
+    document.body.classList.toggle('dv', d.lang === 'dv');
+
+    const hName = d.home.name || d.home.short || 'HOME';
+    const aName = d.away.name || d.away.short || 'AWAY';
+    el.nmHome.textContent = hName;  el.mNmHome.textContent = hName;
+    el.nmAway.textContent = aName;  el.mNmAway.textContent = aName;
+
+    el.ptHome.textContent = d.home.pts ?? 0;
+    el.ptAway.textContent = d.away.pts ?? 0;
+
+    // Sets won ride small above the rally points on the corner bug,
+    // and are the headline number on the main board.
+    const sets = `${L.sets} <b>${d.home.sets || 0}</b>–<b>${d.away.sets || 0}</b>`;
+    el.setLine.innerHTML = sets;
+    el.setLine.classList.toggle('empty', !(d.home.sets || d.away.sets) && d.set === 1 && d.status === 'PRE');
+    el.mStHome.textContent = d.home.sets || 0;
+    el.mStAway.textContent = d.away.sets || 0;
+
+    // Serve — hidden entirely once the match is over
+    const srv = d.status === 'FINAL' ? '' : d.serve;
+    el.svHome.classList.toggle('off', srv !== 'home');
+    el.svAway.classList.toggle('off', srv !== 'away');
+    el.mSvHome.classList.toggle('off', srv !== 'home');
+    el.mSvAway.classList.toggle('off', srv !== 'away');
+
+    // Set pill: the flag line is the urgent bit, the set number the steady bit
+    const pf = pointFlag(d);
+    let flag = '', cls = 'setpill';
+    if(d.status === 'FINAL'){ cls += ' done'; }
+    else if(d.status === 'TO'){ flag = L.timeout; }
+    else if(pf){ flag = pf.match ? L.matchPoint : L.setPoint; cls += pf.match ? ' match' : ' hot'; }
+    else if(d.status === 'BREAK'){ flag = L.break; }
+    else if(d.status === 'PRE'){ flag = L.warmup; }
+
+    el.setPill.className = cls;
+    el.setFlag.textContent = flag;
+    el.setFlag.classList.toggle('empty', !flag);
+    el.setNo.textContent = d.status === 'FINAL' ? L.final : `${L.set} ${d.set}`;
+    el.mPer.textContent  = d.status === 'FINAL' ? L.final : `${L.set} ${d.set}`;
+
+    // Timeouts
+    const showTo = d.showTimeouts && d.status !== 'FINAL';
+    el.statsRow.classList.toggle('hidden', !showTo);
+    if(showTo){
+      for(const side of ['home','away']){
+        const s = d[side];
+        const dots = Array.from({ length: d.maxTo || 2 },
+          (_, i) => `<i class="to ${i < (s.to || 0) ? 'used' : ''}"></i>`).join('');
+        (side === 'home' ? el.spHome : el.spAway).innerHTML =
+          `<i class="cap" style="background:${escapeHtml(s.color || '#888')}"></i>` +
+          `<span>${L.to}</span><span class="tos">${dots}</span>`;
+      }
+    }
+
+    // Set-by-set chips
+    const chips = chipsHtml(d, false);
+    el.histRow.innerHTML = chips;
+    el.histRow.classList.toggle('hidden', !d.showHistory || !chips);
+    el.mHistRow.innerHTML = chipsHtml(d, true);
+
+    // Main board takes the screen: the corner bug and everything under it goes away
+    el.mainWrap.classList.toggle('hidden', !d.mainVisible);
+    el.bug.classList.toggle('hidden', !d.visible || d.mainVisible);
+  }
+
+  function renderEvent(d){
+    const e = d.event || {};
+    const live = e.visible && !d.mainVisible && (Date.now() + skew) - e.at < e.dur * 1000;
+    el.evBox.classList.toggle('hidden', !live);
+    if(!live) return;
+
+    const types = ['POINT','ACE','BLOCK','SPIKE','TIMEOUT','SUB','INFO'];
+    const type = types.includes(e.type) ? e.type : 'INFO';
+    el.evType.className   = 'evtype ' + type;
+    el.evType.textContent = tr(d).ev[type] || type;
+    el.evText.textContent = e.text || '';
+    el.evSub.textContent  = e.sub || '';
+    el.evSub.classList.toggle('empty', !e.sub);
+  }
+
+  async function loadLogo(side){
+    try{
+      const r = await fetch(`${ORIGIN}/api/volley/logo/${side}`, { cache:'no-store' });
+      if(!r.ok) return;
+      const d = await r.json();
+      const imgs = side === 'home' ? [el.lgHome, el.mLgHome] : [el.lgAway, el.mLgAway];
+      for(const img of imgs){
+        if(d.logo){ img.src = d.logo; img.classList.remove('empty'); }
+        else      { img.removeAttribute('src'); img.classList.add('empty'); }
+      }
+    }catch(e){}
+  }
+
+  async function poll(){
+    try{
+      const r = await fetch(`${ORIGIN}/api/volley?t=${Date.now()}`, { cache:'no-store' });
+      if(!r.ok) return;
+      const d = await r.json();
+      skew = (d.serverNow || Date.now()) - Date.now();
+
+      for(const side of ['home','away']){
+        if((d[side].lv || 0) !== lastLv[side]){ lastLv[side] = d[side].lv || 0; loadLogo(side); }
+      }
+
+      // Cheap diff — the event is excluded, it's time-sensitive and ticks on its own
+      const key = JSON.stringify([
+        d.visible, d.mainVisible, d.lang, d.showTimeouts, d.showHistory,
+        d.serve, d.set, d.status, d.bestOf, d.pointsTo, d.decidingTo, d.cap, d.maxTo, d.history,
+        d.home.name, d.home.short, d.home.color, d.home.pts, d.home.sets, d.home.to,
+        d.away.name, d.away.short, d.away.color, d.away.pts, d.away.sets, d.away.to
+      ]);
+      if(key !== lastKey){ lastKey = key; render(d); }
+
+      renderEvent(d);
+    }catch(e){}
+  }
+
+  if(PREVIEW){
+    render({
+      visible:true, mainVisible:false, lang:'en', showTimeouts:true, showHistory:true,
+      bestOf:5, pointsTo:25, decidingTo:15, cap:0, maxTo:2,
+      serve:'home', set:3, status:'LIVE',
+      history:[{h:25,a:20},{h:23,a:25}],
+      home:{ name:'MAAFANNU', short:'MAF', color:'#e11d48', pts:24, sets:1, to:1, lv:0 },
+      away:{ name:'HENVEIRU', short:'HEN', color:'#0ea5e9', pts:22, sets:1, to:0, lv:0 },
+      event:{ visible:false }
+    });
+  }else{
+    poll();
+    setInterval(poll, 700);        // rally scoring moves fast — poll a bit tighter
+  }
+})();
+</script>
+</body>
+</html>

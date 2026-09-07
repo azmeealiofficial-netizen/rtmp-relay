@@ -477,6 +477,276 @@ app.post('/api/score/reset', (req, res) => {
   res.json(scoreLight());
 });
 
+// ============================================================
+// VOLLEYBALL SCOREBOARD  (/api/volley/*)
+// Separate live match from the soccer board, so a volleyball game
+// and a football game never fight over the same state.
+//
+// No clock — volleyball is rally scoring, so the interesting state
+// is points, sets, serve and timeouts. Because points come fast and
+// an operator WILL misclick, every mutating call pushes a snapshot
+// onto an undo stack.
+// ============================================================
+const emptyVSide = (color) => ({
+  name: '', short: '', color,
+  pts: 0, sets: 0, to: 0,          // to = timeouts used this set
+  logo: '', lv: 0
+});
+
+const blankVolley = () => ({
+  visible: false,          // corner bug
+  mainVisible: false,      // big centre board — when on, everything else hides
+  lang: 'en',
+  bestOf: 5,               // 3 or 5
+  pointsTo: 25,            // target for a normal set
+  decidingTo: 15,          // target for the deciding (last possible) set
+  cap: 0,                  // hard cap, 0 = play on until 2 clear
+  maxTo: 2,                // timeouts per team per set
+  autoSet: true,           // finish the set by itself once it's mathematically won
+  showTimeouts: true,
+  showHistory: true,       // per-set chips
+  serve: '',               // '' | 'home' | 'away'
+  set: 1,
+  status: 'PRE',           // PRE | LIVE | BREAK | TO | FINAL
+  history: [],             // [{ h, a }] completed sets, in order
+  home: emptyVSide('#1d4ed8'),
+  away: emptyVSide('#dc2626'),
+  event: { visible: false, type: 'POINT', side: 'home', text: '', sub: '', at: 0, dur: 8 }
+});
+
+let volley = blankVolley();
+let volleyUndo = [];
+
+function volleyLight() {
+  const strip = (s) => { const { logo, ...rest } = s; return rest; };
+  return {
+    ...volley,
+    home: strip(volley.home),
+    away: strip(volley.away),
+    canUndo: volleyUndo.length > 0,
+    serverNow: Date.now()
+  };
+}
+
+// Snapshot before anything that changes the match, so a misclick during a
+// rally is one tap to reverse. Logos are excluded — they're heavy and never
+// change as part of scoring.
+function volleyMark() {
+  const light = { ...volley, home: { ...volley.home }, away: { ...volley.away } };
+  delete light.home.logo; delete light.away.logo;
+  volleyUndo.push(JSON.stringify({ ...light, history: volley.history.slice() }));
+  if (volleyUndo.length > 40) volleyUndo.shift();
+}
+
+let volleySaveTimer = null;
+function saveVolley() {
+  if (!pool) return;
+  clearTimeout(volleySaveTimer);
+  volleySaveTimer = setTimeout(async () => {
+    try {
+      await pool.query(
+        'INSERT INTO volleyball (id, data) VALUES ($1,$2) ON CONFLICT (id) DO UPDATE SET data=$2',
+        ['match', volley]
+      );
+    } catch (e) { console.error('volleyball save failed:', e.message); }
+  }, 400);
+}
+
+const vSetsToWin = () => Math.floor((volley.bestOf || 5) / 2) + 1;
+const vIsDeciding = () => volley.set >= (volley.bestOf || 5);
+const vTarget = () => (vIsDeciding() ? volley.decidingTo : volley.pointsTo) || 25;
+
+// Close the current set: bank the score, credit the winner, reset for the next.
+function vEndSet() {
+  const h = volley.home.pts, a = volley.away.pts;
+  if (h === a) return false;                      // nothing decided yet
+  const w = h > a ? 'home' : 'away';
+  volley.history.push({ h, a });
+  volley[w].sets += 1;
+  volley.home.pts = 0; volley.away.pts = 0;
+  volley.home.to = 0;  volley.away.to = 0;
+
+  if (volley[w].sets >= vSetsToWin()) {
+    volley.status = 'FINAL';
+  } else {
+    volley.set += 1;
+    volley.status = 'BREAK';
+    // Teams alternate first serve each set
+    volley.serve = volley.serve === 'home' ? 'away' : volley.serve === 'away' ? 'home' : '';
+  }
+  return true;
+}
+
+// Has the set just been won? Two clear points past the target, or the cap hit.
+function vSetIsWon() {
+  const t = vTarget(), h = volley.home.pts, a = volley.away.pts;
+  const hi = Math.max(h, a), lo = Math.min(h, a);
+  if (hi < t) return false;
+  if (volley.cap > 0 && hi >= volley.cap) return true;
+  return hi - lo >= 2;
+}
+
+app.use('/api/volley', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  next();
+});
+
+app.get('/api/volley', (req, res) => res.json(volleyLight()));
+
+app.get('/api/volley/logo/:side', (req, res) => {
+  const s = volley[req.params.side];
+  if (!s) return res.status(404).json({ error: 'Unknown side' });
+  res.json({ logo: s.logo || '', lv: s.lv || 0 });
+});
+
+// Patch any subset. Nested home/away merge one level deep, same as /api/score.
+app.post('/api/volley', (req, res) => {
+  const patch = req.body || {};
+  volleyMark();
+  for (const [k, v] of Object.entries(patch)) {
+    const cur = volley[k];
+    if (v && typeof v === 'object' && !Array.isArray(v) && cur && typeof cur === 'object' && !Array.isArray(cur)) {
+      if ((k === 'home' || k === 'away') && typeof v.logo === 'string' && v.logo !== cur.logo) v.lv = Date.now();
+      Object.assign(cur, v);
+    } else {
+      volley[k] = v;
+    }
+  }
+  saveVolley();
+  res.json(volleyLight());
+});
+
+// A rally point. Scoring also wins the serve (side-out), and the set closes
+// itself when it's mathematically over unless autoSet is switched off.
+app.post('/api/volley/point', (req, res) => {
+  const { side, delta = 1 } = req.body || {};
+  const s = volley[side];
+  if (!s) return res.status(400).json({ error: 'Unknown side' });
+  volleyMark();
+
+  s.pts = Math.max(0, (s.pts || 0) + Number(delta));
+  if (Number(delta) > 0) {
+    volley.serve = side;
+    if (volley.status === 'PRE' || volley.status === 'BREAK' || volley.status === 'TO') volley.status = 'LIVE';
+    if (volley.autoSet && vSetIsWon()) vEndSet();
+  }
+  saveVolley();
+  res.json(volleyLight());
+});
+
+app.post('/api/volley/serve', (req, res) => {
+  const { side } = req.body || {};
+  volleyMark();
+  volley.serve = (side === 'home' || side === 'away') ? side : '';
+  saveVolley();
+  res.json(volleyLight());
+});
+
+// Timeout counter per team per set. Flipping status to TO lets the overlay
+// show a TIMEOUT flag; the next point clears it.
+app.post('/api/volley/timeout', (req, res) => {
+  const { side, delta = 1 } = req.body || {};
+  const s = volley[side];
+  if (!s) return res.status(400).json({ error: 'Unknown side' });
+  volleyMark();
+  s.to = Math.max(0, Math.min(volley.maxTo || 2, (s.to || 0) + Number(delta)));
+  if (Number(delta) > 0) volley.status = 'TO';
+  saveVolley();
+  res.json(volleyLight());
+});
+
+// Explicit set control for when autoSet is off, or the operator needs to
+// correct history by hand.
+app.post('/api/volley/set', (req, res) => {
+  const { action } = req.body || {};
+  volleyMark();
+
+  if (action === 'end') {
+    vEndSet();
+  } else if (action === 'award') {
+    // Hand the set to a side outright (forfeit, or a score nobody tracked)
+    const side = req.body.side === 'away' ? 'away' : 'home';
+    const other = side === 'home' ? 'away' : 'home';
+    volley[side].pts = Math.max(volley[side].pts, vTarget());
+    if (volley[other].pts >= volley[side].pts) volley[other].pts = volley[side].pts - 2;
+    vEndSet();
+  } else if (action === 'resume') {
+    // Come back off a break / timeout without touching the score
+    volley.status = 'LIVE';
+  } else if (action === 'reopen') {
+    // Undo a set close: pull the last banked set back onto the board
+    const last = volley.history.pop();
+    if (last) {
+      const w = last.h > last.a ? 'home' : 'away';
+      volley[w].sets = Math.max(0, volley[w].sets - 1);
+      volley.home.pts = last.h; volley.away.pts = last.a;
+      volley.set = Math.max(1, volley.history.length + 1);
+      volley.status = 'LIVE';
+    }
+  } else if (action === 'editHistory') {
+    if (Array.isArray(req.body.history)) {
+      volley.history = req.body.history
+        .slice(0, 5)
+        .map(x => ({ h: Math.max(0, Number(x.h) || 0), a: Math.max(0, Number(x.a) || 0) }));
+      volley.home.sets = volley.history.filter(x => x.h > x.a).length;
+      volley.away.sets = volley.history.filter(x => x.a > x.h).length;
+      volley.set = Math.max(1, volley.history.length + 1);
+    }
+  }
+  saveVolley();
+  res.json(volleyLight());
+});
+
+app.post('/api/volley/undo', (req, res) => {
+  const snap = volleyUndo.pop();
+  if (snap) {
+    const prev = JSON.parse(snap);
+    const hLogo = volley.home.logo, hLv = volley.home.lv;
+    const aLogo = volley.away.logo, aLv = volley.away.lv;
+    volley = Object.assign(blankVolley(), prev);
+    volley.home.logo = hLogo; volley.home.lv = hLv;   // undo never touches logos
+    volley.away.logo = aLogo; volley.away.lv = aLv;
+    saveVolley();
+  }
+  res.json(volleyLight());
+});
+
+app.post('/api/volley/event', (req, res) => {
+  const { type = 'POINT', side = 'home', text = '', sub = '', dur = 8 } = req.body || {};
+  volley.event = {
+    visible: true,
+    type: String(type),
+    side: side === 'away' ? 'away' : 'home',
+    text: String(text).slice(0, 120),
+    sub: String(sub).slice(0, 80),
+    at: Date.now(),
+    dur: Math.max(2, Number(dur) || 8)
+  };
+  saveVolley();
+  res.json(volleyLight());
+});
+
+app.post('/api/volley/event/hide', (req, res) => {
+  volley.event.visible = false;
+  saveVolley();
+  res.json(volleyLight());
+});
+
+// New match: wipes points, sets, timeouts and history but KEEPS the teams
+// and the chosen format, so a double-header is one tap.
+app.post('/api/volley/reset', (req, res) => {
+  const keepTeam = (s) => ({ ...emptyVSide(s.color), name: s.name, short: s.short, logo: s.logo, lv: s.lv });
+  const prev = volley;
+  volley = blankVolley();
+  volleyUndo = [];
+  for (const k of ['lang', 'visible', 'bestOf', 'pointsTo', 'decidingTo', 'cap', 'maxTo',
+                   'autoSet', 'showTimeouts', 'showHistory']) volley[k] = prev[k];
+  volley.home = keepTeam(prev.home);
+  volley.away = keepTeam(prev.away);
+  saveVolley();
+  res.json(volleyLight());
+});
+
 // ---- Ticker states (persisted to Postgres when available) ----
 let tickers = {
   voice: {
@@ -528,6 +798,9 @@ app.get('/streamer-tag', (req, res) => res.sendFile(path.join(__dirname, 'public
 app.get('/scorebug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'scorebug.html')));  // vMix overlay input
 app.get('/score', (req, res) => res.sendFile(path.join(__dirname, 'public', 'score.html')));        // director control (desktop setup)
 app.get('/control', (req, res) => res.sendFile(path.join(__dirname, 'public', 'control.html')));    // iPad match control (controls only)
+app.get('/volleybug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'volleybug.html'))); // vMix overlay input
+app.get('/volley', (req, res) => res.sendFile(path.join(__dirname, 'public', 'volley.html')));       // director control (desktop setup)
+app.get('/vcontrol', (req, res) => res.sendFile(path.join(__dirname, 'public', 'vcontrol.html')));   // iPad match control (controls only)
 
 // ---- Load persisted data, then start the server ----
 async function initDB() {
@@ -544,6 +817,7 @@ async function initDB() {
     await pool.query("ALTER TABLE reporters ADD COLUMN IF NOT EXISTS pv bigint DEFAULT 0");
     await pool.query('CREATE TABLE IF NOT EXISTS tickers (id text PRIMARY KEY, data jsonb NOT NULL)');
     await pool.query('CREATE TABLE IF NOT EXISTS scoreboard (id text PRIMARY KEY, data jsonb NOT NULL)');
+    await pool.query('CREATE TABLE IF NOT EXISTS volleyball (id text PRIMARY KEY, data jsonb NOT NULL)');
 
     const rr = await pool.query('SELECT id, name, location, photo, tag_visible, pv FROM reporters ORDER BY created_at ASC');
     reporters = rr.rows.map(r => ({
@@ -572,6 +846,15 @@ async function initDB() {
       c.running = false; c.startedAt = 0;
     } else {
       await pool.query('INSERT INTO scoreboard (id, data) VALUES ($1,$2)', ['match', scoreboard]);
+    }
+
+    // Volleyball — no clock to worry about, so this restores exactly as saved.
+    const vr = await pool.query('SELECT data FROM volleyball WHERE id=$1', ['match']);
+    if (vr.rows.length) {
+      volley = Object.assign(blankVolley(), vr.rows[0].data);
+      volleyUndo = [];
+    } else {
+      await pool.query('INSERT INTO volleyball (id, data) VALUES ($1,$2)', ['match', volley]);
     }
 
     console.log(`PostgreSQL connected — ${reporters.length} reporters loaded, data persists across deploys`);
