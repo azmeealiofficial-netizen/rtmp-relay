@@ -144,6 +144,29 @@ If step 3 shows nothing, `GET /api/match/status` and read `lastError`.
 
 ---
 
+## Running with only one page automated
+
+You don't need both pages configured. Set only the variables you have and the
+rest is skipped cleanly:
+
+- A brand with no `*_TOKEN` is **left alone entirely** — `/api/match/start`
+  doesn't touch its OBS destination, so a manually-configured persistent stream
+  key keeps working exactly as it did.
+- `/api/match/check` reports that page as `skipped`, not as a failure.
+- `/api/match/end` only closes broadcasts it actually created.
+
+So Dhuvas can be fully automated while VOICE stays manual (set its persistent
+stream key once in OBS → Settings → Stream, and publish from Live Producer). When
+the VOICE token becomes available, add the two variables and it joins in with no
+code change.
+
+The one thing to remember in that mode: `/api/match/start` still calls
+`StartStream`, which starts **both** outputs. Dhuvas goes live automatically;
+VOICE starts pushing to whatever key is set but won't appear until you press
+Go Live on that page.
+
+---
+
 ## Known sharp edges
 
 **Stream settings can't change while streaming.** `/api/match/start` refuses if

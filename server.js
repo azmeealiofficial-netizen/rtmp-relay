@@ -471,12 +471,16 @@ app.post('/api/match/start', async (req, res) => {
   if (!title) return res.status(400).json({ error: 'title required' });
   if (matchState.live) return res.status(409).json({ error: 'a match is already live — end it first' });
 
-  const missing = Object.entries(FB_PAGES)
-    .filter(([, p]) => !p.id || !p.token)
-    .map(([k]) => k);
-  if (missing.length) {
-    return res.status(400).json({ error: 'missing page id/token for: ' + missing.join(', ') });
+  // Work with whatever pages are configured. A brand with no token is
+  // skipped entirely — its OBS destination is left exactly as it is, so
+  // a manually-configured persistent stream key keeps working.
+  const active = Object.entries(FB_PAGES).filter(([, p]) => p.id && p.token);
+  if (!active.length) {
+    return res.status(400).json({ error: 'no Facebook pages configured — set FB_*_PAGE_ID and FB_*_TOKEN' });
   }
+  const skipped = Object.entries(FB_PAGES)
+    .filter(([, p]) => !(p.id && p.token))
+    .map(([k]) => k);
 
   // Stream settings can't be changed while streaming.
   if (obsState.streaming) {
@@ -485,8 +489,8 @@ app.post('/api/match/start', async (req, res) => {
 
   const created = {};
   try {
-    // 1. create both broadcasts, unpublished
-    for (const [brand, page] of Object.entries(FB_PAGES)) {
+    // 1. create the broadcasts, unpublished
+    for (const [brand, page] of active) {
       const v = await fbCall(`/${page.id}/live_videos`, {
         status: 'UNPUBLISHED',
         title,
@@ -510,10 +514,11 @@ app.post('/api/match/start', async (req, res) => {
     matchState.startedAt = Date.now();
     matchState.publishedAt = 0;
     matchState.lastError = '';
-    matchState.videos = {
-      voice: { id: created.voice.id, published: false },
-      dhuvas: { id: created.dhuvas.id, published: false },
-    };
+    matchState.videos = { voice: null, dhuvas: null };
+    for (const [brand, c] of Object.entries(created)) {
+      matchState.videos[brand] = { id: c.id, published: false };
+    }
+    matchState.skipped = skipped;
 
     // 4. publish once OBS confirms ingest is actually running
     setTimeout(async () => {
@@ -523,7 +528,7 @@ app.post('/api/match/start', async (req, res) => {
           matchState.lastError = 'OBS did not start streaming — broadcasts left unpublished';
           return;
         }
-        for (const [brand, page] of Object.entries(FB_PAGES)) {
+        for (const [brand, page] of active) {
           const vid = matchState.videos[brand];
           if (!vid || vid.published) continue;
           await fbCall(`/${vid.id}`, { status: 'LIVE_NOW', access_token: page.token }, 'POST');
@@ -535,7 +540,7 @@ app.post('/api/match/start', async (req, res) => {
       }
     }, Number(process.env.FB_PUBLISH_DELAY_MS || 10000));
 
-    res.json({ ok: true, title, videos: matchState.videos });
+    res.json({ ok: true, title, videos: matchState.videos, skipped });
   } catch (e) {
     // Roll back anything we created so we don't leave orphan broadcasts.
     for (const [brand, c] of Object.entries(created)) {
@@ -553,7 +558,7 @@ app.post('/api/match/publish', async (req, res) => {
   try {
     for (const [brand, page] of Object.entries(FB_PAGES)) {
       const vid = matchState.videos[brand];
-      if (!vid || vid.published) continue;
+      if (!vid || vid.published || !page.token) continue;
       await fbCall(`/${vid.id}`, { status: 'LIVE_NOW', access_token: page.token }, 'POST');
       vid.published = true;
     }
@@ -596,12 +601,15 @@ app.post('/api/match/end', async (req, res) => {
 // kickoff. Run this as part of the pre-match checklist.
 app.get('/api/match/check', async (req, res) => {
   const out = { ok: true, obs: { connected: obsState.connected, streaming: obsState.streaming }, pages: {} };
+  let configuredCount = 0;
   for (const [brand, page] of Object.entries(FB_PAGES)) {
     if (!page.id || !page.token) {
-      out.pages[brand] = { ok: false, error: 'not configured' };
-      out.ok = false;
+      // Deliberately manual (e.g. a page whose token we can't get yet).
+      // Not a failure — but it won't be automated either.
+      out.pages[brand] = { ok: true, skipped: true, note: 'not configured — this page stays manual' };
       continue;
     }
+    configuredCount++;
     try {
       const j = await fbCall(`/${page.id}`, { fields: 'name,id', access_token: page.token });
       out.pages[brand] = { ok: true, name: j.name, id: j.id };
@@ -611,6 +619,7 @@ app.get('/api/match/check', async (req, res) => {
     }
   }
   if (!obsState.connected) out.ok = false;
+  if (!configuredCount) { out.ok = false; out.error = 'no Facebook pages configured'; }
   res.status(out.ok ? 200 : 502).json(out);
 });
 
