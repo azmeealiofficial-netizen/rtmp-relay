@@ -107,7 +107,7 @@
 
     <div class="vol-box">
       <div class="vol-header">
-        <span class="vol-label">vMix MASTER VOLUME</span>
+        <span class="vol-label">PROGRAM VOLUME</span>
         <span class="vol-val" id="masterVolVal">—</span>
       </div>
       <div class="vol-row">
@@ -164,35 +164,45 @@
     let hlsPlayer = null;
     let feedLive = false;
 
-    // Poll vMix status
+    // Poll OBS status via the relay's cached state (was the vMix XML).
+    //
+    // Stream card mapping, now that OBS has one main stream plus a
+    // Branch Output rather than four equal vMix channels:
+    //   1  VOICE Facebook  -> OBS main stream
+    //   2  Dhuvas Facebook -> Branch Output filter on the DHUVAS scene
+    //   3  VOICE YouTube   -> fanned out at the relay, follows the main stream
+    //   4  PSM monitor     -> not wired yet (second Branch Output, later)
+    let obsStats = null;
+
     async function pollStatus() {
       try {
-        const r = await fetch('/api/vmix');
+        const r = await fetch('/api/obs');
         if (!r.ok) throw 0;
-        const t = await r.text();
-        connected = true;
-        parseStreams(t);
-        parseMasterVolume(t);
+        const d = await r.json();
+        connected = !!d.connected;
+        streams[0] = !!d.streaming;
+        streams[1] = !!d.branchLive;
+        streams[2] = !!d.streaming;
+        streams[3] = false;
+        obsStats = d.stats || null;
+        if (!masterDragging) {
+          masterVol = typeof d.volume === 'number' ? d.volume : masterVol;
+          masterMuted = !!d.muted;
+          const sl = document.getElementById('masterVolSlider');
+          if (sl) sl.value = masterVol;
+          const lbl = document.getElementById('masterVolVal');
+          if (lbl) lbl.textContent = masterVol + '%';
+          const btn = document.getElementById('masterVolMute');
+          if (btn) {
+            btn.textContent = masterMuted ? '🔇' : '🔊';
+            btn.classList.toggle('muted', masterMuted);
+          }
+        }
         render();
       } catch(e) {
         connected = false;
         render();
       }
-    }
-
-    function parseStreams(xml) {
-      try {
-        const d = new DOMParser().parseFromString(xml, 'text/xml');
-        const v = d.querySelector('vmix');
-        if (!v) return;
-        const st = v.querySelector('streaming');
-        if (st) {
-          streams[0] = st.getAttribute('channel1') === 'True';
-          streams[1] = st.getAttribute('channel2') === 'True';
-          streams[2] = st.getAttribute('channel3') === 'True';
-          streams[3] = st.getAttribute('channel4') === 'True';
-        }
-      } catch(e) {}
     }
 
     function render() {
@@ -214,25 +224,47 @@
       }
     }
 
-    async function cmd(f, p) {
+    async function obsPost(path, body) {
       try {
-        await fetch('/api/vmix-cmd?Function=' + f + (p ? '&' + p : ''));
+        await fetch(path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body || {}),
+        });
         setTimeout(pollStatus, 500);
       } catch(e) {}
     }
 
     function togStream(i) {
-      if (streams[i]) {
-        if (confirm('Stop this stream?')) cmd('StopStreaming', 'Value=' + i);
-      } else {
-        cmd('StartStreaming', 'Value=' + i);
+      // Card 4 (PSM monitor) isn't wired to an output yet.
+      if (i === 3) return;
+
+      // Cards 1 and 3 are both the main OBS stream — VOICE goes to
+      // Facebook, and YouTube is fanned out from the relay off the same
+      // encode, so they start and stop together.
+      if (i === 0 || i === 2) {
+        if (streams[0]) {
+          if (!confirm('Stop the VOICE stream?')) return;
+          obsPost('/api/obs/stream', { action: 'stop' });
+        } else {
+          obsPost('/api/obs/stream', { action: 'start' });
+        }
+        return;
       }
-      streams[i] = !streams[i];
-      render();
+
+      // Card 2 — Dhuvas Branch Output. With interlock set to "Streaming"
+      // in OBS this normally follows the main stream; this is the manual
+      // override for running one brand without the other.
+      if (streams[1]) {
+        if (!confirm('Stop the Dhuvas stream?')) return;
+        obsPost('/api/obs/branch', { enabled: false });
+      } else {
+        obsPost('/api/obs/branch', { enabled: true });
+      }
     }
 
     function endAll() {
-      cmd('StopStreaming');
+      obsPost('/api/obs/stream', { action: 'stop' });
       streams = [false, false, false, false];
       render();
     }
@@ -296,6 +328,7 @@
     let masterMuted = false;
     let masterLoaded = false;
     let masterDragging = false;
+    let masterVol = 100;
 
     // Preview volume (browser audio only)
     function setPreviewVol(val) {
@@ -313,21 +346,18 @@
       if (previewMuted) btn.classList.add('muted'); else btn.classList.remove('muted');
     }
 
-    // vMix Master volume (amplitude conversion)
-    // XML amplitude → slider: Volume = (Amplitude/100)^0.25 * 100
-    // Slider → API amplitude: Amplitude = (Volume/100)^4 * 100
-    function amplitudeToSlider(amp) {
-      return Math.round(Math.pow(amp / 100, 0.25) * 100);
-    }
-
-    function sliderToAmplitude(vol) {
-      return Math.round(Math.pow(vol / 100, 4) * 100);
-    }
-
+    // Master volume.
+    //
+    // OBS has no master fader — only per-input faders — so this drives one
+    // named input (OBS_AUDIO_INPUT on the relay, the NDI program feed by
+    // default). The relay converts slider 0-100 to OBS's linear multiplier
+    // using a cube, which is the curve OBS's own UI fader uses; vMix used
+    // a fourth power, so the feel is near enough identical.
     function setMasterVol(val) {
       masterDragging = true;
-      document.getElementById('masterVolVal').textContent = val + '%';
-      cmd('SetMasterVolume', 'Value=' + val);
+      masterVol = parseInt(val, 10);
+      document.getElementById('masterVolVal').textContent = masterVol + '%';
+      obsPost('/api/obs/volume', { value: masterVol });
       clearTimeout(window._masterDragTimer);
       window._masterDragTimer = setTimeout(() => { masterDragging = false; }, 3000);
     }
@@ -337,27 +367,7 @@
       const btn = document.getElementById('masterVolMute');
       btn.textContent = masterMuted ? '🔇' : '🔊';
       if (masterMuted) btn.classList.add('muted'); else btn.classList.remove('muted');
-      cmd(masterMuted ? 'MasterAudioOff' : 'MasterAudioOn');
-    }
-
-    function parseMasterVolume(xml) {
-      if (masterDragging) return;
-      try {
-        const d = new DOMParser().parseFromString(xml, 'text/xml');
-        const master = d.querySelector('master');
-        if (master) {
-          const amp = parseFloat(master.getAttribute('volume'));
-          const muted = master.getAttribute('muted') === 'True';
-          // amp is 0-100 amplitude, convert to slider: slider = amp^0.25 * 100
-          const sliderVal = Math.round(Math.pow(amp / 100, 0.25) * 100);
-          document.getElementById('masterVolSlider').value = sliderVal;
-          document.getElementById('masterVolVal').textContent = sliderVal + '%';
-          masterMuted = muted;
-          const btn = document.getElementById('masterVolMute');
-          btn.textContent = muted ? '🔇' : '🔊';
-          if (muted) btn.classList.add('muted'); else btn.classList.remove('muted');
-        }
-      } catch(e) {}
+      obsPost('/api/obs/mute', { muted: masterMuted });
     }
 
     // Start polling

@@ -26,45 +26,353 @@ if (process.env.DATABASE_URL) {
   }
 }
 
-let vmixProxyUrl = 'https://vmix.vxd.news';
+// ============================================================
+// OBS CONTROL (obs-websocket v5) — replaces the vMix HTTP API
+//
+// Inlined here on purpose. The Dockerfile does `COPY server.js ./`
+// and nothing else, so a separate obs.js would MODULE_NOT_FOUND on
+// Railway. Change that COPY to `COPY *.js ./` if you ever want to
+// split this out.
+//
+// The relay holds ONE long-lived websocket to OBS and keeps the last
+// known state in memory. The panel polls the relay exactly as it
+// always did; the relay never polls OBS — obs-websocket pushes
+// events instead. Strictly less traffic than the old vMix setup.
+// ============================================================
+let OBSWebSocket = null;
+try {
+  // v5 is "type": "module" but ships a CJS build; default export is the class.
+  OBSWebSocket = require('obs-websocket-js/json').default;
+} catch (e) {
+  console.error('obs-websocket-js unavailable, OBS control disabled:', e.message);
+}
 
-// vMix URL management
-app.post('/api/set-vmix-url', (req, res) => {
-  vmixProxyUrl = req.body.url || '';
-  res.json({ ok: true, url: vmixProxyUrl });
-});
+const OBS_URL      = process.env.OBS_WS_URL      || 'wss://vmix.vxd.news';
+const OBS_PASSWORD = process.env.OBS_WS_PASSWORD || '';
 
-app.get('/api/get-vmix-url', (req, res) => {
-  res.json({ url: vmixProxyUrl });
-});
+// These must match the OBS scene collection ("VxD Broadcast").
+const OBS_SCENE_VOICE   = process.env.OBS_SCENE_VOICE   || 'VOICE';
+const OBS_SCENE_DHUVAS  = process.env.OBS_SCENE_DHUVAS  || 'DHUVAS';
+const OBS_SCENE_PROGRAM = process.env.OBS_SCENE_PROGRAM || 'Program';
+const OBS_BRANCH_FILTER = process.env.OBS_BRANCH_FILTER || 'Branch Output';
+const OBS_AUDIO_INPUT   = process.env.OBS_AUDIO_INPUT   || 'CAM — PSM (NDI)';
+const OBS_FTB_VOICE     = process.env.OBS_FTB_VOICE     || 'FTB — Black (VOICE)';
+const OBS_FTB_DHUVAS    = process.env.OBS_FTB_DHUVAS    || 'FTB — Black (DHUVAS)';
 
-// Proxy vMix API status
-app.get('/api/vmix', async (req, res) => {
-  if (!vmixProxyUrl) return res.status(400).json({ error: 'No vMix URL configured' });
+// Only scene items whose name starts with this take part in TAKE.
+// Overlays ("OVL — ...") are left alone.
+const OBS_CAM_PREFIX = process.env.OBS_CAM_PREFIX || 'CAM';
+
+const obs = OBSWebSocket ? new OBSWebSocket() : null;
+
+const obsState = {
+  connected: false,
+  streaming: false,
+  branchLive: false,       // Branch Output filter enabled (Dhuvas)
+  ftb: false,
+  currentScene: '',
+  cams: [],                // [{ id, name, live }] inside Program
+  volume: 100,             // 0-100 slider position
+  muted: false,
+  obsVersion: '',
+  stats: {
+    cpu: 0, fps: 0, renderTime: 0,
+    renderMissed: 0, renderTotal: 0,
+    outputSkipped: 0, outputTotal: 0,
+    droppedFrames: 0, totalFrames: 0,
+    bitrate: 0, bytes: 0,
+  },
+  lastError: '',
+  lastUpdate: 0,
+};
+
+// vMix used amplitude = (v/100)^4. OBS's own fader is cubic, so the cube
+// keeps the slider feeling familiar AND matches what the OBS UI shows.
+const sliderToMul = (v) => Math.pow(Math.max(0, Math.min(100, v)) / 100, 3);
+const mulToSlider = (m) => Math.round(Math.cbrt(Math.max(0, Math.min(1, m))) * 100);
+
+let obsReconnectTimer = null;
+let obsBackoff = 2000;
+let lastBytes = 0, lastBytesAt = 0;
+
+async function obsRefreshScene() {
+  if (!obs || !obsState.connected) return;
   try {
-    const response = await fetch(`${vmixProxyUrl}/api/${req.query.path || ''}`);
-    const text = await response.text();
-    res.set('Content-Type', 'text/xml');
-    res.send(text);
+    const items = await obs.call('GetSceneItemList', { sceneName: OBS_SCENE_PROGRAM });
+    obsState.cams = (items.sceneItems || [])
+      .filter((i) => String(i.sourceName || '').startsWith(OBS_CAM_PREFIX))
+      .map((i) => ({ id: i.sceneItemId, name: i.sourceName, live: !!i.sceneItemEnabled }))
+      .reverse(); // top of the OBS list first — matches what the operator sees
+  } catch (e) { obsState.lastError = 'scene: ' + e.message; }
+
+  try {
+    const f = await obs.call('GetSourceFilter', {
+      sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
+    });
+    obsState.branchLive = !!f.filterEnabled;
+  } catch (e) { /* filter may not exist yet — not fatal */ }
+
+  try {
+    const v = await obs.call('GetInputVolume', { inputName: OBS_AUDIO_INPUT });
+    obsState.volume = mulToSlider(v.inputVolumeMul);
+    const m = await obs.call('GetInputMute', { inputName: OBS_AUDIO_INPUT });
+    obsState.muted = !!m.inputMuted;
+  } catch (e) { /* audio input may be named differently — not fatal */ }
+
+  try {
+    const ftb = await obs.call('GetSceneItemId', {
+      sceneName: OBS_SCENE_VOICE, sourceName: OBS_FTB_VOICE,
+    });
+    const en = await obs.call('GetSceneItemEnabled', {
+      sceneName: OBS_SCENE_VOICE, sceneItemId: ftb.sceneItemId,
+    });
+    obsState.ftb = !!en.sceneItemEnabled;
+  } catch (e) { /* no FTB source — not fatal */ }
+
+  obsState.lastUpdate = Date.now();
+}
+
+async function obsPollStats() {
+  if (!obs || !obsState.connected) return;
+  try {
+    const s = await obs.call('GetStats');
+    obsState.stats.cpu = Math.round((s.cpuUsage || 0) * 10) / 10;
+    obsState.stats.fps = Math.round((s.activeFps || 0) * 100) / 100;
+    obsState.stats.renderTime = Math.round((s.averageFrameRenderTime || 0) * 100) / 100;
+    obsState.stats.renderMissed = s.renderSkippedFrames || 0;
+    obsState.stats.renderTotal = s.renderTotalFrames || 0;
+    obsState.stats.outputSkipped = s.outputSkippedFrames || 0;
+    obsState.stats.outputTotal = s.outputTotalFrames || 0;
+  } catch (e) { /* ignore */ }
+
+  try {
+    const st = await obs.call('GetStreamStatus');
+    obsState.streaming = !!st.outputActive;
+    obsState.stats.droppedFrames = st.outputSkippedFrames || 0;
+    obsState.stats.totalFrames = st.outputTotalFrames || 0;
+    const now = Date.now();
+    const bytes = st.outputBytes || 0;
+    if (lastBytesAt && bytes >= lastBytes && now > lastBytesAt) {
+      obsState.stats.bitrate = Math.round(((bytes - lastBytes) * 8) / ((now - lastBytesAt) / 1000) / 1000);
+    }
+    lastBytes = bytes; lastBytesAt = now;
+    obsState.stats.bytes = bytes;
+  } catch (e) { /* ignore */ }
+}
+
+function obsScheduleReconnect() {
+  if (obsReconnectTimer) return;
+  obsReconnectTimer = setTimeout(() => {
+    obsReconnectTimer = null;
+    obsConnect();
+  }, obsBackoff);
+  obsBackoff = Math.min(obsBackoff * 2, 30000);
+}
+
+async function obsConnect() {
+  if (!obs) return;
+  try {
+    const info = await obs.connect(OBS_URL, OBS_PASSWORD || undefined, { rpcVersion: 1 });
+    obsState.connected = true;
+    obsState.obsVersion = (info && info.obsWebSocketVersion) || '';
+    obsState.lastError = '';
+    obsBackoff = 2000;
+    console.log('OBS connected:', OBS_URL, 'ws v' + obsState.obsVersion);
+
+    try {
+      const cur = await obs.call('GetCurrentProgramScene');
+      obsState.currentScene = cur.sceneName || cur.currentProgramSceneName || '';
+    } catch (e) { /* ignore */ }
+
+    await obsRefreshScene();
+    await obsPollStats();
   } catch (e) {
-    res.status(502).json({ error: 'Cannot reach vMix: ' + e.message });
+    obsState.connected = false;
+    obsState.lastError = e.message;
+    obsScheduleReconnect();
   }
-});
+}
 
-// Proxy vMix commands
-app.get('/api/vmix-cmd', async (req, res) => {
-  if (!vmixProxyUrl) return res.status(400).json({ error: 'No vMix URL configured' });
+if (obs) {
+  obs.on('ConnectionClosed', () => {
+    obsState.connected = false;
+    obsState.streaming = false;
+    obsScheduleReconnect();
+  });
+  obs.on('ConnectionError', (e) => {
+    obsState.connected = false;
+    obsState.lastError = (e && e.message) ? e.message : 'connection error';
+  });
+  obs.on('StreamStateChanged', (e) => { obsState.streaming = !!e.outputActive; });
+  obs.on('CurrentProgramSceneChanged', (e) => { obsState.currentScene = e.sceneName; });
+  obs.on('SceneItemEnableStateChanged', (e) => {
+    if (e.sceneName === OBS_SCENE_PROGRAM) {
+      const c = obsState.cams.find((x) => x.id === e.sceneItemId);
+      if (c) c.live = !!e.sceneItemEnabled;
+    }
+    if (e.sceneName === OBS_SCENE_VOICE) obsRefreshScene();
+  });
+  obs.on('SourceFilterEnableStateChanged', (e) => {
+    if (e.sourceName === OBS_SCENE_DHUVAS && e.filterName === OBS_BRANCH_FILTER) {
+      obsState.branchLive = !!e.filterEnabled;
+    }
+  });
+  obs.on('InputVolumeChanged', (e) => {
+    if (e.inputName === OBS_AUDIO_INPUT) obsState.volume = mulToSlider(e.inputVolumeMul);
+  });
+  obs.on('InputMuteStateChanged', (e) => {
+    if (e.inputName === OBS_AUDIO_INPUT) obsState.muted = !!e.inputMuted;
+  });
+
+  obsConnect();
+  setInterval(obsPollStats, 2000);
+  setInterval(() => { if (obsState.connected) obsRefreshScene(); }, 15000);
+}
+
+function obsGuard(res) {
+  if (!obs) { res.status(503).json({ error: 'obs-websocket-js not installed' }); return false; }
+  if (!obsState.connected) { res.status(502).json({ error: 'OBS not connected: ' + obsState.lastError }); return false; }
+  return true;
+}
+
+// ---- status -------------------------------------------------
+app.get('/api/obs', (req, res) => res.json(obsState));
+
+// ---- streaming ----------------------------------------------
+// Branch Output interlock is set to "Streaming" in OBS, so starting
+// the main stream starts Dhuvas too. One call drives both outputs.
+app.post('/api/obs/stream', async (req, res) => {
+  if (!obsGuard(res)) return;
   try {
-    const func = req.query.Function || '';
-    const params = Object.entries(req.query)
-      .filter(([k]) => k !== 'Function')
-      .map(([k, v]) => `&${k}=${v}`)
-      .join('');
-    await fetch(`${vmixProxyUrl}/api/?Function=${func}${params}`);
+    const action = (req.body && req.body.action) || 'toggle';
+    if (action === 'start') await obs.call('StartStream');
+    else if (action === 'stop') await obs.call('StopStream');
+    else await obs.call('ToggleStream');
     res.json({ ok: true });
-  } catch (e) {
-    res.status(502).json({ error: 'Command failed: ' + e.message });
-  }
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+// ---- TAKE (switch camera inside Program) --------------------
+app.post('/api/obs/take', async (req, res) => {
+  if (!obsGuard(res)) return;
+  try {
+    const want = (req.body && req.body.id != null) ? Number(req.body.id) : null;
+    const wantName = req.body && req.body.name;
+    const target = obsState.cams.find(
+      (c) => (want != null && c.id === want) || (wantName && c.name === wantName)
+    );
+    if (!target) return res.status(404).json({ error: 'camera not found' });
+
+    for (const c of obsState.cams) {
+      const on = c.id === target.id;
+      if (c.live !== on) {
+        await obs.call('SetSceneItemEnabled', {
+          sceneName: OBS_SCENE_PROGRAM, sceneItemId: c.id, sceneItemEnabled: on,
+        });
+        c.live = on;
+      }
+    }
+    res.json({ ok: true, live: target.name });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+// ---- FTB (fade to black on BOTH branded scenes) -------------
+app.post('/api/obs/ftb', async (req, res) => {
+  if (!obsGuard(res)) return;
+  try {
+    const on = (req.body && typeof req.body.on === 'boolean') ? req.body.on : !obsState.ftb;
+    for (const [scene, src] of [[OBS_SCENE_VOICE, OBS_FTB_VOICE], [OBS_SCENE_DHUVAS, OBS_FTB_DHUVAS]]) {
+      try {
+        const { sceneItemId } = await obs.call('GetSceneItemId', { sceneName: scene, sourceName: src });
+        await obs.call('SetSceneItemEnabled', { sceneName: scene, sceneItemId, sceneItemEnabled: on });
+      } catch (e) { /* one scene missing its FTB source shouldn't kill the other */ }
+    }
+    obsState.ftb = on;
+    res.json({ ok: true, ftb: on });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+// ---- audio ---------------------------------------------------
+app.post('/api/obs/volume', async (req, res) => {
+  if (!obsGuard(res)) return;
+  try {
+    const v = Number(req.body && req.body.value);
+    if (!isFinite(v)) return res.status(400).json({ error: 'value required' });
+    await obs.call('SetInputVolume', {
+      inputName: OBS_AUDIO_INPUT, inputVolumeMul: sliderToMul(v),
+    });
+    obsState.volume = Math.round(v);
+    res.json({ ok: true, volume: obsState.volume });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+app.post('/api/obs/mute', async (req, res) => {
+  if (!obsGuard(res)) return;
+  try {
+    const muted = (req.body && typeof req.body.muted === 'boolean') ? req.body.muted : !obsState.muted;
+    await obs.call('SetInputMute', { inputName: OBS_AUDIO_INPUT, inputMuted: muted });
+    obsState.muted = muted;
+    res.json({ ok: true, muted });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+// ---- Branch Output (Dhuvas) ---------------------------------
+// Normally follows the main stream via interlock; this is the manual
+// override for running one brand without the other.
+app.post('/api/obs/branch', async (req, res) => {
+  if (!obsGuard(res)) return;
+  try {
+    const enabled = (req.body && typeof req.body.enabled === 'boolean') ? req.body.enabled : !obsState.branchLive;
+    await obs.call('SetSourceFilterEnabled', {
+      sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER, filterEnabled: enabled,
+    });
+    obsState.branchLive = enabled;
+    res.json({ ok: true, enabled });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+// ---- destinations (used by the Facebook automation) ---------
+// VOICE goes on the main OBS stream service; Dhuvas goes into the
+// Branch Output filter. Neither can change while streaming, so set
+// them BEFORE StartStream.
+app.post('/api/obs/destination', async (req, res) => {
+  if (!obsGuard(res)) return;
+  try {
+    const { target, server, key } = req.body || {};
+    if (!server || !key) return res.status(400).json({ error: 'server and key required' });
+
+    if (target === 'voice') {
+      await obs.call('SetStreamServiceSettings', {
+        streamServiceType: 'rtmp_custom',
+        streamServiceSettings: { server, key, use_auth: false },
+      });
+    } else if (target === 'dhuvas') {
+      // Read first, patch, write back — the plugin stores far more than
+      // these two fields and a bare set would wipe the rest.
+      const cur = await obs.call('GetSourceFilter', {
+        sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
+      });
+      const settings = Object.assign({}, cur.filterSettings, { server, key });
+      await obs.call('SetSourceFilterSettings', {
+        sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
+        filterSettings: settings, overlay: true,
+      });
+    } else {
+      return res.status(400).json({ error: "target must be 'voice' or 'dhuvas'" });
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+// ---- raw passthrough, for anything not wrapped above ---------
+app.post('/api/obs/call', async (req, res) => {
+  if (!obsGuard(res)) return;
+  try {
+    const { request, data } = req.body || {};
+    if (!request) return res.status(400).json({ error: 'request required' });
+    const out = await obs.call(request, data || {});
+    res.json({ ok: true, data: out });
+  } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
 // Get NGINX-RTMP stats

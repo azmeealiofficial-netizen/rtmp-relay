@@ -74,6 +74,13 @@
     .q-btn{flex:1;border:none;border-radius:var(--radius);padding:14px 8px;font-size:13px;font-weight:800;cursor:pointer;color:#fff;font-family:inherit;letter-spacing:.5px;transition:all .15s}
     .q-btn:hover{opacity:.85}
     .q-btn.c{background:var(--red)}.q-btn.f{background:var(--blu)}.q-btn.t{background:var(--bdr2)}.q-btn.s{background:#dc2626;font-size:11px}
+    /* TAKE row — one button per camera in the Program scene */
+    .cam-bar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+    .cam-btn{flex:1 1 calc(50% - 3px);background:var(--card2);color:var(--t2);font-size:11px;padding:12px 6px;
+             border:1px solid var(--bdr);letter-spacing:.3px}
+    .cam-btn:hover{border-color:var(--bdr2);color:var(--t1)}
+    .cam-btn.live{background:var(--red);color:#fff;border-color:var(--red)}
+    .q-btn.t.live{background:#dc2626;color:#fff}
 
     /* Section */
     .sec-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
@@ -261,11 +268,11 @@
 
     <div class="sidebar">
 
+      <div class="cam-bar" id="camBar"></div>
+
       <div class="quick-bar">
-        <button class="q-btn c" onclick="cmd('Cut')">CUT</button>
-        <button class="q-btn f" onclick="cmd('Fade','Duration=500')">FADE</button>
-        <button class="q-btn t" onclick="cmd('FadeToBlack')">FTB</button>
-        <button class="q-btn s" onclick="if(confirm('End all streams?'))cmd('StopStreaming')">END ALL</button>
+        <button class="q-btn t" id="ftbBtn" onclick="obsFtb()">FTB</button>
+        <button class="q-btn s" onclick="if(confirm('End all streams?'))obsStream('stop')">END ALL</button>
       </div>
 
       <div class="sec-hdr"><span class="sec-title">Live Ticker</span></div>
@@ -409,12 +416,49 @@
 
     function startPolling(){pollStatus();poll=setInterval(pollStatus,3000);}
 
-    async function cmd(f,p=''){try{await fetch(`/api/vmix-cmd?Function=${f}${p?'&'+p:''}`);setTimeout(pollStatus,500);}catch(e){}}
+    // ---- OBS control (was the vMix HTTP API) ----
+    let obsCams=[],obsFtbOn=false,obsStreaming=false;
+
+    async function obsPost(path,body){
+      try{
+        const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+        setTimeout(pollStatus,400);
+        return r.ok;
+      }catch(e){return false;}
+    }
+    const obsTake   = (id)     => obsPost('/api/obs/take',{id});
+    const obsFtb    = ()       => obsPost('/api/obs/ftb',{on:!obsFtbOn});
+    const obsStream = (action) => obsPost('/api/obs/stream',{action});
+
+    // Only rebuild the camera buttons when the set of cameras actually
+    // changes — same rule as the feed cards, never rebuild on a status tick.
+    let camSig='';
+    function renderCams(){
+      const bar=document.getElementById('camBar');
+      if(!bar)return;
+      const sig=obsCams.map(c=>c.id+':'+c.name).join('|');
+      if(sig!==camSig){
+        camSig=sig;
+        bar.innerHTML=obsCams.map(c=>
+          `<button class="q-btn c cam-btn" data-id="${c.id}" onclick="obsTake(${c.id})">`+
+          `${c.name.replace(/^CAM\s*[—-]\s*/,'').replace(/\s*\(.*\)$/,'')}</button>`
+        ).join('');
+      }
+      obsCams.forEach(c=>{
+        const b=bar.querySelector(`[data-id="${c.id}"]`);
+        if(b)b.classList.toggle('live',c.live);
+      });
+      const f=document.getElementById('ftbBtn');
+      if(f)f.classList.toggle('live',obsFtbOn);
+    }
 
     async function pollStatus(){
       try{
-        const r=await fetch('/api/vmix');if(!r.ok)throw 0;
-        s.connected=true;render();
+        const r=await fetch('/api/obs');if(!r.ok)throw 0;
+        const d=await r.json();
+        s.connected=!!d.connected;
+        obsCams=d.cams||[];obsFtbOn=!!d.ftb;obsStreaming=!!d.streaming;
+        render();renderCams();
       }catch(e){s.connected=false;render();}
     }
 
