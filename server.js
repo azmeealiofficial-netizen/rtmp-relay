@@ -375,6 +375,238 @@ app.post('/api/obs/call', async (req, res) => {
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
+// ============================================================
+// MATCH AUTOMATION — Facebook Live via Graph API
+//
+// One call creates a live video on BOTH pages, writes each page's
+// stream key into the right place in OBS, and starts streaming.
+// Another call ends the match and closes both broadcasts.
+//
+// Sequence used by /api/match/start:
+//   1. create both live videos as UNPUBLISHED (nothing visible yet)
+//   2. write VOICE's key to the OBS stream service,
+//      Dhuvas's key into the Branch Output filter
+//   3. StartStream
+//   4. ~10s later, once OBS confirms it is actually streaming,
+//      flip both to LIVE_NOW
+//
+// Creating them UNPUBLISHED first is deliberate: LIVE_NOW publishes
+// the post immediately, so a failure anywhere after that leaves a
+// dead broadcast on both pages with viewers staring at a spinner.
+// ============================================================
+const FB_API_VERSION = process.env.FB_API_VERSION || 'v25.0';
+const FB_GRAPH = `https://graph.facebook.com/${FB_API_VERSION}`;
+
+const FB_PAGES = {
+  voice: {
+    label: 'VOICE',
+    id: process.env.FB_VOICE_PAGE_ID || '248813165823102',
+    token: process.env.FB_VOICE_TOKEN || '',
+  },
+  dhuvas: {
+    label: 'Dhuvas',
+    id: process.env.FB_DHUVAS_PAGE_ID || '',
+    token: process.env.FB_DHUVAS_TOKEN || '',
+  },
+};
+
+const matchState = {
+  live: false,
+  title: '',
+  startedAt: 0,
+  publishedAt: 0,
+  videos: { voice: null, dhuvas: null },   // { id, permalink, published }
+  lastError: '',
+};
+
+async function fbCall(path, params, method) {
+  const url = new URL(FB_GRAPH + path);
+  const body = new URLSearchParams();
+  for (const [k, v] of Object.entries(params || {})) {
+    if (v === undefined || v === null) continue;
+    if (method === 'POST') body.append(k, String(v));
+    else url.searchParams.append(k, String(v));
+  }
+  const r = await fetch(url.toString(), method === 'POST'
+    ? { method: 'POST', body }
+    : { method: 'GET' });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) {
+    const m = (j.error && j.error.message) || ('HTTP ' + r.status);
+    throw new Error(m);
+  }
+  return j;
+}
+
+// "rtmps://live-api-s.facebook.com:443/rtmp/FB-123-456" splits into
+// server "rtmps://live-api-s.facebook.com:443/rtmp/" and key "FB-123-456".
+function splitStreamUrl(u) {
+  const i = u.lastIndexOf('/');
+  if (i < 0) throw new Error('unexpected stream url: ' + u);
+  return { server: u.slice(0, i + 1), key: u.slice(i + 1) };
+}
+
+async function setDestination(brand, server, key) {
+  if (brand === 'voice') {
+    await obs.call('SetStreamServiceSettings', {
+      streamServiceType: 'rtmp_custom',
+      streamServiceSettings: { server, key, use_auth: false },
+    });
+  } else {
+    const cur = await obs.call('GetSourceFilter', {
+      sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
+    });
+    await obs.call('SetSourceFilterSettings', {
+      sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
+      filterSettings: Object.assign({}, cur.filterSettings, { server, key }),
+      overlay: true,
+    });
+  }
+}
+
+app.post('/api/match/start', async (req, res) => {
+  if (!obsGuard(res)) return;
+  const title = (req.body && req.body.title || '').trim();
+  const description = (req.body && req.body.description || '').trim();
+  if (!title) return res.status(400).json({ error: 'title required' });
+  if (matchState.live) return res.status(409).json({ error: 'a match is already live — end it first' });
+
+  const missing = Object.entries(FB_PAGES)
+    .filter(([, p]) => !p.id || !p.token)
+    .map(([k]) => k);
+  if (missing.length) {
+    return res.status(400).json({ error: 'missing page id/token for: ' + missing.join(', ') });
+  }
+
+  // Stream settings can't be changed while streaming.
+  if (obsState.streaming) {
+    return res.status(409).json({ error: 'OBS is already streaming — stop it before starting a match' });
+  }
+
+  const created = {};
+  try {
+    // 1. create both broadcasts, unpublished
+    for (const [brand, page] of Object.entries(FB_PAGES)) {
+      const v = await fbCall(`/${page.id}/live_videos`, {
+        status: 'UNPUBLISHED',
+        title,
+        description,
+        access_token: page.token,
+      }, 'POST');
+      if (!v.secure_stream_url) throw new Error(`${page.label}: no secure_stream_url returned`);
+      created[brand] = { id: v.id, ...splitStreamUrl(v.secure_stream_url) };
+    }
+
+    // 2. point OBS at them
+    for (const [brand, c] of Object.entries(created)) {
+      await setDestination(brand, c.server, c.key);
+    }
+
+    // 3. go
+    await obs.call('StartStream');
+
+    matchState.live = true;
+    matchState.title = title;
+    matchState.startedAt = Date.now();
+    matchState.publishedAt = 0;
+    matchState.lastError = '';
+    matchState.videos = {
+      voice: { id: created.voice.id, published: false },
+      dhuvas: { id: created.dhuvas.id, published: false },
+    };
+
+    // 4. publish once OBS confirms ingest is actually running
+    setTimeout(async () => {
+      try {
+        const st = await obs.call('GetStreamStatus');
+        if (!st.outputActive) {
+          matchState.lastError = 'OBS did not start streaming — broadcasts left unpublished';
+          return;
+        }
+        for (const [brand, page] of Object.entries(FB_PAGES)) {
+          const vid = matchState.videos[brand];
+          if (!vid || vid.published) continue;
+          await fbCall(`/${vid.id}`, { status: 'LIVE_NOW', access_token: page.token }, 'POST');
+          vid.published = true;
+        }
+        matchState.publishedAt = Date.now();
+      } catch (e) {
+        matchState.lastError = 'publish failed: ' + e.message;
+      }
+    }, Number(process.env.FB_PUBLISH_DELAY_MS || 10000));
+
+    res.json({ ok: true, title, videos: matchState.videos });
+  } catch (e) {
+    // Roll back anything we created so we don't leave orphan broadcasts.
+    for (const [brand, c] of Object.entries(created)) {
+      try {
+        await fbCall(`/${c.id}`, { end_live_video: true, access_token: FB_PAGES[brand].token }, 'POST');
+      } catch (_) { /* best effort */ }
+    }
+    matchState.lastError = e.message;
+    res.status(502).json({ error: e.message });
+  }
+});
+
+app.post('/api/match/publish', async (req, res) => {
+  if (!matchState.live) return res.status(409).json({ error: 'no match is live' });
+  try {
+    for (const [brand, page] of Object.entries(FB_PAGES)) {
+      const vid = matchState.videos[brand];
+      if (!vid || vid.published) continue;
+      await fbCall(`/${vid.id}`, { status: 'LIVE_NOW', access_token: page.token }, 'POST');
+      vid.published = true;
+    }
+    matchState.publishedAt = Date.now();
+    res.json({ ok: true, videos: matchState.videos });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+app.post('/api/match/end', async (req, res) => {
+  const errors = [];
+
+  // Stop the encoder first — ending the broadcasts while OBS is still
+  // pushing leaves Facebook trying to ingest a stream nobody is watching.
+  if (obs && obsState.connected) {
+    try { await obs.call('StopStream'); }
+    catch (e) { errors.push('OBS: ' + e.message); }
+  } else {
+    errors.push('OBS not connected — stop the stream manually');
+  }
+
+  for (const [brand, page] of Object.entries(FB_PAGES)) {
+    const vid = matchState.videos[brand];
+    if (!vid || !vid.id) continue;
+    try {
+      await fbCall(`/${vid.id}`, { end_live_video: true, access_token: page.token }, 'POST');
+    } catch (e) {
+      errors.push(`${page.label}: ${e.message}`);
+    }
+  }
+
+  matchState.live = false;
+  matchState.videos = { voice: null, dhuvas: null };
+  matchState.lastError = errors.join(' | ');
+
+  res.json({ ok: errors.length === 0, errors });
+});
+
+app.get('/api/match/status', (req, res) => {
+  res.json({
+    live: matchState.live,
+    title: matchState.title,
+    startedAt: matchState.startedAt,
+    publishedAt: matchState.publishedAt,
+    videos: matchState.videos,
+    lastError: matchState.lastError,
+    configured: {
+      voice: !!(FB_PAGES.voice.id && FB_PAGES.voice.token),
+      dhuvas: !!(FB_PAGES.dhuvas.id && FB_PAGES.dhuvas.token),
+    },
+    apiVersion: FB_API_VERSION,
+  });
+});
+
 // Get NGINX-RTMP stats
 app.get('/api/relay-stats', async (req, res) => {
   try {

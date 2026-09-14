@@ -170,8 +170,11 @@
     // Branch Output rather than four equal vMix channels:
     //   1  VOICE Facebook  -> OBS main stream
     //   2  Dhuvas Facebook -> Branch Output filter on the DHUVAS scene
-    //   3  VOICE YouTube   -> fanned out at the relay, follows the main stream
-    //   4  PSM monitor     -> not wired yet (second Branch Output, later)
+    //   3  VOICE YouTube   -> NOT WIRED. Nothing pushes to YouTube yet.
+    //   4  PSM monitor      -> NOT WIRED. Nothing pushes back to the relay yet;
+    //                          in vMix this was Stream 4, which no longer exists.
+    // Cards 3 and 4 are inert on purpose — a lamp that says LIVE when nothing
+    // is being sent is worse than no lamp at all.
     let obsStats = null;
 
     async function pollStatus() {
@@ -182,8 +185,8 @@
         connected = !!d.connected;
         streams[0] = !!d.streaming;
         streams[1] = !!d.branchLive;
-        streams[2] = !!d.streaming;
-        streams[3] = false;
+        streams[2] = false;   // YouTube: no destination configured yet
+        streams[3] = false;   // PSM monitor: no destination configured yet
         obsStats = d.stats || null;
         if (!masterDragging) {
           masterVol = typeof d.volume === 'number' ? d.volume : masterVol;
@@ -236,13 +239,11 @@
     }
 
     function togStream(i) {
-      // Card 4 (PSM monitor) isn't wired to an output yet.
-      if (i === 3) return;
+      // Cards 3 and 4 have no destination configured yet.
+      if (i === 2 || i === 3) return;
 
-      // Cards 1 and 3 are both the main OBS stream — VOICE goes to
-      // Facebook, and YouTube is fanned out from the relay off the same
-      // encode, so they start and stop together.
-      if (i === 0 || i === 2) {
+      // Card 1 — VOICE on the main OBS stream.
+      if (i === 0) {
         if (streams[0]) {
           if (!confirm('Stop the VOICE stream?')) return;
           obsPost('/api/obs/stream', { action: 'stop' });
