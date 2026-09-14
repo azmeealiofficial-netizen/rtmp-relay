@@ -591,6 +591,29 @@ app.post('/api/match/end', async (req, res) => {
   res.json({ ok: errors.length === 0, errors });
 });
 
+// Preflight — proves both page tokens still work, without creating
+// anything. Token revocation is otherwise silent and you'd find out at
+// kickoff. Run this as part of the pre-match checklist.
+app.get('/api/match/check', async (req, res) => {
+  const out = { ok: true, obs: { connected: obsState.connected, streaming: obsState.streaming }, pages: {} };
+  for (const [brand, page] of Object.entries(FB_PAGES)) {
+    if (!page.id || !page.token) {
+      out.pages[brand] = { ok: false, error: 'not configured' };
+      out.ok = false;
+      continue;
+    }
+    try {
+      const j = await fbCall(`/${page.id}`, { fields: 'name,id', access_token: page.token });
+      out.pages[brand] = { ok: true, name: j.name, id: j.id };
+    } catch (e) {
+      out.pages[brand] = { ok: false, error: e.message };
+      out.ok = false;
+    }
+  }
+  if (!obsState.connected) out.ok = false;
+  res.status(out.ok ? 200 : 502).json(out);
+});
+
 app.get('/api/match/status', (req, res) => {
   res.json({
     live: matchState.live,
