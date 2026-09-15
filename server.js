@@ -55,6 +55,9 @@ const OBS_SCENE_VOICE   = process.env.OBS_SCENE_VOICE   || 'VOICE';
 const OBS_SCENE_DHUVAS  = process.env.OBS_SCENE_DHUVAS  || 'DHUVAS';
 const OBS_SCENE_PROGRAM = process.env.OBS_SCENE_PROGRAM || 'Program';
 const OBS_BRANCH_FILTER = process.env.OBS_BRANCH_FILTER || 'Branch Output';
+// Second Branch Output filter, on the VOICE scene, pushing to YouTube.
+// Separate encode from the main stream — see the load note in the docs.
+const OBS_YT_FILTER     = process.env.OBS_YT_FILTER     || 'YouTube';
 const OBS_AUDIO_INPUT   = process.env.OBS_AUDIO_INPUT   || 'CAM — PSM (NDI)';
 const OBS_FTB_VOICE     = process.env.OBS_FTB_VOICE     || 'FTB — Black (VOICE)';
 const OBS_FTB_DHUVAS    = process.env.OBS_FTB_DHUVAS    || 'FTB — Black (DHUVAS)';
@@ -68,7 +71,8 @@ const obs = OBSWebSocket ? new OBSWebSocket() : null;
 const obsState = {
   connected: false,
   streaming: false,
-  branchLive: false,       // Branch Output filter enabled (Dhuvas)
+  branchLive: false,       // Branch Output filter enabled (Dhuvas -> Facebook)
+  ytLive: false,           // Branch Output filter enabled (VOICE -> YouTube)
   ftb: false,
   currentScene: '',
   cams: [],                // [{ id, name, live }] inside Program
@@ -111,6 +115,13 @@ async function obsRefreshScene() {
     });
     obsState.branchLive = !!f.filterEnabled;
   } catch (e) { /* filter may not exist yet — not fatal */ }
+
+  try {
+    const y = await obs.call('GetSourceFilter', {
+      sourceName: OBS_SCENE_VOICE, filterName: OBS_YT_FILTER,
+    });
+    obsState.ytLive = !!y.filterEnabled;
+  } catch (e) { obsState.ytLive = false; /* no YouTube filter — not fatal */ }
 
   try {
     const v = await obs.call('GetInputVolume', { inputName: OBS_AUDIO_INPUT });
@@ -215,6 +226,9 @@ if (obs) {
   obs.on('SourceFilterEnableStateChanged', (e) => {
     if (e.sourceName === OBS_SCENE_DHUVAS && e.filterName === OBS_BRANCH_FILTER) {
       obsState.branchLive = !!e.filterEnabled;
+    }
+    if (e.sourceName === OBS_SCENE_VOICE && e.filterName === OBS_YT_FILTER) {
+      obsState.ytLive = !!e.filterEnabled;
     }
   });
   obs.on('InputVolumeChanged', (e) => {
@@ -322,12 +336,18 @@ app.post('/api/obs/mute', async (req, res) => {
 app.post('/api/obs/branch', async (req, res) => {
   if (!obsGuard(res)) return;
   try {
-    const enabled = (req.body && typeof req.body.enabled === 'boolean') ? req.body.enabled : !obsState.branchLive;
+    const target = (req.body && req.body.target) || 'dhuvas';
+    const isYT = target === 'youtube';
+    const scene = isYT ? OBS_SCENE_VOICE : OBS_SCENE_DHUVAS;
+    const filter = isYT ? OBS_YT_FILTER : OBS_BRANCH_FILTER;
+    const currently = isYT ? obsState.ytLive : obsState.branchLive;
+    const enabled = (req.body && typeof req.body.enabled === 'boolean') ? req.body.enabled : !currently;
+
     await obs.call('SetSourceFilterEnabled', {
-      sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER, filterEnabled: enabled,
+      sourceName: scene, filterName: filter, filterEnabled: enabled,
     });
-    obsState.branchLive = enabled;
-    res.json({ ok: true, enabled });
+    if (isYT) obsState.ytLive = enabled; else obsState.branchLive = enabled;
+    res.json({ ok: true, target, enabled });
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
@@ -357,8 +377,17 @@ app.post('/api/obs/destination', async (req, res) => {
         sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
         filterSettings: settings, overlay: true,
       });
+    } else if (target === 'youtube') {
+      const cur = await obs.call('GetSourceFilter', {
+        sourceName: OBS_SCENE_VOICE, filterName: OBS_YT_FILTER,
+      });
+      await obs.call('SetSourceFilterSettings', {
+        sourceName: OBS_SCENE_VOICE, filterName: OBS_YT_FILTER,
+        filterSettings: Object.assign({}, cur.filterSettings, { server, key }),
+        overlay: true,
+      });
     } else {
-      return res.status(400).json({ error: "target must be 'voice' or 'dhuvas'" });
+      return res.status(400).json({ error: "target must be 'voice', 'dhuvas' or 'youtube'" });
     }
     res.json({ ok: true });
   } catch (e) { res.status(502).json({ error: e.message }); }
