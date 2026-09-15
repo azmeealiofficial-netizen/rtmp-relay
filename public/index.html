@@ -96,15 +96,12 @@
     .gl-pill.on{background:#22c55e12;border-color:#22c55e30;color:var(--grn)}
     .gl-pill.warn{background:#f59e0b12;border-color:#f59e0b30;color:var(--amb);cursor:pointer}
     .gl-pill.err{background:#ef444412;border-color:#ef444430;color:var(--red)}
-    .gl-actions{display:flex;gap:6px}
-    .gl-msg{margin-top:10px;font-size:11px;line-height:1.5;color:var(--t3);min-height:15px;white-space:pre-line}
-    .gl-msg.err{color:var(--red)}
-    .gl-msg.ok{color:var(--grn)}
-    .gl-msg.warn{color:var(--amb)}
-    .gl-link{background:none;border:none;color:var(--t3);font-size:10px;font-weight:700;letter-spacing:.5px;
-             cursor:pointer;font-family:inherit;padding:0;text-decoration:underline;text-underline-offset:3px}
-    .gl-link:hover{color:var(--t1)}
-    .q-btn:disabled{opacity:.35;cursor:not-allowed}
+    .gl-card{display:block;background:var(--card);border:1px solid var(--bdr);border-radius:12px;
+             padding:14px 16px;margin-bottom:20px;text-decoration:none;transition:border-color .15s}
+    .gl-card:hover{border-color:var(--bdr2)}
+    .gl-card .gl-dests{margin:0 0 10px}
+    .gl-open{display:block;text-align:center;font-size:10px;font-weight:800;letter-spacing:1px;color:var(--t3)}
+    .gl-card:hover .gl-open{color:var(--t1)}
     .sec-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
     .sec-title{color:var(--t3);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
 
@@ -298,25 +295,13 @@
       </div>
 
       <div class="sec-hdr">
-        <span class="sec-title">Go Live</span>
+        <span class="sec-title">Broadcast</span>
         <span class="gl-state" id="glState">IDLE</span>
       </div>
-      <div class="tk-panel">
-        <div class="tk-label-text">Event name</div>
-        <input type="text" id="glTitle" class="tk-input" dir="auto"
-               placeholder="e.g. Maziya vs New Radiant — Dhivehi Premier League">
-
+      <a class="gl-card" href="/golive">
         <div class="gl-dests" id="glDests"></div>
-
-        <div class="gl-actions">
-          <button class="q-btn c" id="glGo" onclick="matchStart()">GO LIVE</button>
-          <button class="q-btn t" id="glReh" onclick="matchRehearse()">REHEARSE</button>
-        </div>
-        <button class="q-btn s" id="glEnd" onclick="matchEnd()" style="width:100%;margin-top:6px">END MATCH</button>
-
-        <div class="gl-msg" id="glMsg"></div>
-        <div style="margin-top:8px"><button class="gl-link" onclick="matchPreflight()">RUN PREFLIGHT</button></div>
-      </div>
+        <span class="gl-open">OPEN GO LIVE →</span>
+      </a>
 
       <div class="sec-hdr"><span class="sec-title">Live Ticker</span></div>
       <div class="tk-panel">
@@ -478,137 +463,47 @@
     const obsFtb    = ()       => obsPost('/api/obs/ftb',{on:!obsFtbOn});
     const obsStream = (action) => obsPost('/api/obs/stream',{action});
 
-    // ================= GO LIVE (Facebook match automation) =================
-    // Facebook is API-driven: one title creates a broadcast on both pages.
-    // YouTube is NOT — it rides a persistent stream key set in the OBS
-    // Branch Output filter, so its title is whatever Studio has. All this
-    // panel can do for YouTube is show whether the branch is armed, which
-    // is the thing that actually gets forgotten after a rehearsal.
-    let mState={live:false,rehearsal:false,videos:{},lastError:''};
+    // ================= BROADCAST STATUS (read-only) =================
+    // The controls live on /golive so there is exactly one place that can
+    // start or end a match. This card only mirrors state and links there.
+    let mState={live:false,rehearsal:false,videos:{}};
     let obsYtLive=false,obsBranchLive=false;
 
-    async function apiCall(path,body){
+    async function apiCall(path){
       try{
-        const opt = body===undefined
-          ? {}
-          : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};
-        const r=await fetch(path,opt);
+        const r=await fetch(path);
         let d={}; try{ d=await r.json(); }catch(_){}
         return {ok:r.ok,data:d};
-      }catch(e){ return {ok:false,data:{error:e.message}}; }
-    }
-
-    function glMsg(text,cls){
-      const e=document.getElementById('glMsg');
-      if(!e)return;
-      e.className='gl-msg'+(cls?' '+cls:'');
-      e.textContent=text||'';
+      }catch(e){ return {ok:false,data:{}}; }
     }
 
     function renderMatch(){
       const st=document.getElementById('glState');
-      const go=document.getElementById('glGo');
-      const rh=document.getElementById('glReh');
-      const en=document.getElementById('glEnd');
       const ds=document.getElementById('glDests');
       if(!st||!ds)return;
 
-      if(mState.live && mState.rehearsal){ st.className='gl-state reh'; st.textContent='REHEARSAL'; }
-      else if(mState.live){ st.className='gl-state live'; st.textContent='● LIVE'; }
+      if(mState.live&&mState.rehearsal){ st.className='gl-state reh'; st.textContent='REHEARSAL'; }
+      else if(mState.live){ st.className='gl-state live'; st.textContent='\u25cf LIVE'; }
       else { st.className='gl-state'; st.textContent='IDLE'; }
-
-      // Can't start a match while one is running, or while OBS is already
-      // streaming — the server refuses both, so don't offer them.
-      const busy = mState.live || obsStreaming;
-      go.disabled = busy; rh.disabled = busy; en.disabled = !mState.live;
 
       const fb=(brand,label)=>{
         const v=mState.videos&&mState.videos[brand];
         let cls='',txt='READY';
-        if(v&&v.published){ cls='on'; txt='● LIVE'; }
+        if(v&&v.published){ cls='on'; txt='\u25cf LIVE'; }
         else if(v){ cls='warn'; txt='UNPUBLISHED'; }
-        return `<div class="gl-dest"><div>${label}<small>Facebook · title from this panel</small></div>`+
+        return `<div class="gl-dest"><div>${label}<small>Facebook</small></div>`+
                `<span class="gl-pill ${cls}">${txt}</span></div>`;
       };
 
-      const ytCls = obsYtLive?'on':'warn';
-      const ytTxt = obsYtLive?'ARMED':'DISARMED — CLICK';
-      const ytClick = obsYtLive?'':' onclick="armYouTube()"';
-
-      ds.innerHTML =
-        fb('voice','VOICE') +
-        fb('dhuvas','DHUVAS') +
-        `<div class="gl-dest"><div>YOUTUBE<small>Persistent key · title set in Studio</small></div>`+
-        `<span class="gl-pill ${ytCls}"${ytClick}>${ytTxt}</span></div>`;
+      ds.innerHTML = fb('voice','VOICE') + fb('dhuvas','DHUVAS') +
+        `<div class="gl-dest"><div>YOUTUBE<small>Persistent key</small></div>`+
+        `<span class="gl-pill ${obsYtLive?'on':'warn'}">${obsYtLive?'ARMED':'DISARMED'}</span></div>`;
     }
 
     async function pollMatch(){
       const r=await apiCall('/api/match/status');
-      if(r.ok&&r.data){ mState=r.data; }
+      if(r.ok&&r.data) mState=r.data;
       renderMatch();
-    }
-
-    function glTitle(){ return (document.getElementById('glTitle').value||'').trim(); }
-
-    async function matchStart(){
-      const title=glTitle();
-      if(!title){ glMsg('Enter an event name first — it becomes the post title on both pages.','err'); return; }
-      if(!obsYtLive && !confirm('The YouTube branch is DISARMED — YouTube will not go out.\n\nStart anyway?')) return;
-      if(!confirm(`This publishes to VOICE and DHUVAS for real.\n\n"${title}"\n\nGo live?`)) return;
-      glMsg('Creating broadcasts…');
-      const r=await apiCall('/api/match/start',{title});
-      if(!r.ok){ glMsg('Failed: '+(r.data.error||'unknown error'),'err'); }
-      else { glMsg('Live on '+Object.keys(r.data.videos||{}).filter(k=>r.data.videos[k]).join(' + ')+
-                   '. Publishing in ~10s once OBS confirms ingest.','ok'); }
-      pollMatch(); setTimeout(pollStatus,400); setTimeout(pollMatch,12000);
-    }
-
-    async function matchRehearse(){
-      const title=glTitle()||'Rehearsal - not for broadcast';
-      if(obsYtLive){
-        if(!confirm('YouTube is ARMED and would go PUBLIC — rehearsal only protects Facebook.\n\nDisarm the YouTube branch first?')) return;
-        await obsPost('/api/obs/branch',{target:'youtube',enabled:false});
-        await new Promise(r=>setTimeout(r,600));
-        await pollStatus();
-        if(obsYtLive){ glMsg('Could not disarm YouTube — aborting rehearsal.','err'); return; }
-      }
-      glMsg('Rehearsing — nothing will be published…','warn');
-      const r=await apiCall('/api/match/start',{title,publish:false});
-      if(!r.ok){ glMsg('Failed: '+(r.data.error||'unknown error'),'err'); }
-      else { glMsg('Rehearsal running. Nothing is public. END MATCH when done — then re-arm YouTube.','warn'); }
-      pollMatch(); setTimeout(pollStatus,400);
-    }
-
-    async function matchEnd(){
-      if(!confirm('End the match and close both broadcasts?')) return;
-      glMsg('Ending…');
-      const r=await apiCall('/api/match/end',{});
-      const errs=(r.data&&r.data.errors)||[];
-      glMsg(errs.length?('Ended with problems:\n'+errs.join('\n')):'Ended cleanly.',errs.length?'err':'ok');
-      pollMatch(); setTimeout(pollStatus,400);
-      if(!obsYtLive) setTimeout(()=>glMsg('Ended. YouTube is still DISARMED — click the pill to re-arm it.','warn'),1500);
-    }
-
-    async function armYouTube(){
-      await obsPost('/api/obs/branch',{target:'youtube',enabled:true});
-      setTimeout(pollStatus,600);
-      glMsg('Re-arming YouTube…');
-    }
-
-    async function matchPreflight(){
-      glMsg('Checking tokens and OBS…');
-      const r=await apiCall('/api/match/check');
-      const d=r.data||{};
-      const lines=[];
-      if(d.obs) lines.push('OBS: '+(d.obs.connected?'connected':'NOT CONNECTED')+
-                           (d.obs.streaming?' · already streaming':''));
-      for(const [k,p] of Object.entries(d.pages||{})){
-        if(p.skipped){ lines.push(k.toUpperCase()+': not configured (manual)'); continue; }
-        lines.push(k.toUpperCase()+': '+(p.ok?'ok':'FAIL '+(p.error||''))+
-                   (p.dataAccessDays!=null?` · data access ${p.dataAccessDays}d (${p.dataAccessExpires})`:''));
-      }
-      (d.warnings||[]).forEach(w=>lines.push('⚠ '+w));
-      glMsg(lines.join('\n'), d.ok?'ok':'err');
     }
 
     // Only rebuild the camera buttons when the set of cameras actually

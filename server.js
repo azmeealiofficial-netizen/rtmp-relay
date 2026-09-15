@@ -1475,6 +1475,7 @@ app.get('/settings', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/ticker', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ticker.html')));
 app.get('/go', (req, res) => res.sendFile(path.join(__dirname, 'public', 'go.html')));
 app.get('/live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'live.html')));
+app.get('/golive', (req, res) => res.sendFile(path.join(__dirname, 'public', 'golive.html'))); // phone-friendly match start/end
 app.get('/streamer-tag', (req, res) => res.sendFile(path.join(__dirname, 'public', 'streamer-tag.html')));
 app.get('/scorebug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'scorebug.html')));  // vMix overlay input
 app.get('/score', (req, res) => res.sendFile(path.join(__dirname, 'public', 'score.html')));        // director control (desktop setup)
