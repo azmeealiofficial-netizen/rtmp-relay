@@ -33,6 +33,20 @@ button{font-family:inherit;cursor:pointer;border:none}
 .conn.off{background:#ef444412;border-color:#ef444430;color:var(--red)}
 .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 
+/* PSM preview */
+.preview{position:relative;width:100%;aspect-ratio:16/9;background:#000;border:1px solid var(--bdr);
+  border-radius:14px;overflow:hidden;margin-bottom:16px;display:flex;align-items:center;justify-content:center}
+.preview video{width:100%;height:100%;object-fit:contain;display:none;background:#000}
+.preview.on video{display:block}
+.p-off{color:var(--t3);font-size:12px;font-weight:600;letter-spacing:.5px;text-align:center;padding:0 16px}
+.preview.on .p-off{display:none}
+.p-badge{position:absolute;top:10px;left:10px;font-size:9px;font-weight:800;letter-spacing:.8px;
+  padding:4px 9px;border-radius:999px;background:#00000090;backdrop-filter:blur(6px);
+  color:var(--t3);border:1px solid var(--bdr)}
+.preview.on .p-badge{color:var(--grn);border-color:#22c55e40}
+.p-mute{position:absolute;bottom:10px;right:10px;font-size:15px;line-height:1;padding:8px 10px;
+  border-radius:999px;background:#00000090;backdrop-filter:blur(6px);border:1px solid var(--bdr);color:var(--t2)}
+
 /* status banner */
 .banner{border-radius:16px;padding:20px 18px;margin-bottom:16px;border:1px solid var(--bdr);
   background:var(--card);text-align:center;transition:all .25s}
@@ -99,6 +113,13 @@ button.pill{min-height:34px}
   <div class="conn off" id="conn"><span class="dot"></span><span id="connTxt">OFFLINE</span></div>
 </div>
 
+<div class="preview" id="preview">
+  <video id="psmVid" muted autoplay playsinline></video>
+  <div class="p-off" id="psmOff">PSM — waiting for feed</div>
+  <div class="p-badge" id="psmBadge">PSM</div>
+  <button class="p-mute" id="psmMute" onclick="toggleMute()" title="Unmute">🔇</button>
+</div>
+
 <div class="banner" id="banner">
   <div class="b-state" id="state">IDLE</div>
   <div class="b-sub" id="sub">Nothing is broadcasting</div>
@@ -113,7 +134,7 @@ button.pill{min-height:34px}
 <div class="dests" id="dests"></div>
 
 <button class="btn go" id="go" onclick="tapGo()">GO LIVE</button>
-<button class="btn end" id="end" onclick="tapEnd()" hidden>END MATCH</button>
+<button class="btn end" id="end" onclick="tapEnd()" hidden>END LIVE</button>
 <div class="row"><button class="btn reh" id="reh" onclick="tapReh()">REHEARSE</button></div>
 
 <div class="msg" id="msg"></div>
@@ -124,9 +145,10 @@ button.pill{min-height:34px}
   <a class="link" href="/live">STREAM PREVIEW</a>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
 <script>
 // ============================================================
-// GO LIVE — mobile-first front end for the match automation.
+// GO LIVE — mobile-first front end for the event automation.
 //
 // Facebook is API-driven: one title creates a broadcast on both
 // pages and the relay publishes them once OBS confirms ingest.
@@ -171,7 +193,7 @@ function disarm(){
   if(armTimer){clearInterval(armTimer);armTimer=null;}
   if(armed){
     const b=document.getElementById(armed);
-    if(b){b.classList.remove('arm');b.textContent=(armed==='go'?'GO LIVE':'END MATCH');}
+    if(b){b.classList.remove('arm');b.textContent=(armed==='go'?'GO LIVE':'END LIVE');}
     armed=null;
   }
 }
@@ -205,7 +227,7 @@ function render(){
     sub.innerHTML=(M.title?esc(M.title)+' · ':'')+'<span class="b-clock">'+clock(Date.now()-M.startedAt)+'</span>';
   }else{
     ban.className='banner'; st.textContent='IDLE';
-    sub.textContent = streaming ? 'OBS is streaming outside match control'
+    sub.textContent = streaming ? 'OBS is streaming outside event control'
                                 : 'Nothing is broadcasting';
   }
 
@@ -284,12 +306,12 @@ async function rehearse(){
   }
   const r=await api('/api/match/start',{title:t,publish:false});
   if(!r.ok) msg('Failed: '+(r.data.error||'unknown error'),'err');
-  else msg('Rehearsal running. Nothing is public and no VOD is left behind.\nEND MATCH when done, then re-arm YouTube.','warn');
+  else msg('Rehearsal running. Nothing is public and no VOD is left behind.\nEND LIVE when done, then re-arm YouTube.','warn');
   poll();
 }
 
 function tapEnd(){
-  arm('end','TAP AGAIN TO END',endMatch);
+  arm('end','TAP AGAIN TO END LIVE',endMatch);
   if(armed) msg('This stops OBS and closes both broadcasts.','warn');
 }
 
@@ -325,9 +347,66 @@ async function preflight(){
   msg(out.join('\n'), d.ok&&ytLive?'ok':(d.ok?'warn':'err'));
 }
 
+// ---------------- PSM preview ----------------
+// The relay serves /hls/psm.m3u8 only while something is publishing to
+// rtmp://.../live/psm, and 404s otherwise. So probe the manifest rather
+// than letting hls.js retry-storm against a feed that isn't there yet,
+// and tear the player down when the feed stops so the poster returns.
+let hls=null, psmUp=false;
+
+function psmStop(){
+  if(hls){ try{hls.destroy();}catch(_){ } hls=null; }
+  psmUp=false;
+  document.getElementById('preview').classList.remove('on');
+  document.getElementById('psmBadge').textContent='PSM';
+}
+
+function psmStart(){
+  const v=document.getElementById('psmVid');
+  if(window.Hls&&Hls.isSupported()){
+    hls=new Hls({liveSyncDuration:6,liveMaxLatencyDuration:20,maxBufferLength:12,
+                 manifestLoadingMaxRetry:4,levelLoadingMaxRetry:4,fragLoadingMaxRetry:4});
+    hls.loadSource('/hls/psm.m3u8');
+    hls.attachMedia(v);
+    hls.on(Hls.Events.MANIFEST_PARSED,()=>v.play().catch(()=>{}));
+    hls.on(Hls.Events.ERROR,(e,d)=>{
+      if(!d.fatal)return;
+      if(d.type===Hls.ErrorTypes.NETWORK_ERROR){ hls.startLoad(); return; }
+      if(d.type===Hls.ErrorTypes.MEDIA_ERROR){ hls.recoverMediaError(); return; }
+      psmStop();
+    });
+  }else{
+    // Safari plays HLS natively and has no Hls.isSupported() path.
+    v.src='/hls/psm.m3u8'; v.play().catch(()=>{});
+  }
+  psmUp=true;
+  document.getElementById('preview').classList.add('on');
+  document.getElementById('psmBadge').textContent='● PSM';
+}
+
+async function psmPoll(){
+  let live=false;
+  try{
+    const r=await fetch('/hls/psm.m3u8',{cache:'no-store'});
+    // A 200 is not enough — a proxy error page or SPA fallback also
+    // returns 200. Only a real manifest starts with #EXTM3U.
+    if(r.ok) live=(await r.text()).trimStart().startsWith('#EXTM3U');
+  }catch(_){ live=false; }
+  if(live&&!psmUp) psmStart();
+  else if(!live&&psmUp){ psmStop(); document.getElementById('psmOff').textContent='PSM — feed stopped'; }
+}
+
+function toggleMute(){
+  const v=document.getElementById('psmVid');
+  v.muted=!v.muted;
+  document.getElementById('psmMute').textContent=v.muted?'🔇':'🔊';
+  if(!v.muted) v.play().catch(()=>{});
+}
+
 // A running clock needs a faster tick than the 3s poll, but only the
 // clock — no network. Keeps the elapsed time honest without extra load.
 poll(); setInterval(poll,3000); setInterval(()=>{ if(M.live) render(); },1000);
+psmPoll(); setInterval(psmPoll,5000);
 document.getElementById('title').addEventListener('input',disarm);
 </script>
 </body>
