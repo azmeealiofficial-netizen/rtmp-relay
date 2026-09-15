@@ -115,8 +115,8 @@ button.pill{min-height:34px}
 
 <div class="preview" id="preview">
   <video id="psmVid" muted autoplay playsinline></video>
-  <div class="p-off" id="psmOff">PSM — waiting for feed</div>
-  <div class="p-badge" id="psmBadge">PSM</div>
+  <div class="p-off" id="psmOff">PROGRAM — waiting for feed</div>
+  <div class="p-badge" id="psmBadge">PROGRAM</div>
   <button class="p-mute" id="psmMute" onclick="toggleMute()" title="Unmute">🔇</button>
 </div>
 
@@ -347,9 +347,9 @@ async function preflight(){
   msg(out.join('\n'), d.ok&&ytLive?'ok':(d.ok?'warn':'err'));
 }
 
-// ---------------- PSM preview ----------------
-// The relay serves /hls/psm.m3u8 only while something is publishing to
-// rtmp://.../live/psm, and 404s otherwise. So probe the manifest rather
+// ---------------- PROGRAM monitor preview ----------------
+// The relay serves /hls/program.m3u8 only while something is publishing to
+// rtmp://.../live/program, and 404s otherwise. So probe the manifest rather
 // than letting hls.js retry-storm against a feed that isn't there yet,
 // and tear the player down when the feed stops so the poster returns.
 let hls=null, psmUp=false;
@@ -358,7 +358,7 @@ function psmStop(){
   if(hls){ try{hls.destroy();}catch(_){ } hls=null; }
   psmUp=false;
   document.getElementById('preview').classList.remove('on');
-  document.getElementById('psmBadge').textContent='PSM';
+  document.getElementById('psmBadge').textContent='PROGRAM';
 }
 
 function psmStart(){
@@ -366,7 +366,7 @@ function psmStart(){
   if(window.Hls&&Hls.isSupported()){
     hls=new Hls({liveSyncDuration:6,liveMaxLatencyDuration:20,maxBufferLength:12,
                  manifestLoadingMaxRetry:4,levelLoadingMaxRetry:4,fragLoadingMaxRetry:4});
-    hls.loadSource('/hls/psm.m3u8');
+    hls.loadSource('/hls/program.m3u8');
     hls.attachMedia(v);
     hls.on(Hls.Events.MANIFEST_PARSED,()=>v.play().catch(()=>{}));
     hls.on(Hls.Events.ERROR,(e,d)=>{
@@ -377,23 +377,23 @@ function psmStart(){
     });
   }else{
     // Safari plays HLS natively and has no Hls.isSupported() path.
-    v.src='/hls/psm.m3u8'; v.play().catch(()=>{});
+    v.src='/hls/program.m3u8'; v.play().catch(()=>{});
   }
   psmUp=true;
   document.getElementById('preview').classList.add('on');
-  document.getElementById('psmBadge').textContent='● PSM';
+  document.getElementById('psmBadge').textContent='● ON AIR';
 }
 
 async function psmPoll(){
   let live=false;
   try{
-    const r=await fetch('/hls/psm.m3u8',{cache:'no-store'});
+    const r=await fetch('/hls/program.m3u8',{cache:'no-store'});
     // A 200 is not enough — a proxy error page or SPA fallback also
     // returns 200. Only a real manifest starts with #EXTM3U.
     if(r.ok) live=(await r.text()).trimStart().startsWith('#EXTM3U');
   }catch(_){ live=false; }
   if(live&&!psmUp) psmStart();
-  else if(!live&&psmUp){ psmStop(); document.getElementById('psmOff').textContent='PSM — feed stopped'; }
+  else if(!live&&psmUp){ psmStop(); document.getElementById('psmOff').textContent='PROGRAM — feed stopped'; }
 }
 
 function toggleMute(){
