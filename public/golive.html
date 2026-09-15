@@ -251,12 +251,19 @@ function render(){
            '<span class="pill '+cls+'">'+txt+'</span></div>';
   };
 
+  // Interlock is Always ON, so an armed YouTube branch is BROADCASTING,
+  // not merely ready. Off between events is the correct state, so it reads
+  // neutral; armed outside an event is an alarm, not a reassurance.
+  let ytCls,ytTxt;
+  if(M.live&&!M.rehearsal){ ytCls=ytLive?'on':'warn'; ytTxt=ytLive?'● LIVE':'OFF — NOT GOING OUT'; }
+  else if(M.live&&M.rehearsal){ ytCls=ytLive?'err':''; ytTxt=ytLive?'PUSHING!':'OFF'; }
+  else { ytCls=ytLive?'err':''; ytTxt=ytLive?'ARMED — PUSHING!':'OFF'; }
+
   document.getElementById('dests').innerHTML =
     fb('voice','VOICE') + fb('dhuvas','DHUVAS') +
     '<div class="dest"><div><div class="d-name">YOUTUBE</div>'+
     '<div class="d-note">Persistent key · title set in Studio</div></div>'+
-    '<button class="pill '+(ytLive?'on':'warn')+'" onclick="toggleYt()">'+
-    (ytLive?'ARMED':'DISARMED')+'</button></div>';
+    '<button class="pill '+ytCls+'" onclick="toggleYt()">'+ytTxt+'</button></div>';
 }
 
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -274,9 +281,8 @@ function titleVal(){ return (document.getElementById('title').value||'').trim();
 function tapGo(){
   const t=titleVal();
   if(!t){ msg('Enter an event name first — it becomes the post title on both pages.','err'); return; }
-  const warn = ytLive ? '' : '\nYouTube is DISARMED and will not go out.';
   arm('go','TAP AGAIN TO GO LIVE',()=>goLive(t));
-  if(armed) msg('This publishes to VOICE and DHUVAS for real.'+warn,'warn');
+  if(armed) msg('This publishes to VOICE, DHUVAS and YouTube for real.','warn');
 }
 
 async function goLive(t){
@@ -306,7 +312,7 @@ async function rehearse(){
   }
   const r=await api('/api/match/start',{title:t,publish:false});
   if(!r.ok) msg('Failed: '+(r.data.error||'unknown error'),'err');
-  else msg('Rehearsal running. Nothing is public and no VOD is left behind.\nEND LIVE when done, then re-arm YouTube.','warn');
+  else msg('Rehearsal running. Nothing is public and no VOD is left behind.','warn');
   poll();
 }
 
@@ -321,7 +327,7 @@ async function endMatch(){
   const errs=(r.data&&r.data.errors)||[];
   msg(errs.length?('Ended with problems:\n'+errs.join('\n')):'Ended cleanly.',errs.length?'err':'ok');
   await poll();
-  if(!ytLive) setTimeout(()=>msg('Ended. YouTube is still DISARMED — tap the pill to re-arm it.','warn'),1600);
+  if(ytLive) setTimeout(()=>msg('Ended, but a branch is still ARMED and pushing. Tap the pill to stop it.','err'),1600);
 }
 
 async function toggleYt(){
@@ -342,9 +348,12 @@ async function preflight(){
     out.push(k.toUpperCase()+': '+(p.ok?'ok':'FAIL '+(p.error||''))+
       (p.dataAccessDays!=null?' · data access '+p.dataAccessDays+'d ('+p.dataAccessExpires+')':''));
   }
-  out.push('YouTube: '+(ytLive?'armed':'DISARMED — it will not go out'));
+  // The server now judges branch state for us — armed outside an event is
+  // a failure there, so don't second-guess it here.
+  if(d.branches) out.push('Branches: dhuvas '+(d.branches.dhuvas?'ARMED':'off')+
+                          ', youtube '+(d.branches.youtube?'ARMED':'off'));
   (d.warnings||[]).forEach(w=>out.push('⚠ '+w));
-  msg(out.join('\n'), d.ok&&ytLive?'ok':(d.ok?'warn':'err'));
+  msg(out.join('\n'), d.ok?'ok':'err');
 }
 
 // ---------------- PROGRAM monitor preview ----------------

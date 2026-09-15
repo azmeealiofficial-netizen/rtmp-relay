@@ -484,6 +484,23 @@ function splitStreamUrl(u) {
   return { server: u.slice(0, i + 1), key: u.slice(i + 1) };
 }
 
+// Branch Output's Interlock is set to "Always ON", which means a filter
+// broadcasts the moment it is enabled — it no longer waits for StartStream.
+// That is what makes the Monitor branch usable as a permanent preview, but
+// it also removes the safety net that used to exist by accident: an enabled
+// DHUVAS or YouTube filter is live as soon as OBS opens. So the invariant
+// between events is Monitor ON, DHUVAS and YouTube OFF, and these two
+// functions are what maintain it. Never leave them enabled by hand.
+async function setBranchEnabled(target, enabled) {
+  const isYT = target === 'youtube';
+  await obs.call('SetSourceFilterEnabled', {
+    sourceName: isYT ? OBS_SCENE_VOICE : OBS_SCENE_DHUVAS,
+    filterName: isYT ? OBS_YT_FILTER : OBS_BRANCH_FILTER,
+    filterEnabled: enabled,
+  });
+  if (isYT) obsState.ytLive = enabled; else obsState.branchLive = enabled;
+}
+
 async function setDestination(brand, server, key) {
   if (brand === 'voice') {
     await obs.call('SetStreamServiceSettings', {
@@ -548,6 +565,13 @@ app.post('/api/match/start', async (req, res) => {
       await setDestination(brand, c.server, c.key);
     }
 
+    // 2b. arm the branches. Dhuvas is safe either way — its broadcast is
+    // still UNPUBLISHED at this point, so the bytes go somewhere invisible.
+    // YouTube has no unpublished state and auto-starts on ingest, so it is
+    // armed ONLY for a real go-live, never for a rehearsal.
+    if (created.dhuvas) await setBranchEnabled('dhuvas', true);
+    if (autoPublish) await setBranchEnabled('youtube', true);
+
     // 3. go
     await obs.call('StartStream');
 
@@ -587,6 +611,11 @@ app.post('/api/match/start', async (req, res) => {
 
     res.json({ ok: true, title, rehearsal: matchState.rehearsal, videos: matchState.videos, skipped });
   } catch (e) {
+    // Disarm first: under Always ON a branch we managed to enable before the
+    // failure would keep broadcasting to a broadcast we are about to kill.
+    for (const t of ['dhuvas', 'youtube']) {
+      try { await setBranchEnabled(t, false); } catch (_) { /* best effort */ }
+    }
     // Roll back anything we created so we don't leave orphan broadcasts.
     for (const [brand, c] of Object.entries(created)) {
       try {
@@ -618,6 +647,14 @@ app.post('/api/match/end', async (req, res) => {
   // Stop the encoder first — ending the broadcasts while OBS is still
   // pushing leaves Facebook trying to ingest a stream nobody is watching.
   if (obs && obsState.connected) {
+    // Disarm the broadcast branches BEFORE StopStream. Under Always ON they
+    // do not stop with the main stream — leaving either enabled keeps it
+    // pushing after the event has "ended", which is the worst way to find
+    // out this setting changed. Monitor is deliberately left running.
+    for (const t of ['dhuvas', 'youtube']) {
+      try { await setBranchEnabled(t, false); }
+      catch (e) { errors.push(`branch ${t}: ${e.message}`); }
+    }
     try { await obs.call('StopStream'); }
     catch (e) { errors.push('OBS: ' + e.message); }
   } else {
@@ -727,6 +764,20 @@ app.get('/api/match/check', async (req, res) => {
   }
   if (!obsState.connected) out.ok = false;
   if (!configuredCount) { out.ok = false; out.error = 'no Facebook pages configured'; }
+
+  // Interlock is "Always ON", so an armed branch outside an event is not
+  // merely untidy — it is broadcasting right now. Treat it as a failure.
+  out.branches = { dhuvas: obsState.branchLive, youtube: obsState.ytLive, live: matchState.live };
+  if (!matchState.live) {
+    if (obsState.branchLive) {
+      out.warnings.push('Dhuvas branch is ARMED with no event running — it is pushing to Facebook right now.');
+      out.ok = false;
+    }
+    if (obsState.ytLive) {
+      out.warnings.push('YouTube branch is ARMED with no event running — it is pushing to YouTube right now.');
+      out.ok = false;
+    }
+  }
   if (!out.warnings.length) delete out.warnings;
   res.status(out.ok ? 200 : 502).json(out);
 });
