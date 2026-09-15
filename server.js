@@ -642,11 +642,44 @@ app.post('/api/match/end', async (req, res) => {
   res.json({ ok: errors.length === 0, errors });
 });
 
+// A page token can read "Expires: Never" and still stop working.
+// Separately from token expiry, Facebook enforces DATA ACCESS expiry:
+// roughly 90 days after the granting user last interacted with the app.
+// When it lapses the token starts failing with no prior warning — which,
+// for an automation that fires at kickoff, is the worst possible moment
+// to find out. So the preflight reports the remaining days and goes
+// non-ok below the threshold, turning a silent failure into a visible
+// line on the pre-match checklist.
+//
+// The cure is to re-run the token procedure (see FACEBOOK-SETUP.md) or,
+// permanently, to move the pages into a Business Portfolio and use a
+// System User token, which has no data-access clock at all.
+const FB_EXPIRY_WARN_DAYS = Number(process.env.FB_EXPIRY_WARN_DAYS || 14);
+
+async function tokenHealth(token) {
+  const j = await fbCall('/debug_token', { input_token: token, access_token: token });
+  const d = (j && j.data) || {};
+  const now = Math.floor(Date.now() / 1000);
+  const daysFrom = (ts) => (ts ? Math.floor((ts - now) / 86400) : null);
+  return {
+    neverExpires: d.expires_at === 0,
+    expiresInDays: d.expires_at === 0 ? null : daysFrom(d.expires_at),
+    dataAccessExpiresAt: d.data_access_expires_at || null,
+    dataAccessDays: daysFrom(d.data_access_expires_at),
+    scopes: d.scopes || [],
+  };
+}
+
 // Preflight — proves both page tokens still work, without creating
 // anything. Token revocation is otherwise silent and you'd find out at
 // kickoff. Run this as part of the pre-match checklist.
 app.get('/api/match/check', async (req, res) => {
-  const out = { ok: true, obs: { connected: obsState.connected, streaming: obsState.streaming }, pages: {} };
+  const out = {
+    ok: true,
+    obs: { connected: obsState.connected, streaming: obsState.streaming },
+    pages: {},
+    warnings: [],
+  };
   let configuredCount = 0;
   for (const [brand, page] of Object.entries(FB_PAGES)) {
     if (!page.id || !page.token) {
@@ -662,10 +695,39 @@ app.get('/api/match/check', async (req, res) => {
     } catch (e) {
       out.pages[brand] = { ok: false, error: e.message };
       out.ok = false;
+      continue;
+    }
+
+    // Health is advisory: if debug_token itself fails we say so, but we
+    // don't fail a preflight whose actual page call just succeeded.
+    try {
+      const h = await tokenHealth(page.token);
+      const p = out.pages[brand];
+      p.dataAccessDays = h.dataAccessDays;
+      p.neverExpires = h.neverExpires;
+      if (h.dataAccessExpiresAt) {
+        p.dataAccessExpires = new Date(h.dataAccessExpiresAt * 1000).toISOString().slice(0, 10);
+      }
+
+      if (!h.neverExpires) {
+        out.warnings.push(`${page.label}: token is NOT permanent — expires in ${h.expiresInDays} day(s). Re-derive it from a long-lived user token.`);
+        out.ok = false;
+      }
+      if (!h.scopes.includes('pages_manage_posts')) {
+        out.warnings.push(`${page.label}: token is missing pages_manage_posts — live video creation will fail with (#200).`);
+        out.ok = false;
+      }
+      if (h.dataAccessDays !== null && h.dataAccessDays <= FB_EXPIRY_WARN_DAYS) {
+        out.warnings.push(`${page.label}: DATA ACCESS expires in ${h.dataAccessDays} day(s) (${p.dataAccessExpires}). Re-run the token procedure or move to a System User token.`);
+        out.ok = false;
+      }
+    } catch (e) {
+      out.warnings.push(`${page.label}: could not read token health — ${e.message}`);
     }
   }
   if (!obsState.connected) out.ok = false;
   if (!configuredCount) { out.ok = false; out.error = 'no Facebook pages configured'; }
+  if (!out.warnings.length) delete out.warnings;
   res.status(out.ok ? 200 : 502).json(out);
 });
 
