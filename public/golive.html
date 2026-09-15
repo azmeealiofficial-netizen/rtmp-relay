@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#09090b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Go Live — VxD</title>
+<style>
+:root{
+  --bg:#09090b;--card:#18181b;--card2:#1f1f23;--bdr:#27272a;--bdr2:#3f3f46;
+  --t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;
+  --red:#ef4444;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b;
+  --safe-t:env(safe-area-inset-top,0px);--safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--t1);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body{padding:calc(var(--safe-t) + 14px) 16px calc(var(--safe-b) + 28px);
+  max-width:620px;margin:0 auto;min-height:100vh}
+button{font-family:inherit;cursor:pointer;border:none}
+[hidden]{display:none!important}
+
+/* header */
+.hdr{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}
+.brand{font-size:17px;font-weight:800;letter-spacing:-.3px}
+.brand .v{color:var(--red)}.brand .x{color:var(--amb)}.brand .d{color:var(--grn)}
+.conn{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.8px;
+  padding:5px 10px;border-radius:999px;background:var(--card2);color:var(--t3);border:1px solid transparent}
+.conn.on{background:#22c55e12;border-color:#22c55e30;color:var(--grn)}
+.conn.off{background:#ef444412;border-color:#ef444430;color:var(--red)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+
+/* status banner */
+.banner{border-radius:16px;padding:20px 18px;margin-bottom:16px;border:1px solid var(--bdr);
+  background:var(--card);text-align:center;transition:all .25s}
+.banner.live{border-color:#ef444440;background:linear-gradient(180deg,#1a0c0c 0%,var(--card) 100%)}
+.banner.reh{border-color:#f59e0b40;background:linear-gradient(180deg,#1a150a 0%,var(--card) 100%)}
+.b-state{font-size:26px;font-weight:900;letter-spacing:-.5px;margin-bottom:4px}
+.banner.live .b-state{color:var(--red)}
+.banner.reh .b-state{color:var(--amb)}
+.banner .b-state{color:var(--t3)}
+.b-sub{font-size:12px;color:var(--t3);min-height:17px;word-break:break-word}
+.b-clock{font-variant-numeric:tabular-nums;font-weight:700;color:var(--t2)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.banner.live .b-state{animation:pulse 2s infinite}
+
+/* input */
+.lbl{font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--t3);
+  margin:0 0 8px 2px}
+input[type=text]{width:100%;padding:15px 16px;background:var(--card);border:1px solid var(--bdr);
+  border-radius:12px;color:var(--t1);font-size:16px;font-family:inherit;outline:none;margin-bottom:18px}
+input[type=text]:focus{border-color:var(--bdr2)}
+input[type=text]::placeholder{color:var(--t3)}
+input:disabled{opacity:.5}
+
+/* destinations */
+.dests{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.dest{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 16px;background:var(--card);border:1px solid var(--bdr);border-radius:12px}
+.d-name{font-size:14px;font-weight:700;letter-spacing:.2px}
+.d-note{font-size:11px;color:var(--t3);margin-top:2px}
+.pill{flex:none;font-size:10px;font-weight:800;letter-spacing:.6px;padding:7px 12px;border-radius:999px;
+  background:var(--card2);color:var(--t3);border:1px solid transparent;white-space:nowrap}
+.pill.on{background:#22c55e12;border-color:#22c55e30;color:var(--grn)}
+.pill.warn{background:#f59e0b12;border-color:#f59e0b30;color:var(--amb)}
+.pill.err{background:#ef444412;border-color:#ef444430;color:var(--red)}
+button.pill{min-height:34px}
+
+/* actions */
+.btn{width:100%;padding:18px;border-radius:14px;font-size:15px;font-weight:800;letter-spacing:.6px;
+  color:#fff;transition:all .15s;min-height:56px}
+.btn:disabled{opacity:.3;cursor:not-allowed}
+.btn.go{background:var(--red);margin-bottom:8px}
+.btn.go.arm{background:#fff;color:#0a0a0a}
+.btn.reh{background:var(--card2);color:var(--t2);border:1px solid var(--bdr)}
+.btn.end{background:#dc2626;margin-bottom:8px}
+.btn.end.arm{background:#fff;color:#0a0a0a}
+.row{display:flex;gap:8px}
+.row .btn{margin-bottom:0}
+
+/* message + preflight */
+.msg{margin-top:14px;font-size:12.5px;line-height:1.6;color:var(--t3);white-space:pre-line;
+  word-break:break-word;min-height:18px}
+.msg.ok{color:var(--grn)}.msg.err{color:var(--red)}.msg.warn{color:var(--amb)}
+.tools{margin-top:22px;padding-top:18px;border-top:1px solid var(--bdr);
+  display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.link{background:none;color:var(--t3);font-size:11px;font-weight:700;letter-spacing:.8px;
+  padding:8px 12px;border-radius:8px;text-decoration:none;display:inline-block}
+.link:hover,.link:active{color:var(--t1);background:var(--card)}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="brand"><span class="v">V</span><span class="x">x</span><span class="d">D</span> Go Live</div>
+  <div class="conn off" id="conn"><span class="dot"></span><span id="connTxt">OFFLINE</span></div>
+</div>
+
+<div class="banner" id="banner">
+  <div class="b-state" id="state">IDLE</div>
+  <div class="b-sub" id="sub">Nothing is broadcasting</div>
+</div>
+
+<div id="titleWrap">
+  <div class="lbl">Event name</div>
+  <input type="text" id="title" dir="auto" autocomplete="off"
+         placeholder="Maziya vs New Radiant — Dhivehi Premier League">
+</div>
+
+<div class="dests" id="dests"></div>
+
+<button class="btn go" id="go" onclick="tapGo()">GO LIVE</button>
+<button class="btn end" id="end" onclick="tapEnd()" hidden>END MATCH</button>
+<div class="row"><button class="btn reh" id="reh" onclick="tapReh()">REHEARSE</button></div>
+
+<div class="msg" id="msg"></div>
+
+<div class="tools">
+  <button class="link" onclick="preflight()">RUN PREFLIGHT</button>
+  <a class="link" href="/">CONTROL PANEL</a>
+  <a class="link" href="/live">STREAM PREVIEW</a>
+</div>
+
+<script>
+// ============================================================
+// GO LIVE — mobile-first front end for the match automation.
+//
+// Facebook is API-driven: one title creates a broadcast on both
+// pages and the relay publishes them once OBS confirms ingest.
+// YouTube is NOT — it rides a persistent stream key set in the
+// OBS Branch Output filter, so this page can only show whether
+// that branch is armed. That is the thing people forget after a
+// rehearsal, so it is a tappable control rather than a label.
+//
+// Destructive actions use tap-to-arm rather than confirm(), which
+// is unreliable and ugly on phones, and easy to dismiss by reflex.
+// ============================================================
+let M={live:false,rehearsal:false,videos:{},title:'',startedAt:0,lastError:''};
+let connected=false, streaming=false, ytLive=false;
+let armed=null, armTimer=null;
+
+async function api(path,body){
+  try{
+    const opt = body===undefined ? {}
+      : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};
+    const r=await fetch(path,opt);
+    let d={}; try{ d=await r.json(); }catch(_){}
+    return {ok:r.ok,data:d};
+  }catch(e){ return {ok:false,data:{error:e.message}}; }
+}
+
+function msg(t,cls){
+  const e=document.getElementById('msg');
+  e.className='msg'+(cls?' '+cls:''); e.textContent=t||'';
+}
+
+function clock(ms){
+  const s=Math.max(0,Math.floor(ms/1000));
+  const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60;
+  const p=n=>String(n).padStart(2,'0');
+  return (h?h+':':'')+p(m)+':'+p(x);
+}
+
+// Disarm a pending confirmation — any state change or timeout cancels it,
+// so a stale armed button can never fire against a changed situation.
+function disarm(){
+  if(armTimer){clearTimeout(armTimer);armTimer=null;}
+  if(armed){
+    const b=document.getElementById(armed);
+    if(b){b.classList.remove('arm');b.textContent=(armed==='go'?'GO LIVE':'END MATCH');}
+    armed=null;
+  }
+}
+function arm(id,label,then){
+  if(armed===id){ disarm(); then(); return; }
+  disarm(); armed=id;
+  const b=document.getElementById(id);
+  b.classList.add('arm'); b.textContent=label;
+  armTimer=setTimeout(disarm,4000);
+}
+
+function render(){
+  const c=document.getElementById('conn');
+  c.className='conn '+(connected?'on':'off');
+  document.getElementById('connTxt').textContent=connected?'OBS CONNECTED':'OBS OFFLINE';
+
+  const ban=document.getElementById('banner');
+  const st=document.getElementById('state');
+  const sub=document.getElementById('sub');
+
+  if(M.live&&M.rehearsal){
+    ban.className='banner reh'; st.textContent='REHEARSAL';
+    sub.innerHTML='Nothing is public · <span class="b-clock">'+clock(Date.now()-M.startedAt)+'</span>';
+  }else if(M.live){
+    ban.className='banner live'; st.textContent='● LIVE';
+    sub.innerHTML=(M.title?esc(M.title)+' · ':'')+'<span class="b-clock">'+clock(Date.now()-M.startedAt)+'</span>';
+  }else{
+    ban.className='banner'; st.textContent='IDLE';
+    sub.textContent = streaming ? 'OBS is streaming outside match control'
+                                : 'Nothing is broadcasting';
+  }
+
+  const busy = M.live || streaming;
+  document.getElementById('go').disabled  = busy || !connected;
+  document.getElementById('reh').disabled = busy || !connected;
+  document.getElementById('go').hidden    = M.live;
+  document.getElementById('reh').hidden   = M.live;
+  document.getElementById('end').hidden   = !M.live;
+  // Once live the title is fixed and already shown in the banner — an
+  // empty disabled field just looks broken.
+  document.getElementById('titleWrap').hidden = M.live;
+
+  const fb=(k,label)=>{
+    const v=M.videos&&M.videos[k];
+    let cls='',txt='READY';
+    if(v&&v.published){cls='on';txt='● LIVE';}
+    else if(v){cls='warn';txt='UNPUBLISHED';}
+    return '<div class="dest"><div><div class="d-name">'+label+'</div>'+
+           '<div class="d-note">Facebook · title from this page</div></div>'+
+           '<span class="pill '+cls+'">'+txt+'</span></div>';
+  };
+
+  document.getElementById('dests').innerHTML =
+    fb('voice','VOICE') + fb('dhuvas','DHUVAS') +
+    '<div class="dest"><div><div class="d-name">YOUTUBE</div>'+
+    '<div class="d-note">Persistent key · title set in Studio</div></div>'+
+    '<button class="pill '+(ytLive?'on':'warn')+'" onclick="toggleYt()">'+
+    (ytLive?'ARMED':'DISARMED')+'</button></div>';
+}
+
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+async function poll(){
+  const [a,b]=await Promise.all([api('/api/match/status'),api('/api/obs')]);
+  if(a.ok&&a.data) M=a.data;
+  if(b.ok&&b.data){ connected=!!b.data.connected; streaming=!!b.data.streaming; ytLive=!!b.data.ytLive; }
+  else connected=false;
+  render();
+}
+
+function titleVal(){ return (document.getElementById('title').value||'').trim(); }
+
+function tapGo(){
+  const t=titleVal();
+  if(!t){ msg('Enter an event name first — it becomes the post title on both pages.','err'); return; }
+  const warn = ytLive ? '' : '\nYouTube is DISARMED and will not go out.';
+  arm('go','TAP AGAIN TO CONFIRM',()=>goLive(t));
+  if(armed) msg('This publishes to VOICE and DHUVAS for real.'+warn,'warn');
+}
+
+async function goLive(t){
+  msg('Creating broadcasts…');
+  const r=await api('/api/match/start',{title:t});
+  if(!r.ok){ msg('Failed: '+(r.data.error||'unknown error'),'err'); }
+  else{
+    const on=Object.keys(r.data.videos||{}).filter(k=>r.data.videos[k]);
+    msg('Broadcasts created on '+on.join(' + ')+'. Publishing in ~10s once OBS confirms ingest.','ok');
+    setTimeout(poll,12000);
+  }
+  poll();
+}
+
+// Rehearsal publishes nothing, so it needs no confirmation — but it must
+// cancel any armed GO LIVE, or an armed button could fire afterwards.
+function tapReh(){ disarm(); rehearse(); }
+
+async function rehearse(){
+  const t=titleVal()||'Rehearsal - not for broadcast';
+  if(ytLive){
+    msg('Disarming YouTube first — rehearsal only protects Facebook…','warn');
+    await api('/api/obs/branch',{target:'youtube',enabled:false});
+    await new Promise(r=>setTimeout(r,700));
+    await poll();
+    if(ytLive){ msg('Could not disarm YouTube. Aborted — nothing was started.','err'); return; }
+  }
+  const r=await api('/api/match/start',{title:t,publish:false});
+  if(!r.ok) msg('Failed: '+(r.data.error||'unknown error'),'err');
+  else msg('Rehearsal running. Nothing is public and no VOD is left behind.\nEND MATCH when done, then re-arm YouTube.','warn');
+  poll();
+}
+
+function tapEnd(){
+  arm('end','TAP AGAIN TO END',endMatch);
+  if(armed) msg('This stops OBS and closes both broadcasts.','warn');
+}
+
+async function endMatch(){
+  msg('Ending…');
+  const r=await api('/api/match/end',{});
+  const errs=(r.data&&r.data.errors)||[];
+  msg(errs.length?('Ended with problems:\n'+errs.join('\n')):'Ended cleanly.',errs.length?'err':'ok');
+  await poll();
+  if(!ytLive) setTimeout(()=>msg('Ended. YouTube is still DISARMED — tap the pill to re-arm it.','warn'),1600);
+}
+
+async function toggleYt(){
+  const next=!ytLive;
+  msg(next?'Arming YouTube…':'Disarming YouTube…');
+  await api('/api/obs/branch',{target:'youtube',enabled:next});
+  setTimeout(async()=>{ await poll(); msg(ytLive?'YouTube armed.':'YouTube disarmed.',ytLive?'ok':'warn'); },700);
+}
+
+async function preflight(){
+  msg('Checking tokens and OBS…');
+  const r=await api('/api/match/check');
+  const d=r.data||{};
+  const out=[];
+  if(d.obs) out.push('OBS: '+(d.obs.connected?'connected':'NOT CONNECTED')+(d.obs.streaming?' · already streaming':''));
+  for(const [k,p] of Object.entries(d.pages||{})){
+    if(p.skipped){ out.push(k.toUpperCase()+': not configured (stays manual)'); continue; }
+    out.push(k.toUpperCase()+': '+(p.ok?'ok':'FAIL '+(p.error||''))+
+      (p.dataAccessDays!=null?' · data access '+p.dataAccessDays+'d ('+p.dataAccessExpires+')':''));
+  }
+  out.push('YouTube: '+(ytLive?'armed':'DISARMED — it will not go out'));
+  (d.warnings||[]).forEach(w=>out.push('⚠ '+w));
+  msg(out.join('\n'), d.ok&&ytLive?'ok':(d.ok?'warn':'err'));
+}
+
+// A running clock needs a faster tick than the 3s poll, but only the
+// clock — no network. Keeps the elapsed time honest without extra load.
+poll(); setInterval(poll,3000); setInterval(()=>{ if(M.live) render(); },1000);
+document.getElementById('title').addEventListener('input',disarm);
+</script>
+</body>
+</html>

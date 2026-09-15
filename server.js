@@ -734,6 +734,7 @@ app.get('/api/match/check', async (req, res) => {
 app.get('/api/match/status', (req, res) => {
   res.json({
     live: matchState.live,
+    rehearsal: matchState.rehearsal,
     title: matchState.title,
     startedAt: matchState.startedAt,
     publishedAt: matchState.publishedAt,
