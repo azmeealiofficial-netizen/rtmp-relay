@@ -135,6 +135,7 @@ button.pill{min-height:34px}
 
 <button class="btn go" id="go" onclick="tapGo()">GO LIVE</button>
 <button class="btn end" id="end" onclick="tapEnd()" hidden>END LIVE</button>
+<button class="btn end" id="stopman" onclick="tapStopManual()" hidden>STOP MANUAL STREAM</button>
 <div class="row"><button class="btn reh" id="reh" onclick="tapReh()">REHEARSE</button></div>
 
 <div class="msg" id="msg"></div>
@@ -189,11 +190,12 @@ function clock(ms){
 // Disarm a pending confirmation — any state change or timeout cancels it,
 // so a stale armed button can never fire against a changed situation.
 const ARM_SECONDS=6;
+const BTN_LABEL={go:'GO LIVE',end:'END LIVE',stopman:'STOP MANUAL STREAM'};
 function disarm(){
   if(armTimer){clearInterval(armTimer);armTimer=null;}
   if(armed){
     const b=document.getElementById(armed);
-    if(b){b.classList.remove('arm');b.textContent=(armed==='go'?'GO LIVE':'END LIVE');}
+    if(b){b.classList.remove('arm');b.textContent=BTN_LABEL[armed]||'';}
     armed=null;
   }
 }
@@ -231,12 +233,17 @@ function render(){
                                 : 'Nothing is broadcasting';
   }
 
+  // OBS streaming with no event of ours running = someone started it by
+  // hand (persistent keys, Live Producer). We can't end those broadcasts —
+  // they aren't ours — but we can stop the encoder and disarm the branches.
+  const manual = streaming && !M.live;
   const busy = M.live || streaming;
   document.getElementById('go').disabled  = busy || !connected;
   document.getElementById('reh').disabled = busy || !connected;
-  document.getElementById('go').hidden    = M.live;
-  document.getElementById('reh').hidden   = M.live;
+  document.getElementById('go').hidden    = M.live || manual;
+  document.getElementById('reh').hidden   = M.live || manual;
   document.getElementById('end').hidden   = !M.live;
+  document.getElementById('stopman').hidden = !manual;
   // Once live the title is fixed and already shown in the banner — an
   // empty disabled field just looks broken.
   document.getElementById('titleWrap').hidden = M.live;
@@ -257,6 +264,7 @@ function render(){
   let ytCls,ytTxt;
   if(M.live&&!M.rehearsal){ ytCls=ytLive?'on':'warn'; ytTxt=ytLive?'● LIVE':'OFF — NOT GOING OUT'; }
   else if(M.live&&M.rehearsal){ ytCls=ytLive?'err':''; ytTxt=ytLive?'PUSHING!':'OFF'; }
+  else if(manual){ ytCls=ytLive?'warn':''; ytTxt=ytLive?'● LIVE (manual)':'OFF'; }
   else { ytCls=ytLive?'err':''; ytTxt=ytLive?'ARMED — PUSHING!':'OFF'; }
 
   document.getElementById('dests').innerHTML =
@@ -328,6 +336,25 @@ async function endMatch(){
   msg(errs.length?('Ended with problems:\n'+errs.join('\n')):'Ended cleanly.',errs.length?'err':'ok');
   await poll();
   if(ytLive) setTimeout(()=>msg('Ended, but a branch is still ARMED and pushing. Tap the pill to stop it.','err'),1600);
+}
+
+function tapStopManual(){
+  arm('stopman','TAP AGAIN TO STOP',stopManual);
+  if(armed) msg('Stops the OBS encoder and disarms both branches.\nBroadcasts started by hand must still be ended on Facebook / YouTube.','warn');
+}
+
+async function stopManual(){
+  msg('Disarming branches and stopping the encoder…');
+  // Disarm first: under Always ON the branches do NOT stop with the main
+  // stream, so stopping in the other order leaves them pushing.
+  await api('/api/obs/branch',{target:'youtube',enabled:false});
+  await api('/api/obs/branch',{target:'dhuvas',enabled:false});
+  const r=await api('/api/obs/stream',{action:'stop'});
+  await new Promise(x=>setTimeout(x,900));
+  await poll();
+  if(!r.ok) msg('Stop failed: '+(r.data.error||'unknown error'),'err');
+  else if(streaming) msg('Branches disarmed, but OBS is still streaming. Stop it in OBS.','err');
+  else msg('Encoder stopped and branches disarmed.\nEnd the broadcasts themselves on Facebook / YouTube — they were not created here.','ok');
 }
 
 async function toggleYt(){
