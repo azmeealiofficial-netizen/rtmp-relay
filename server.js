@@ -422,6 +422,14 @@ app.post('/api/obs/call', async (req, res) => {
 // Creating them UNPUBLISHED first is deliberate: LIVE_NOW publishes
 // the post immediately, so a failure anywhere after that leaves a
 // dead broadcast on both pages with viewers staring at a spinner.
+//
+// REHEARSAL MODE: POST /api/match/start with {"publish": false} runs
+// steps 1-3 and skips step 4 entirely. The broadcasts are created,
+// the keys land in OBS, the encoder runs and Facebook ingests the
+// feed — but nothing is ever flipped to LIVE_NOW, so nothing appears
+// on either page and no follower is notified. /api/match/end closes
+// the unpublished broadcasts and leaves no VOD behind. Use this to
+// exercise the whole path at any hour without going public.
 // ============================================================
 const FB_API_VERSION = process.env.FB_API_VERSION || 'v25.0';
 const FB_GRAPH = `https://graph.facebook.com/${FB_API_VERSION}`;
@@ -441,6 +449,7 @@ const FB_PAGES = {
 
 const matchState = {
   live: false,
+  rehearsal: false,        // true when started with {publish:false} — never auto-publishes
   title: '',
   startedAt: 0,
   publishedAt: 0,
@@ -497,6 +506,10 @@ app.post('/api/match/start', async (req, res) => {
   if (!obsGuard(res)) return;
   const title = (req.body && req.body.title || '').trim();
   const description = (req.body && req.body.description || '').trim();
+  // Rehearsal: only an explicit false opts out of publishing. Anything
+  // else — absent, undefined, a stray string — behaves exactly as before,
+  // so a real match can never be silently turned into a rehearsal.
+  const autoPublish = !(req.body && req.body.publish === false);
   if (!title) return res.status(400).json({ error: 'title required' });
   if (matchState.live) return res.status(409).json({ error: 'a match is already live — end it first' });
 
@@ -539,6 +552,7 @@ app.post('/api/match/start', async (req, res) => {
     await obs.call('StartStream');
 
     matchState.live = true;
+    matchState.rehearsal = !autoPublish;
     matchState.title = title;
     matchState.startedAt = Date.now();
     matchState.publishedAt = 0;
@@ -549,8 +563,10 @@ app.post('/api/match/start', async (req, res) => {
     }
     matchState.skipped = skipped;
 
-    // 4. publish once OBS confirms ingest is actually running
-    setTimeout(async () => {
+    // 4. publish once OBS confirms ingest is actually running.
+    //    Skipped entirely in rehearsal mode — the broadcasts stay
+    //    UNPUBLISHED until /api/match/end closes them.
+    if (autoPublish) setTimeout(async () => {
       try {
         const st = await obs.call('GetStreamStatus');
         if (!st.outputActive) {
@@ -569,7 +585,7 @@ app.post('/api/match/start', async (req, res) => {
       }
     }, Number(process.env.FB_PUBLISH_DELAY_MS || 10000));
 
-    res.json({ ok: true, title, videos: matchState.videos, skipped });
+    res.json({ ok: true, title, rehearsal: matchState.rehearsal, videos: matchState.videos, skipped });
   } catch (e) {
     // Roll back anything we created so we don't leave orphan broadcasts.
     for (const [brand, c] of Object.entries(created)) {
@@ -619,6 +635,7 @@ app.post('/api/match/end', async (req, res) => {
   }
 
   matchState.live = false;
+  matchState.rehearsal = false;
   matchState.videos = { voice: null, dhuvas: null };
   matchState.lastError = errors.join(' | ');
 
