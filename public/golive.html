@@ -166,20 +166,26 @@ function clock(ms){
 
 // Disarm a pending confirmation — any state change or timeout cancels it,
 // so a stale armed button can never fire against a changed situation.
+const ARM_SECONDS=6;
 function disarm(){
-  if(armTimer){clearTimeout(armTimer);armTimer=null;}
+  if(armTimer){clearInterval(armTimer);armTimer=null;}
   if(armed){
     const b=document.getElementById(armed);
     if(b){b.classList.remove('arm');b.textContent=(armed==='go'?'GO LIVE':'END MATCH');}
     armed=null;
   }
 }
+// Two-tap confirm with a visible countdown. A silent window leaves you
+// guessing whether you still have time; the number removes the guess.
 function arm(id,label,then){
   if(armed===id){ disarm(); then(); return; }
   disarm(); armed=id;
   const b=document.getElementById(id);
-  b.classList.add('arm'); b.textContent=label;
-  armTimer=setTimeout(disarm,4000);
+  b.classList.add('arm');
+  let left=ARM_SECONDS;
+  const paint=()=>{ b.textContent=label+'  '+left; };
+  paint();
+  armTimer=setInterval(()=>{ if(--left<=0) disarm(); else paint(); },1000);
 }
 
 function render(){
@@ -247,7 +253,7 @@ function tapGo(){
   const t=titleVal();
   if(!t){ msg('Enter an event name first — it becomes the post title on both pages.','err'); return; }
   const warn = ytLive ? '' : '\nYouTube is DISARMED and will not go out.';
-  arm('go','TAP AGAIN TO CONFIRM',()=>goLive(t));
+  arm('go','TAP AGAIN TO GO LIVE',()=>goLive(t));
   if(armed) msg('This publishes to VOICE and DHUVAS for real.'+warn,'warn');
 }
 
