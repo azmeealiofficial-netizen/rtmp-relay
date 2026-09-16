@@ -411,7 +411,7 @@ async function scanLive(quiet){
   renderFound();
   if(quiet) return;
   if(errs.length) msg('Scan errors:\n'+errs.map(e=>e.label+': '+e.error).join('\n'),'err');
-  else if(!foundVideos.length) msg('Nothing still live on either page.','ok');
+  else if(!foundVideos.length) msg('No published broadcast open on either page.\n(Rehearsals stay unpublished and Facebook does not list them — that is expected.)','ok');
   else msg(foundVideos.length+' broadcast(s) still open — listed below.','warn');
 }
 

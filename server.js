@@ -693,6 +693,13 @@ app.post('/api/match/end', async (req, res) => {
 // to close. Killing a colleague's broadcast by accident is a worse
 // failure than leaving one running, so nothing here ends anything on
 // its own.
+// ⚠ VERIFIED LIMITATION (16 Sep 2026): this edge does NOT return
+// UNPUBLISHED broadcasts. A rehearsal with two open unpublished videos
+// returned only older VODs. So the scan finds PUBLISHED lives — a Live
+// Producer stream, a persistent-key stream, a colleague's broadcast —
+// which is the case that matters, but it cannot recover an unpublished
+// broadcast orphaned by a relay restart. Only persisting matchState
+// fixes that. `broadcast_status` is not served on this edge either.
 async function scanLiveVideos() {
   const out = [];
   for (const [brand, page] of Object.entries(FB_PAGES)) {
@@ -704,9 +711,10 @@ async function scanLiveVideos() {
         access_token: page.token,
       });
       for (const v of (j.data || [])) {
-        // VOD = already ended. LIVE is public; UNPUBLISHED is still
-        // holding an ingest slot even though nobody can see it.
-        if (v.status !== 'LIVE' && v.status !== 'UNPUBLISHED') continue;
+        // Blacklist the finished states rather than whitelisting live
+        // ones — the status vocabulary is not fully documented, and
+        // missing an open broadcast is worse than listing a stale one.
+        if (v.status === 'VOD' || v.status === 'PROCESSING') continue;
         const ours = Object.values(matchState.videos || {})
           .some(x => x && x.id === v.id);
         out.push({
