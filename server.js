@@ -640,7 +640,11 @@ app.get('/oauth/youtube/start', (req, res) => {
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('scope', YT_SCOPE);
   u.searchParams.set('access_type', 'offline');
-  u.searchParams.set('prompt', 'consent');   // forces a refresh_token every time
+  // 'consent' forces a refresh_token every time. 'select_account' forces the
+  // account chooser, which is the ONLY place Google offers Brand Account
+  // channels — sign in straight through and you silently authorise the
+  // personal channel instead, which is not live-enabled.
+  u.searchParams.set('prompt', 'select_account consent');
   res.redirect(u.toString());
 });
 
