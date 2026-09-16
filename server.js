@@ -450,6 +450,7 @@ const FB_PAGES = {
 const matchState = {
   live: false,
   rehearsal: false,        // true when started with {publish:false} — never auto-publishes
+  youtube: null,           // { id, url, title } when a YouTube broadcast was created
   title: '',
   startedAt: 0,
   publishedAt: 0,
@@ -519,6 +520,159 @@ async function setDestination(brand, server, key) {
   }
 }
 
+// ============================================================
+// YOUTUBE DATA API v3
+//
+// Facebook is fully API-driven; YouTube was not. It rode a persistent
+// stream key set in the OBS Branch Output filter, so its title was
+// whatever Studio happened to have — an easy thing to forget, and
+// invisible when forgotten.
+//
+// This keeps the persistent key (OBS never changes) and instead creates
+// a NEW BROADCAST per event and binds it to that existing stream. The
+// broadcast carries the event name and caption, and `enableAutoStart`
+// makes it go live the moment the branch starts pushing.
+//
+// ⚠ The refresh token only lasts 7 days unless the Google OAuth consent
+// screen publishing status is "In production". Testing mode expires it —
+// same silent-failure shape as the Facebook data-access clock.
+// ============================================================
+const YT_CLIENT_ID     = process.env.YT_CLIENT_ID || '';
+const YT_CLIENT_SECRET = process.env.YT_CLIENT_SECRET || '';
+const YT_REFRESH_TOKEN = process.env.YT_REFRESH_TOKEN || '';
+const YT_STREAM_ID     = process.env.YT_STREAM_ID || '';      // optional override
+const YT_PRIVACY       = process.env.YT_PRIVACY || 'public';
+const YT_REDIRECT      = process.env.YT_REDIRECT || 'https://mix.vxd.news/oauth/youtube/callback';
+const YT_SCOPE         = 'https://www.googleapis.com/auth/youtube.force-ssl';
+
+const ytConfigured = () => !!(YT_CLIENT_ID && YT_CLIENT_SECRET && YT_REFRESH_TOKEN);
+
+// Access tokens last an hour; cache and refresh a minute early.
+let ytAccess = { token: '', expires: 0 };
+async function ytToken() {
+  if (ytAccess.token && Date.now() < ytAccess.expires - 60000) return ytAccess.token;
+  const body = new URLSearchParams({
+    client_id: YT_CLIENT_ID, client_secret: YT_CLIENT_SECRET,
+    refresh_token: YT_REFRESH_TOKEN, grant_type: 'refresh_token',
+  });
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.access_token) {
+    throw new Error('YouTube token refresh failed: ' + (j.error_description || j.error || ('HTTP ' + r.status)));
+  }
+  ytAccess = { token: j.access_token, expires: Date.now() + (j.expires_in || 3600) * 1000 };
+  return ytAccess.token;
+}
+
+async function ytCall(pathname, { method = 'GET', params = {}, body } = {}) {
+  const url = new URL('https://www.googleapis.com/youtube/v3' + pathname);
+  for (const [k, v] of Object.entries(params)) if (v != null) url.searchParams.append(k, String(v));
+  const opt = { method, headers: { Authorization: 'Bearer ' + (await ytToken()) } };
+  if (body) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  const r = await fetch(url.toString(), opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(`YouTube ${method} ${pathname}: ` + ((j.error && j.error.message) || ('HTTP ' + r.status)));
+  return j;
+}
+
+// The channel's reusable ingest stream — the one whose key is already in
+// the OBS Branch Output filter. Looked up once per event rather than
+// stored, so rotating the key in Studio doesn't silently break us.
+async function ytFindStream() {
+  if (YT_STREAM_ID) return YT_STREAM_ID;
+  const j = await ytCall('/liveStreams', {
+    params: { part: 'id,snippet,cdn,contentDetails,status', mine: true, maxResults: 50 },
+  });
+  const items = j.items || [];
+  const pick = items.find(x => x.contentDetails && x.contentDetails.isReusable) || items[0];
+  if (!pick) throw new Error('no reusable ingest stream found on the YouTube channel');
+  return pick.id;
+}
+
+async function ytStartBroadcast(title, description) {
+  const streamId = await ytFindStream();
+  const b = await ytCall('/liveBroadcasts', {
+    method: 'POST',
+    params: { part: 'snippet,status,contentDetails' },
+    body: {
+      snippet: {
+        title: String(title).slice(0, 100),          // YouTube hard limit
+        description: String(description || '').slice(0, 5000),
+        scheduledStartTime: new Date(Date.now() + 30000).toISOString(),
+      },
+      status: { privacyStatus: YT_PRIVACY, selfDeclaredMadeForKids: false },
+      contentDetails: {
+        enableAutoStart: true,   // goes live when the branch starts pushing
+        enableAutoStop: true,    // and ends when it stops
+        enableDvr: true,
+        monitorStream: { enableMonitorStream: false },
+      },
+    },
+  });
+  await ytCall('/liveBroadcasts/bind', {
+    method: 'POST',
+    params: { id: b.id, streamId, part: 'id,contentDetails' },
+  });
+  return { id: b.id, url: 'https://www.youtube.com/watch?v=' + b.id, title: String(title).slice(0, 100) };
+}
+
+async function ytEndBroadcast(id) {
+  // autoStop usually handles this, but be explicit — a broadcast left
+  // "live" with no ingest sits on the channel looking broken.
+  try {
+    await ytCall('/liveBroadcasts/transition', {
+      method: 'POST', params: { id, broadcastStatus: 'complete', part: 'id,status' },
+    });
+  } catch (e) {
+    // Already complete, or never started: both are fine, not failures.
+    if (!/redundant|invalid transition|not currently live/i.test(e.message)) throw e;
+  }
+}
+
+// ---- one-time OAuth, to obtain the refresh token -------------------
+app.get('/oauth/youtube/start', (req, res) => {
+  if (!YT_CLIENT_ID || !YT_CLIENT_SECRET) {
+    return res.status(400).send('Set YT_CLIENT_ID and YT_CLIENT_SECRET on Railway first.');
+  }
+  const u = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  u.searchParams.set('client_id', YT_CLIENT_ID);
+  u.searchParams.set('redirect_uri', YT_REDIRECT);
+  u.searchParams.set('response_type', 'code');
+  u.searchParams.set('scope', YT_SCOPE);
+  u.searchParams.set('access_type', 'offline');
+  u.searchParams.set('prompt', 'consent');   // forces a refresh_token every time
+  res.redirect(u.toString());
+});
+
+app.get('/oauth/youtube/callback', async (req, res) => {
+  const code = req.query && req.query.code;
+  if (!code) return res.status(400).send('No code returned. Error: ' + ((req.query && req.query.error) || 'unknown'));
+  try {
+    const body = new URLSearchParams({
+      code, client_id: YT_CLIENT_ID, client_secret: YT_CLIENT_SECRET,
+      redirect_uri: YT_REDIRECT, grant_type: 'authorization_code',
+    });
+    const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.refresh_token) {
+      return res.status(502).send('<pre>No refresh token returned.\n' +
+        JSON.stringify(j, null, 2) +
+        '\n\nIf refresh_token is missing, Google has already issued one to this client.\n' +
+        'Remove the app at myaccount.google.com/permissions and try again.</pre>');
+    }
+    res.set('Content-Type', 'text/html').send(
+      '<!doctype html><meta charset=utf-8><title>YouTube refresh token</title>' +
+      '<body style="font-family:ui-monospace,monospace;background:#141413;color:#f2f0ec;padding:2rem;line-height:1.6">' +
+      '<h1 style="font-family:ui-sans-serif,system-ui">Copy this into Railway as <code>YT_REFRESH_TOKEN</code></h1>' +
+      '<p style="color:#f0915e">Shown once. Treat it like a password — it grants ongoing access to the channel.</p>' +
+      '<textarea readonly rows=4 style="width:100%;font:inherit;background:#1e1d1b;color:#f2f0ec;border:1px solid #2e2d2a;padding:1rem;border-radius:6px">' +
+      String(j.refresh_token).replace(/[<>&]/g, '') + '</textarea>' +
+      '<p>Then redeploy and run <b>RUN PREFLIGHT</b> on /golive.</p></body>');
+  } catch (e) {
+    res.status(502).send('Token exchange failed: ' + e.message);
+  }
+});
+
 app.post('/api/match/start', async (req, res) => {
   if (!obsGuard(res)) return;
   const title = (req.body && req.body.title || '').trim();
@@ -551,6 +705,7 @@ app.post('/api/match/start', async (req, res) => {
   }
 
   const created = {};
+  let ytBroadcast = null, ytError = '';
   try {
     // 1. create the broadcasts, unpublished
     for (const [brand, page] of active) {
@@ -574,6 +729,16 @@ app.post('/api/match/start', async (req, res) => {
     // YouTube has no unpublished state and auto-starts on ingest, so it is
     // armed ONLY for a real go-live, never for a rehearsal.
     if (created.dhuvas) await setBranchEnabled('dhuvas', true);
+
+    // 2c. YouTube: create the broadcast and bind it to the persistent
+    // stream BEFORE the branch starts pushing, so enableAutoStart fires
+    // on OUR titled broadcast rather than whatever Studio had.
+    // A YouTube failure must never take down the Facebook event — it is
+    // recorded and surfaced, not thrown.
+    if (autoPublish && ytConfigured()) {
+      try { ytBroadcast = await ytStartBroadcast(title, description); }
+      catch (e) { ytError = e.message; }
+    }
     if (autoPublish) await setBranchEnabled('youtube', true);
 
     // 3. go
@@ -590,6 +755,8 @@ app.post('/api/match/start', async (req, res) => {
       matchState.videos[brand] = { id: c.id, published: false };
     }
     matchState.skipped = skipped;
+    matchState.youtube = ytBroadcast;
+    if (ytError) matchState.lastError = 'YouTube: ' + ytError;
 
     // 4. publish once OBS confirms ingest is actually running.
     //    Skipped entirely in rehearsal mode — the broadcasts stay
@@ -613,7 +780,8 @@ app.post('/api/match/start', async (req, res) => {
       }
     }, Number(process.env.FB_PUBLISH_DELAY_MS || 10000));
 
-    res.json({ ok: true, title, rehearsal: matchState.rehearsal, videos: matchState.videos, skipped });
+    res.json({ ok: true, title, rehearsal: matchState.rehearsal, videos: matchState.videos,
+               skipped, youtube: ytBroadcast, youtubeError: ytError || undefined });
   } catch (e) {
     // Disarm first: under Always ON a branch we managed to enable before the
     // failure would keep broadcasting to a broadcast we are about to kill.
@@ -621,6 +789,7 @@ app.post('/api/match/start', async (req, res) => {
       try { await setBranchEnabled(t, false); } catch (_) { /* best effort */ }
     }
     // Roll back anything we created so we don't leave orphan broadcasts.
+    if (ytBroadcast) { try { await ytEndBroadcast(ytBroadcast.id); } catch (_) {} }
     for (const [brand, c] of Object.entries(created)) {
       try {
         await fbCall(`/${c.id}`, { end_live_video: true, access_token: FB_PAGES[brand].token }, 'POST');
@@ -675,9 +844,15 @@ app.post('/api/match/end', async (req, res) => {
     }
   }
 
+  if (matchState.youtube) {
+    try { await ytEndBroadcast(matchState.youtube.id); }
+    catch (e) { errors.push('YouTube: ' + e.message); }
+  }
+
   matchState.live = false;
   matchState.rehearsal = false;
   matchState.videos = { voice: null, dhuvas: null };
+  matchState.youtube = null;
   matchState.lastError = errors.join(' | ');
 
   res.json({ ok: errors.length === 0, errors });
@@ -842,6 +1017,19 @@ app.get('/api/match/check', async (req, res) => {
   // Interlock is "Always ON", so an armed branch outside an event is not
   // merely untidy — it is broadcasting right now. Treat it as a failure.
   out.branches = { dhuvas: obsState.branchLive, youtube: obsState.ytLive, live: matchState.live };
+  out.youtube = { configured: ytConfigured(), privacy: YT_PRIVACY };
+  if (ytConfigured()) {
+    // Proves the refresh token still works. Google silently expires it
+    // after 7 days if the consent screen is left in Testing mode.
+    try { await ytToken(); out.youtube.token = 'ok'; }
+    catch (e) {
+      out.youtube.token = 'FAILED';
+      out.warnings.push('YouTube: ' + e.message + ' — the event name will not reach YouTube.');
+      out.ok = false;
+    }
+  } else {
+    out.warnings.push('YouTube is not configured — its title still comes from Studio.');
+  }
   if (!matchState.live) {
     if (obsState.branchLive) {
       out.warnings.push('Dhuvas branch is ARMED with no event running — it is pushing to Facebook right now.');
@@ -860,6 +1048,7 @@ app.get('/api/match/status', (req, res) => {
   res.json({
     live: matchState.live,
     rehearsal: matchState.rehearsal,
+    youtube: matchState.youtube,
     title: matchState.title,
     startedAt: matchState.startedAt,
     publishedAt: matchState.publishedAt,

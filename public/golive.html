@@ -83,6 +83,7 @@ textarea::placeholder{color:var(--t3)}
   padding:14px 16px;background:var(--card);border:1px solid var(--bdr);border-radius:12px}
 .d-name{font-size:14px;font-weight:700;letter-spacing:.2px}
 .d-note{font-size:11px;color:var(--t3);margin-top:2px}
+.d-note a{color:var(--t2);text-decoration:underline;text-underline-offset:2px}
 .pill{flex:none;font-size:10px;font-weight:800;letter-spacing:.6px;padding:7px 12px;border-radius:999px;
   background:var(--card2);color:var(--t3);border:1px solid transparent;white-space:nowrap}
 .pill.on{background:#22c55e12;border-color:#22c55e30;color:var(--grn)}
@@ -284,10 +285,16 @@ function render(){
   else if(manual){ ytCls=ytLive?'warn':''; ytTxt=ytLive?'● LIVE (manual)':'OFF'; }
   else { ytCls=ytLive?'err':''; ytTxt=ytLive?'ARMED — PUSHING!':'OFF'; }
 
+  // Once the relay creates the broadcast itself, the note becomes a link
+  // to it — the fastest way to confirm the title actually landed.
+  const ytNote = M.youtube
+    ? '<a href="'+M.youtube.url+'" target="_blank" rel="noopener">'+esc(M.youtube.title)+' ↗</a>'
+    : 'Persistent key · title set in Studio';
+
   document.getElementById('dests').innerHTML =
     fb('voice','VOICE') + fb('dhuvas','DHUVAS') +
     '<div class="dest"><div><div class="d-name">YOUTUBE</div>'+
-    '<div class="d-note">Persistent key · title set in Studio</div></div>'+
+    '<div class="d-note">'+ytNote+'</div></div>'+
     '<button class="pill '+ytCls+'" onclick="toggleYt()">'+ytTxt+'</button></div>';
 }
 
@@ -443,6 +450,9 @@ async function preflight(){
   // a failure there, so don't second-guess it here.
   if(d.branches) out.push('Branches: dhuvas '+(d.branches.dhuvas?'ARMED':'off')+
                           ', youtube '+(d.branches.youtube?'ARMED':'off'));
+  if(d.youtube) out.push('YouTube API: '+(d.youtube.configured
+      ? (d.youtube.token==='ok' ? 'ok · '+d.youtube.privacy : 'TOKEN FAILED')
+      : 'not configured'));
   (d.warnings||[]).forEach(w=>out.push('⚠ '+w));
   msg(out.join('\n'), d.ok?'ok':'err');
 }
