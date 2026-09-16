@@ -7,6 +7,125 @@ app.use(express.json({ limit: '3mb' })); // 3mb headroom for base64 reporter pho
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ============================================================
+// PIN AUTHENTICATION
+//
+// One shared PIN, set as GOLIVE_PIN. A correct PIN mints a signed
+// cookie; every state-changing request must present one.
+//
+// Design notes, because each of these is a decision someone will
+// later wonder about:
+//
+//  * If GOLIVE_PIN is UNSET the relay runs wide open and preflight
+//    says so loudly. Failing closed would mean a forgotten env var
+//    bricks /golive at kickoff, and in this system a locked-out
+//    operator at kickoff is worse than an open panel.
+//  * The cookie is an HMAC over its own expiry — stateless, so a
+//    Railway restart mid-event does NOT sign anybody out. Sessions
+//    are not stored anywhere.
+//  * The signing secret derives from the PIN, so changing the PIN
+//    invalidates every outstanding session for free.
+//  * GET stays open: OBS browser sources (scorebug, volleybug,
+//    tagbug) poll unauthenticated and must never see a 401.
+//  * Field reporters are exempt where they need to be — SOS and
+//    message-ack come from phones that will never hold the PIN.
+// ============================================================
+const crypto = require('crypto');
+
+const GOLIVE_PIN   = String(process.env.GOLIVE_PIN || '').trim();
+const AUTH_HOURS   = Number(process.env.GOLIVE_SESSION_HOURS || 12);
+const AUTH_COOKIE  = 'vxd_auth';
+const AUTH_SECRET  = process.env.GOLIVE_SECRET
+  || (GOLIVE_PIN + '|' + (process.env.FB_APP_SECRET || 'vxd-relay-fallback'));
+
+// POSTs that must work without a PIN. Reporters in the field carry
+// no credentials; an SOS button that 401s is worse than useless.
+const AUTH_EXEMPT = new Set(['/api/auth/login', '/api/auth/logout', '/api/sos', '/api/msg/ack']);
+
+const authRequired = () => !!GOLIVE_PIN;
+
+function authSign(expires) {
+  return crypto.createHmac('sha256', AUTH_SECRET).update(String(expires)).digest('hex').slice(0, 32);
+}
+function authMint() {
+  const expires = Date.now() + AUTH_HOURS * 3600 * 1000;
+  return { token: expires + '.' + authSign(expires), expires };
+}
+function authVerify(token) {
+  if (!token || typeof token !== 'string') return null;
+  const [expStr, sig] = token.split('.');
+  const expires = Number(expStr);
+  if (!expires || !sig) return null;
+  if (Date.now() > expires) return null;
+  const good = authSign(expires);
+  // Constant-time compare; lengths already match by construction.
+  if (sig.length !== good.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null;
+  return { expires };
+}
+function readCookie(req, name) {
+  const raw = req.headers && req.headers.cookie;
+  if (!raw) return '';
+  for (const part of raw.split(';')) {
+    const i = part.indexOf('=');
+    if (i > -1 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return '';
+}
+function setAuthCookie(res, token, maxAgeSec) {
+  res.setHeader('Set-Cookie',
+    AUTH_COOKIE + '=' + encodeURIComponent(token) +
+    '; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=' + maxAgeSec);
+}
+
+// A 4-6 digit PIN is guessable in minutes without this.
+const authFails = new Map();   // ip -> { n, until }
+function authThrottled(ip) {
+  const rec = authFails.get(ip);
+  if (!rec) return 0;
+  if (Date.now() > rec.until) { authFails.delete(ip); return 0; }
+  return rec.n >= 8 ? Math.ceil((rec.until - Date.now()) / 1000) : 0;
+}
+function authFail(ip) {
+  const rec = authFails.get(ip) || { n: 0, until: 0 };
+  rec.n += 1;
+  rec.until = Date.now() + 15 * 60 * 1000;
+  authFails.set(ip, rec);
+}
+
+app.use((req, res, next) => {
+  if (!authRequired()) return next();
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  if (AUTH_EXEMPT.has(req.path)) return next();
+  if (authVerify(readCookie(req, AUTH_COOKIE))) return next();
+  res.status(401).json({ error: 'PIN required', authRequired: true });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  if (!authRequired()) return res.json({ ok: true, authRequired: false });
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?').split(',')[0].trim();
+  const wait = authThrottled(ip);
+  if (wait) return res.status(429).json({ error: 'Too many attempts. Try again in ' + Math.ceil(wait / 60) + ' min.' });
+  const pin = String((req.body && req.body.pin) || '');
+  const a = Buffer.from(pin), b = Buffer.from(GOLIVE_PIN);
+  const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+  if (!ok) { authFail(ip); return res.status(401).json({ error: 'Wrong PIN' }); }
+  authFails.delete(ip);
+  const { token, expires } = authMint();
+  setAuthCookie(res, token, AUTH_HOURS * 3600);
+  res.json({ ok: true, expires });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  setAuthCookie(res, '', 0);
+  res.json({ ok: true });
+});
+
+app.get('/api/auth/status', (req, res) => {
+  const s = authVerify(readCookie(req, AUTH_COOKIE));
+  res.json({ authRequired: authRequired(), authed: !authRequired() || !!s, expires: s ? s.expires : null });
+});
+
+// ============================================================
 // OPTIONAL POSTGRESQL PERSISTENCE
 // If DATABASE_URL is set (Railway Postgres), reporters + ticker
 // settings persist across deploys. If it's not set (or pg isn't
@@ -1130,6 +1249,10 @@ app.get('/api/match/check', async (req, res) => {
     }
   } else {
     out.warnings.push('YouTube is not configured — its title still comes from Studio.');
+  }
+  out.auth = { required: authRequired(), sessionHours: AUTH_HOURS };
+  if (!authRequired()) {
+    out.warnings.push('No PIN set — anyone who reaches this URL can start or end a broadcast. Set GOLIVE_PIN.');
   }
   if (!matchState.live) {
     if (obsState.branchLive) {
