@@ -451,7 +451,10 @@ async function preflight(){
   if(d.branches) out.push('Branches: dhuvas '+(d.branches.dhuvas?'ARMED':'off')+
                           ', youtube '+(d.branches.youtube?'ARMED':'off'));
   if(d.youtube) out.push('YouTube API: '+(d.youtube.configured
-      ? (d.youtube.token==='ok' ? 'ok · '+d.youtube.privacy : 'TOKEN FAILED')
+      ? (d.youtube.token==='ok'
+          ? 'ok · '+d.youtube.privacy+' · ingest '+
+            (d.youtube.streamId==='MISSING' ? 'MISSING' : 'ok')
+          : 'TOKEN FAILED')
       : 'not configured'));
   (d.warnings||[]).forEach(w=>out.push('⚠ '+w));
   msg(out.join('\n'), d.ok?'ok':'err');

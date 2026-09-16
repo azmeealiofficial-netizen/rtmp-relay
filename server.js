@@ -1027,6 +1027,19 @@ app.get('/api/match/check', async (req, res) => {
       out.warnings.push('YouTube: ' + e.message + ' — the event name will not reach YouTube.');
       out.ok = false;
     }
+    // A working token is NOT enough. liveBroadcasts.bind needs a reusable
+    // ingest stream to bind to, and that only exists if a persistent stream
+    // key was created in YouTube Studio (Go live -> Stream). If it is absent
+    // ytFindStream() throws at GO LIVE time — i.e. with the crowd already
+    // there. Surface it here, where it costs nothing.
+    if (out.youtube.token === 'ok') {
+      try { out.youtube.streamId = await ytFindStream(); }
+      catch (e) {
+        out.youtube.streamId = 'MISSING';
+        out.warnings.push('YouTube: ' + e.message + ' — create a persistent stream key in YouTube Studio (Go live -> Stream), or set YT_STREAM_ID.');
+        out.ok = false;
+      }
+    }
   } else {
     out.warnings.push('YouTube is not configured — its title still comes from Studio.');
   }
