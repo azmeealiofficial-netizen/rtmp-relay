@@ -1033,6 +1033,22 @@ app.get('/api/match/check', async (req, res) => {
     // ytFindStream() throws at GO LIVE time — i.e. with the crowd already
     // there. Surface it here, where it costs nothing.
     if (out.youtube.token === 'ok') {
+      // WHICH channel did we actually get consent for? A Brand Account channel
+      // is only used if it is picked at the consent screen; sign in without
+      // picking and you authorise the personal channel instead — which is not
+      // live-enabled, and fails later with the misleading "user is not enabled
+      // for live streaming". Print the channel so a mismatch is visible
+      // immediately rather than inferred.
+      try {
+        const me = await ytCall('/channels', { params: { part: 'snippet', mine: true } });
+        const ch = (me.items || [])[0];
+        out.youtube.channel = ch
+          ? (ch.snippet.customUrl || ch.snippet.title) + ' [' + ch.id + ']'
+          : 'NONE — this Google account has no YouTube channel';
+        if (!ch) out.ok = false;
+      } catch (e) {
+        out.youtube.channel = 'unknown — ' + e.message;
+      }
       try { out.youtube.streamId = await ytFindStream(); }
       catch (e) {
         out.youtube.streamId = 'MISSING';
