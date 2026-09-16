@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<!--
+  Brief: a Meta reviewer checking the "Data Deletion Instructions URL" box, or
+  a Page admin who wants this app's access gone. The one action is "follow the
+  steps and be certain it is done". So: numbered, specific, no marketing tone,
+  and honest that the fastest route does not involve us at all.
+  Shares the token system with privacy.html deliberately — same voice, same page.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data Deletion Instructions — VxD Broadcast Relay</title>
+<meta name="description" content="How to remove the VxD Broadcast Relay application's access and request deletion of associated data.">
+<style>
+:root{
+  --step--1:clamp(0.83rem,0.8rem + 0.15vw,0.9rem);
+  --step-0:clamp(1rem,0.96rem + 0.2vw,1.06rem);
+  --step-1:clamp(1.15rem,1.05rem + 0.4vw,1.35rem);
+  --step-2:clamp(1.5rem,1.25rem + 1vw,2rem);
+  --step-3:clamp(2rem,1.5rem + 2.2vw,3rem);
+
+  --s-1:0.5rem; --s-2:0.75rem; --s-3:1rem;
+  --s-4:1.5rem; --s-5:2.5rem; --s-6:4rem; --s-7:6rem;
+
+  --max:46rem;
+  --gutter:clamp(1.25rem,5vw,2.5rem);
+  --radius:6px;
+
+  --paper:#fbfaf8;
+  --ink:#1b1a18;
+  --muted:#5e5b55;
+  --rule:#e3e0da;
+  --surface:#f2efe9;
+  --accent:#9a3412;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#141413; --ink:#f2f0ec; --muted:#a6a29a;
+    --rule:#2e2d2a; --surface:#1e1d1b; --accent:#f0915e;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:ui-serif,Georgia,"Times New Roman",serif;
+  font-size:var(--step-0); line-height:1.65;
+}
+.wrap{max-width:var(--max);margin-inline:auto;padding-inline:var(--gutter);
+  padding-block:var(--s-6) var(--s-7)}
+header{border-bottom:1px solid var(--rule);padding-bottom:var(--s-4);margin-bottom:var(--s-5)}
+.eyebrow{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:var(--step--1);letter-spacing:.09em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 var(--s-2)}
+h1{font-size:var(--step-3);line-height:1.1;letter-spacing:-.022em;margin:0 0 var(--s-2);font-weight:600}
+.sub{color:var(--muted);margin:0;font-size:var(--step-1);line-height:1.45}
+.meta{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:var(--step--1);color:var(--muted);margin-top:var(--s-3)}
+h2{font-size:var(--step-2);line-height:1.2;letter-spacing:-.015em;
+  margin:var(--s-6) 0 var(--s-3);font-weight:600}
+p,li{max-width:65ch}
+p{margin:0 0 var(--s-3)}
+ol{margin:0 0 var(--s-4);padding-inline-start:var(--s-4)}
+ul{margin:0 0 var(--s-3);padding-inline-start:var(--s-3)}
+li{margin-bottom:var(--s-2)}
+strong{font-weight:600}
+a{color:var(--accent);text-underline-offset:.18em}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:.9em;background:var(--surface);padding:.12em .38em;border-radius:3px}
+.callout{background:var(--surface);border-inline-start:3px solid var(--accent);
+  padding:var(--s-3) var(--s-4);border-radius:0 var(--radius) var(--radius) 0;margin:var(--s-4) 0}
+.callout p:last-child{margin-bottom:0}
+footer{border-top:1px solid var(--rule);margin-top:var(--s-7);padding-top:var(--s-4);
+  color:var(--muted);font-size:var(--step--1)}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+<header>
+  <p class="eyebrow">Data Deletion Instructions</p>
+  <h1>Removing this app's access</h1>
+  <p class="sub">Two ways to do it. The first is immediate and does not involve us.</p>
+  <p class="meta">Last updated 16 September 2026 · Facebook App ID 28453934654262266</p>
+</header>
+
+<div class="callout">
+  <p><strong>What there is to delete.</strong> VxD Broadcast Relay stores one thing: a Facebook Page access token for Pages operated by VxD Media. It holds no personal information about viewers, followers, or commenters — so for almost everyone reading this, there is nothing about you to delete. Revoking the token removes everything the application has.</p>
+</div>
+
+<h2>Option 1 — revoke it yourself, immediately</h2>
+<p>This takes effect the moment you confirm it, and needs nothing from us.</p>
+<ol>
+  <li>Open Facebook and go to <strong>Settings &amp; Privacy → Settings</strong>.</li>
+  <li>Choose <strong>Apps and Websites</strong> in the left sidebar.</li>
+  <li>Find <strong>VxD Broadcast Relay</strong> in the list.</li>
+  <li>Select <strong>Remove</strong>, and tick the option to delete posts and videos the app published if you also want those gone.</li>
+</ol>
+<p>The application's token stops working at once. It cannot create, publish, or end broadcasts on your Pages afterwards.</p>
+
+<h2>Option 2 — ask us to do it</h2>
+<p>Email <a href="mailto:contact@vxd.news">contact@vxd.news</a> with the subject line <strong>Data deletion request</strong>, and tell us which Facebook Page or account the request concerns so we can identify the right token.</p>
+<p>We will:</p>
+<ul>
+  <li>Revoke and destroy the stored access token for that Page.</li>
+  <li>Remove any broadcast identifiers still held for it.</li>
+  <li>Confirm to you by email once it is done.</li>
+</ul>
+<p>We respond within <strong>30 days</strong>, and in practice far sooner.</p>
+
+<h2>What deletion does not cover</h2>
+<p>Live videos already published to a Facebook Page belong to that Page, not to this application. Removing the app's access stops it creating or ending any more, but it does not delete videos already posted. Delete those from the Page itself, or use the "delete posts and videos" option in step 4 above.</p>
+
+<h2>Contact</h2>
+<p>VxD Media, Malé, Republic of Maldives<br>
+Email: <a href="mailto:contact@vxd.news">contact@vxd.news</a></p>
+
+<footer>
+  <p>VxD Broadcast Relay · Facebook App ID 28453934654262266 · <a href="/privacy">Privacy Policy</a></p>
+</footer>
+
+</main>
+</body>
+</html>

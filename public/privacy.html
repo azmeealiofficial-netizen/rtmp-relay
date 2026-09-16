@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<!--
+  Brief: audience is a Meta App Review reviewer and, rarely, a member of the
+  public who clicks through from the app. The one action is "confirm this app
+  handles data narrowly and honestly". What they must believe by the end: this
+  is a first-party broadcast tool for two Pages the operator owns, storing one
+  credential and no personal data. So: plain, specific, no legal boilerplate
+  that describes things the app does not do.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy Policy — VxD Broadcast Relay</title>
+<meta name="description" content="How the VxD Broadcast Relay application handles data.">
+<style>
+:root{
+  --step--1:clamp(0.83rem,0.8rem + 0.15vw,0.9rem);
+  --step-0:clamp(1rem,0.96rem + 0.2vw,1.06rem);
+  --step-1:clamp(1.15rem,1.05rem + 0.4vw,1.35rem);
+  --step-2:clamp(1.5rem,1.25rem + 1vw,2rem);
+  --step-3:clamp(2rem,1.5rem + 2.2vw,3rem);
+
+  --s-1:0.5rem; --s-2:0.75rem; --s-3:1rem;
+  --s-4:1.5rem; --s-5:2.5rem; --s-6:4rem; --s-7:6rem;
+
+  --max:46rem;
+  --gutter:clamp(1.25rem,5vw,2.5rem);
+  --radius:6px;
+
+  --paper:#fbfaf8;
+  --ink:#1b1a18;
+  --muted:#5e5b55;
+  --rule:#e3e0da;
+  --surface:#f2efe9;
+  --accent:#9a3412;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#141413; --ink:#f2f0ec; --muted:#a6a29a;
+    --rule:#2e2d2a; --surface:#1e1d1b; --accent:#f0915e;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:ui-serif,Georgia,"Times New Roman",serif;
+  font-size:var(--step-0); line-height:1.65;
+}
+.wrap{max-width:var(--max);margin-inline:auto;padding-inline:var(--gutter);
+  padding-block:var(--s-6) var(--s-7)}
+header{border-bottom:1px solid var(--rule);padding-bottom:var(--s-4);margin-bottom:var(--s-5)}
+.eyebrow{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:var(--step--1);letter-spacing:.09em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 var(--s-2)}
+h1{font-size:var(--step-3);line-height:1.1;letter-spacing:-.022em;margin:0 0 var(--s-2);font-weight:600}
+.sub{color:var(--muted);margin:0;font-size:var(--step-1);line-height:1.45}
+.meta{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:var(--step--1);color:var(--muted);margin-top:var(--s-3)}
+h2{font-size:var(--step-2);line-height:1.2;letter-spacing:-.015em;
+  margin:var(--s-6) 0 var(--s-3);font-weight:600}
+h3{font-size:var(--step-1);margin:var(--s-5) 0 var(--s-2);font-weight:600;line-height:1.3}
+p,li{max-width:65ch}
+p{margin:0 0 var(--s-3)}
+ul{margin:0 0 var(--s-3);padding-inline-start:var(--s-3)}
+li{margin-bottom:var(--s-1)}
+strong{font-weight:600}
+a{color:var(--accent);text-underline-offset:.18em}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:.9em;background:var(--surface);padding:.12em .38em;border-radius:3px}
+.callout{background:var(--surface);border-inline-start:3px solid var(--accent);
+  padding:var(--s-3) var(--s-4);border-radius:0 var(--radius) var(--radius) 0;margin:var(--s-4) 0}
+.callout p:last-child{margin-bottom:0}
+table{border-collapse:collapse;width:100%;margin:var(--s-3) 0 var(--s-4);font-size:var(--step--1)}
+th,td{text-align:start;padding:var(--s-2) var(--s-2) var(--s-2) 0;
+  border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-weight:600;white-space:nowrap;padding-inline-end:var(--s-4)}
+footer{border-top:1px solid var(--rule);margin-top:var(--s-7);padding-top:var(--s-4);
+  color:var(--muted);font-size:var(--step--1)}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+<header>
+  <p class="eyebrow">Privacy Policy</p>
+  <h1>VxD Broadcast Relay</h1>
+  <p class="sub">An internal broadcast tool. It starts and ends live video on two Facebook Pages we own, and handles no data about anybody else.</p>
+  <p class="meta">Last updated 16 September 2026 · Facebook App ID 28453934654262266</p>
+</header>
+
+<div class="callout">
+  <p><strong>The short version.</strong> This application has exactly one user: the operator who runs it. It stores one credential — a Facebook Page access token — so it can create and end live broadcasts. It collects nothing about viewers, uses no cookies or analytics, and shares nothing with anyone.</p>
+</div>
+
+<h2>Who operates this application</h2>
+<p>VxD Broadcast Relay is built and operated by <strong>VxD Media</strong>, Malé, Republic of Maldives, publisher of the news outlets <strong>VOICE</strong> (voice.mv) and <strong>DHUVAS</strong> (dhuvas.mv). The application runs on our own infrastructure at <code>mix.vxd.news</code> and is not distributed to, installed by, or offered to anyone else.</p>
+
+<h2>What the application does</h2>
+<p>It automates live broadcasting for our own events. When an operator starts an event, the application creates a live video on our Facebook Pages, passes the resulting stream keys to our encoder, and publishes the broadcast once the encoder confirms it is running. When the event ends, it closes those broadcasts.</p>
+
+<h2>What data it accesses</h2>
+
+<table>
+  <tbody>
+    <tr>
+      <th scope="row">Page identity</th>
+      <td>The name and numeric ID of the Facebook Pages we own, used to address the right Page and to confirm the connection is healthy before an event.</td>
+    </tr>
+    <tr>
+      <th scope="row">Page access token</th>
+      <td>A long-lived credential that authorises the application to act for our Pages. Stored as an environment variable on our server and never displayed, logged, or transmitted anywhere except to Facebook.</td>
+    </tr>
+    <tr>
+      <th scope="row">Live video objects</th>
+      <td>The broadcasts the application itself creates — identifier, title, description, status, and stream URL — held only for the duration of an event so it can publish and later end them.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The permissions requested are <code>pages_show_list</code>, <code>pages_read_engagement</code>, <code>pages_manage_posts</code> and <code>publish_video</code>. Each is required for the function above; none is used for any other purpose.</p>
+
+<h3>What it does not access</h3>
+<ul>
+  <li>No personal information about viewers, followers, or commenters.</li>
+  <li>No messages, comments, or reactions.</li>
+  <li>No advertising, audience, or insights data.</li>
+  <li>No Pages other than those belonging to us.</li>
+  <li>No cookies, trackers, analytics, or advertising identifiers of any kind.</li>
+</ul>
+
+<h2>How the data is stored and protected</h2>
+<p>The Page access token is held as an environment variable on our hosting provider and is available only to the running application. It is not written to a database, not committed to source control, and not included in logs. Traffic between the application and Facebook uses HTTPS. The application's own control interface is reachable only over HTTPS.</p>
+<p>Broadcast identifiers exist in the application's memory for the length of an event and are discarded when the event ends or the service restarts.</p>
+
+<h2>Sharing</h2>
+<p>We do not sell, rent, or share any data with third parties. The only external service the application communicates with is the Facebook Graph API, in order to perform the broadcasting described above.</p>
+
+<h2>Retention</h2>
+<p>The access token is retained until it is revoked or replaced. Broadcast identifiers are not retained beyond the event. Because no personal data of any other person is collected, there is nothing else to retain.</p>
+
+<h2>Your rights and how to exercise them</h2>
+<p>If you believe this application holds data relating to you, or you administer a Page you think it has access to, you can ask us to remove that access and delete anything associated with it. See <a href="/data-deletion">Data Deletion Instructions</a> for exactly how, or write to us at the address below. We respond within 30 days.</p>
+
+<h2>Children</h2>
+<p>The application is an internal broadcasting tool with no public sign-up and no users other than our own staff. It is not directed at children and collects no information from them.</p>
+
+<h2>Changes</h2>
+<p>If what the application does changes, this page is updated and the date at the top changes with it.</p>
+
+<h2>Contact</h2>
+<p>VxD Media, Malé, Republic of Maldives<br>
+Email: <a href="mailto:contact@vxd.news">contact@vxd.news</a></p>
+
+<footer>
+  <p>VxD Broadcast Relay · Facebook App ID 28453934654262266 · <a href="/data-deletion">Data Deletion Instructions</a></p>
+</footer>
+
+</main>
+</body>
+</html>
