@@ -1,17 +1,16 @@
 <!DOCTYPE html>
 <!--
-  Brief: a Meta reviewer checking the "Data Deletion Instructions URL" box, or
-  a Page admin who wants this app's access gone. The one action is "follow the
-  steps and be certain it is done". So: numbered, specific, no marketing tone,
-  and honest that the fastest route does not involve us at all.
-  Shares the token system with privacy.html deliberately — same voice, same page.
+  Brief: a Meta reviewer filling the "Terms of Service URL" field. The app has
+  no public users and no commercial offering, so the honest terms are short.
+  Anything longer would be describing a product that does not exist.
+  Same token system and voice as privacy.html / data-deletion.html.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Data Deletion Instructions — VxD Broadcast Relay</title>
-<meta name="description" content="How to remove the VxD Broadcast Relay application's access and request deletion of associated data.">
+<title>Terms of Service — VxD Broadcast Relay</title>
+<meta name="description" content="Terms governing use of the VxD Broadcast Relay application.">
 <style>
 :root{
   --step--1:clamp(0.83rem,0.8rem + 0.15vw,0.9rem);
@@ -61,9 +60,8 @@ h2{font-size:var(--step-2);line-height:1.2;letter-spacing:-.015em;
   margin:var(--s-6) 0 var(--s-3);font-weight:600}
 p,li{max-width:65ch}
 p{margin:0 0 var(--s-3)}
-ol{margin:0 0 var(--s-4);padding-inline-start:var(--s-4)}
 ul{margin:0 0 var(--s-3);padding-inline-start:var(--s-3)}
-li{margin-bottom:var(--s-2)}
+li{margin-bottom:var(--s-1)}
 strong{font-weight:600}
 a{color:var(--accent);text-underline-offset:.18em}
 a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
@@ -80,45 +78,49 @@ footer{border-top:1px solid var(--rule);margin-top:var(--s-7);padding-top:var(--
 <main class="wrap">
 
 <header>
-  <p class="eyebrow">Data Deletion Instructions</p>
-  <h1>Removing this app's access</h1>
-  <p class="sub">Two ways to do it. The first is immediate and does not involve us.</p>
+  <p class="eyebrow">Terms of Service</p>
+  <h1>VxD Broadcast Relay</h1>
+  <p class="sub">An internal tool with one operator. These terms are short because there is little to govern.</p>
   <p class="meta">Last updated 16 September 2026 · Facebook App ID 28453934654262266</p>
 </header>
 
 <div class="callout">
-  <p><strong>What there is to delete.</strong> VxD Broadcast Relay stores one thing: a Facebook Page access token for Pages operated by VxD Media. It holds no personal information about viewers, followers, or commenters — so for almost everyone reading this, there is nothing about you to delete. Revoking the token removes everything the application has.</p>
+  <p><strong>In brief.</strong> This application is operated by VxD Media for its own Facebook Pages. It is not a product, not offered to the public, and has no users other than our own staff.</p>
 </div>
 
-<h2>Option 1 — revoke it yourself, immediately</h2>
-<p>This takes effect the moment you confirm it, and needs nothing from us.</p>
-<ol>
-  <li>Open Facebook and go to <strong>Settings &amp; Privacy → Settings</strong>.</li>
-  <li>Choose <strong>Apps and Websites</strong> in the left sidebar.</li>
-  <li>Find <strong>VxD Broadcast Relay</strong> in the list.</li>
-  <li>Select <strong>Remove</strong>, and tick the option to delete posts and videos the app published if you also want those gone.</li>
-</ol>
-<p>The application's token stops working at once. It cannot create, publish, or end broadcasts on your Pages afterwards.</p>
+<h2>1. What this is</h2>
+<p>VxD Broadcast Relay is software built and run by <strong>VxD Media</strong>, Malé, Republic of Maldives, to manage live video broadcasts on the Facebook Pages of <strong>VOICE</strong> (voice.mv) and <strong>DHUVAS</strong> (dhuvas.mv). It runs on our own infrastructure at <code>mix.vxd.news</code>.</p>
 
-<h2>Option 2 — ask us to do it</h2>
-<p>Email <a href="mailto:shafraz@voice.mv">shafraz@voice.mv</a> with the subject line <strong>Data deletion request</strong>, and tell us which Facebook Page or account the request concerns so we can identify the right token.</p>
-<p>We will:</p>
-<ul>
-  <li>Revoke and destroy the stored access token for that Page.</li>
-  <li>Remove any broadcast identifiers still held for it.</li>
-  <li>Confirm to you by email once it is done.</li>
-</ul>
-<p>We respond within <strong>30 days</strong>, and in practice far sooner.</p>
+<h2>2. Who may use it</h2>
+<p>Only staff and contractors authorised by VxD Media. There is no public sign-up, no account creation, and no licence granted to anyone else to use, copy, or deploy the application.</p>
 
-<h2>What deletion does not cover</h2>
-<p>Live videos already published to a Facebook Page belong to that Page, not to this application. Removing the app's access stops it creating or ending any more, but it does not delete videos already posted. Delete those from the Page itself, or use the "delete posts and videos" option in step 4 above.</p>
+<h2>3. Acceptable use</h2>
+<p>Authorised operators must use the application only to broadcast content VxD Media has the right to broadcast, and in accordance with Meta's Platform Terms, Community Standards, and the broadcasting rules applicable in the Republic of Maldives.</p>
+
+<h2>4. Content</h2>
+<p>Responsibility for broadcast content rests with VxD Media as publisher. Video published to a Facebook Page is governed by that Page's own terms and by Meta's policies once published.</p>
+
+<h2>5. Availability</h2>
+<p>The application is provided to its operators as-is, with no guarantee of uptime. It depends on third-party services — Meta's Graph API, our hosting provider, and our internet connection — any of which may be unavailable. We make no warranty of fitness for any particular purpose.</p>
+
+<h2>6. Liability</h2>
+<p>To the extent permitted by law, VxD Media is not liable for indirect or consequential loss arising from use of the application, including interrupted or failed broadcasts.</p>
+
+<h2>7. Privacy</h2>
+<p>Data handling is described in the <a href="/privacy">Privacy Policy</a>. Removal of access is described in the <a href="/data-deletion">Data Deletion Instructions</a>.</p>
+
+<h2>8. Changes</h2>
+<p>These terms may be updated; the date at the top changes when they are.</p>
+
+<h2>9. Governing law</h2>
+<p>These terms are governed by the laws of the Republic of Maldives.</p>
 
 <h2>Contact</h2>
 <p>VxD Media, Malé, Republic of Maldives<br>
 Email: <a href="mailto:shafraz@voice.mv">shafraz@voice.mv</a></p>
 
 <footer>
-  <p>VxD Broadcast Relay · Facebook App ID 28453934654262266 · <a href="/privacy">Privacy Policy</a></p>
+  <p>VxD Broadcast Relay · Facebook App ID 28453934654262266 · <a href="/privacy">Privacy Policy</a> · <a href="/data-deletion">Data Deletion Instructions</a></p>
 </footer>
 
 </main>

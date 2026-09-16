@@ -1605,6 +1605,7 @@ app.get('/golive', (req, res) => res.sendFile(path.join(__dirname, 'public', 'go
 // no auth — a reviewer has to be able to open them while logged out.
 app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, 'public', 'privacy.html')));
 app.get('/data-deletion', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data-deletion.html')));
+app.get('/terms', (req, res) => res.sendFile(path.join(__dirname, 'public', 'terms.html')));
 app.get('/streamer-tag', (req, res) => res.sendFile(path.join(__dirname, 'public', 'streamer-tag.html')));
 app.get('/scorebug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'scorebug.html')));  // vMix overlay input
 app.get('/score', (req, res) => res.sendFile(path.join(__dirname, 'public', 'score.html')));        // director control (desktop setup)
