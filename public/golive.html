@@ -69,6 +69,13 @@ input[type=text]{width:100%;padding:15px 16px;background:var(--card);border:1px 
 input[type=text]:focus{border-color:var(--bdr2)}
 input[type=text]::placeholder{color:var(--t3)}
 input:disabled{opacity:.5}
+textarea{width:100%;padding:13px 16px;background:var(--card);border:1px solid var(--bdr);
+  border-radius:12px;color:var(--t1);font-size:16px;font-family:inherit;outline:none;
+  margin-bottom:18px;resize:vertical;min-height:84px;line-height:1.5}
+textarea:focus{border-color:var(--bdr2)}
+textarea::placeholder{color:var(--t3)}
+.found-hdr{font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;
+  color:var(--amb);margin:0 0 8px 2px}
 
 /* destinations */
 .dests{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
@@ -129,6 +136,9 @@ button.pill{min-height:34px}
   <div class="lbl">Event name</div>
   <input type="text" id="title" dir="auto" autocomplete="off"
          placeholder="Maziya vs New Radiant — Dhivehi Premier League">
+  <div class="lbl">Post caption <span style="text-transform:none;letter-spacing:0;font-weight:500">— optional, falls back to the event name</span></div>
+  <textarea id="caption" dir="auto"
+            placeholder="A line or two of context — reads better than a bare title."></textarea>
 </div>
 
 <div class="dests" id="dests"></div>
@@ -138,10 +148,17 @@ button.pill{min-height:34px}
 <button class="btn end" id="stopman" onclick="tapStopManual()" hidden>STOP MANUAL STREAM</button>
 <div class="row"><button class="btn reh" id="reh" onclick="tapReh()">REHEARSE</button></div>
 
+<div id="foundWrap" hidden>
+  <div class="found-hdr">Still live on these pages</div>
+  <div class="dests" id="found"></div>
+  <button class="btn end" id="endfound" onclick="tapEndFound()">END THESE BROADCASTS</button>
+</div>
+
 <div class="msg" id="msg"></div>
 
 <div class="tools">
   <button class="link" onclick="preflight()">RUN PREFLIGHT</button>
+  <button class="link" onclick="scanLive()">SCAN FOR OPEN LIVES</button>
   <a class="link" href="/">CONTROL PANEL</a>
   <a class="link" href="/live">STREAM PREVIEW</a>
 </div>
@@ -190,7 +207,7 @@ function clock(ms){
 // Disarm a pending confirmation — any state change or timeout cancels it,
 // so a stale armed button can never fire against a changed situation.
 const ARM_SECONDS=6;
-const BTN_LABEL={go:'GO LIVE',end:'END LIVE',stopman:'STOP MANUAL STREAM'};
+const BTN_LABEL={go:'GO LIVE',end:'END LIVE',stopman:'STOP MANUAL STREAM',endfound:'END THESE BROADCASTS'};
 function disarm(){
   if(armTimer){clearInterval(armTimer);armTimer=null;}
   if(armed){
@@ -285,6 +302,7 @@ async function poll(){
 }
 
 function titleVal(){ return (document.getElementById('title').value||'').trim(); }
+function captionVal(){ return (document.getElementById('caption').value||'').trim(); }
 
 function tapGo(){
   const t=titleVal();
@@ -295,7 +313,7 @@ function tapGo(){
 
 async function goLive(t){
   msg('Creating broadcasts…');
-  const r=await api('/api/match/start',{title:t});
+  const r=await api('/api/match/start',{title:t,description:captionVal()});
   if(!r.ok){ msg('Failed: '+(r.data.error||'unknown error'),'err'); }
   else{
     const on=Object.keys(r.data.videos||{}).filter(k=>r.data.videos[k]);
@@ -318,7 +336,7 @@ async function rehearse(){
     await poll();
     if(ytLive){ msg('Could not disarm YouTube. Aborted — nothing was started.','err'); return; }
   }
-  const r=await api('/api/match/start',{title:t,publish:false});
+  const r=await api('/api/match/start',{title:t,publish:false,description:captionVal()});
   if(!r.ok) msg('Failed: '+(r.data.error||'unknown error'),'err');
   else msg('Rehearsal running. Nothing is public and no VOD is left behind.','warn');
   poll();
@@ -354,7 +372,7 @@ async function stopManual(){
   await poll();
   if(!r.ok) msg('Stop failed: '+(r.data.error||'unknown error'),'err');
   else if(streaming) msg('Branches disarmed, but OBS is still streaming. Stop it in OBS.','err');
-  else msg('Encoder stopped and branches disarmed.\nEnd the broadcasts themselves on Facebook / YouTube — they were not created here.','ok');
+  else { msg('Encoder stopped and branches disarmed. Checking for open broadcasts…','ok'); await scanLive(); }
 }
 
 async function toggleYt(){
@@ -362,6 +380,52 @@ async function toggleYt(){
   msg(next?'Arming YouTube…':'Disarming YouTube…');
   await api('/api/obs/branch',{target:'youtube',enabled:next});
   setTimeout(async()=>{ await poll(); msg(ytLive?'YouTube armed.':'YouTube disarmed.',ytLive?'ok':'warn'); },700);
+}
+
+// ---- broadcasts still open on the pages ----
+// Anything the relay did not create — Live Producer, a persistent key, a
+// colleague, or our own event from before a relay restart. Found is not
+// the same as ours, so nothing is ended without an explicit second tap.
+let foundVideos=[];
+
+function renderFound(){
+  const wrap=document.getElementById('foundWrap');
+  const box=document.getElementById('found');
+  if(!foundVideos.length){ wrap.hidden=true; box.innerHTML=''; return; }
+  box.innerHTML=foundVideos.map(v=>{
+    const when=v.creation_time?new Date(v.creation_time).toLocaleTimeString():'';
+    return '<div class="dest"><div><div class="d-name">'+esc(v.label)+
+      (v.ours?' <span style="color:var(--t3);font-weight:500">· started here</span>':'')+
+      '</div><div class="d-note">'+esc(v.title)+(when?' · '+when:'')+'</div></div>'+
+      '<span class="pill '+(v.status==='LIVE'?'err':'warn')+'">'+v.status+'</span></div>';
+  }).join('');
+  wrap.hidden=false;
+}
+
+async function scanLive(quiet){
+  if(!quiet) msg('Scanning both pages…');
+  const r=await api('/api/live/scan');
+  const list=(r.data&&r.data.videos)||[];
+  const errs=list.filter(v=>v.error);
+  foundVideos=list.filter(v=>v.id);
+  renderFound();
+  if(quiet) return;
+  if(errs.length) msg('Scan errors:\n'+errs.map(e=>e.label+': '+e.error).join('\n'),'err');
+  else if(!foundVideos.length) msg('Nothing still live on either page.','ok');
+  else msg(foundVideos.length+' broadcast(s) still open — listed below.','warn');
+}
+
+function tapEndFound(){
+  arm('endfound','TAP AGAIN TO END THEM',endFound);
+  if(armed) msg('Ends every broadcast listed below, including any a colleague started.','warn');
+}
+
+async function endFound(){
+  msg('Ending '+foundVideos.length+' broadcast(s)…');
+  const r=await api('/api/live/end',{videos:foundVideos.map(v=>({brand:v.brand,id:v.id}))});
+  const errs=(r.data&&r.data.errors)||[];
+  await scanLive(true);
+  msg(errs.length?('Some could not be ended:\n'+errs.join('\n')):'All ended.',errs.length?'err':'ok');
 }
 
 async function preflight(){

@@ -522,7 +522,11 @@ async function setDestination(brand, server, key) {
 app.post('/api/match/start', async (req, res) => {
   if (!obsGuard(res)) return;
   const title = (req.body && req.body.title || '').trim();
-  const description = (req.body && req.body.description || '').trim();
+  // Facebook shows `title` on the video itself, but the POST TEXT people
+  // read in the feed comes from `description`. A title with no description
+  // produces a live post with no caption — which is what happened on the
+  // 15 Sep event. Fall back to the title so there is always copy.
+  const description = (req.body && req.body.description || '').trim() || title;
   // Rehearsal: only an explicit false opts out of publishing. Anything
   // else — absent, undefined, a stray string — behaves exactly as before,
   // so a real match can never be silently turned into a rehearsal.
@@ -677,6 +681,68 @@ app.post('/api/match/end', async (req, res) => {
   matchState.lastError = errors.join(' | ');
 
   res.json({ ok: errors.length === 0, errors });
+});
+
+// ---- broadcasts we did not create ---------------------------------
+// matchState only knows the ids it made. Anything started from Live
+// Producer, from a persistent key, or by someone else on the team is
+// invisible to it — and after a relay restart, so is our own event.
+// This scans both pages for whatever is still live.
+//
+// Ending is deliberately a SEPARATE, EXPLICIT call taking the exact ids
+// to close. Killing a colleague's broadcast by accident is a worse
+// failure than leaving one running, so nothing here ends anything on
+// its own.
+async function scanLiveVideos() {
+  const out = [];
+  for (const [brand, page] of Object.entries(FB_PAGES)) {
+    if (!page.id || !page.token) continue;
+    try {
+      const j = await fbCall(`/${page.id}/live_videos`, {
+        fields: 'id,status,title,creation_time',
+        limit: 10,
+        access_token: page.token,
+      });
+      for (const v of (j.data || [])) {
+        // VOD = already ended. LIVE is public; UNPUBLISHED is still
+        // holding an ingest slot even though nobody can see it.
+        if (v.status !== 'LIVE' && v.status !== 'UNPUBLISHED') continue;
+        const ours = Object.values(matchState.videos || {})
+          .some(x => x && x.id === v.id);
+        out.push({
+          brand, label: page.label, id: v.id, status: v.status,
+          title: v.title || '(no title)', creation_time: v.creation_time, ours,
+        });
+      }
+    } catch (e) {
+      out.push({ brand, label: page.label, error: e.message });
+    }
+  }
+  return out;
+}
+
+app.get('/api/live/scan', async (req, res) => {
+  try { res.json({ ok: true, videos: await scanLiveVideos() }); }
+  catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+app.post('/api/live/end', async (req, res) => {
+  const items = (req.body && req.body.videos) || [];
+  if (!Array.isArray(items) || !items.length) {
+    return res.status(400).json({ error: 'videos required: [{brand, id}]' });
+  }
+  const ended = [], errors = [];
+  for (const it of items) {
+    const page = FB_PAGES[it && it.brand];
+    if (!page || !page.token) { errors.push(`${it && it.id}: unknown brand`); continue; }
+    try {
+      await fbCall(`/${it.id}`, { end_live_video: true, access_token: page.token }, 'POST');
+      ended.push(it.id);
+    } catch (e) {
+      errors.push(`${page.label} ${it.id}: ${e.message}`);
+    }
+  }
+  res.json({ ok: errors.length === 0, ended, errors });
 });
 
 // A page token can read "Expires: Never" and still stop working.
