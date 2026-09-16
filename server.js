@@ -580,13 +580,46 @@ async function ytCall(pathname, { method = 'GET', params = {}, body } = {}) {
 // stored, so rotating the key in Studio doesn't silently break us.
 async function ytFindStream() {
   if (YT_STREAM_ID) return YT_STREAM_ID;
+  // liveStreams.list?mine=true is a long-standing source of HTTP 500
+  // "Internal error encountered" on some channels, and the `part` combination
+  // is one trigger. Ask for progressively less until one works, rather than
+  // failing the whole event over a Google-side quirk.
+  const parts = ['id,snippet,cdn,contentDetails,status', 'id,snippet,cdn', 'id,cdn', 'id'];
+  let lastErr;
+  for (const part of parts) {
+    try {
+      const j = await ytCall('/liveStreams', { params: { part, mine: true, maxResults: 50 } });
+      const items = j.items || [];
+      const pick = items.find(x => x.contentDetails && x.contentDetails.isReusable) || items[0];
+      if (!pick) throw new Error('no reusable ingest stream found on the YouTube channel');
+      return pick.id;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr;
+}
+
+// Escape hatch for when the list call is unusable: make our own reusable
+// ingest stream and pin its id in YT_STREAM_ID. The returned key then goes
+// into the OBS YouTube Branch Output filter. Deliberately NOT automatic —
+// creating streams silently on every failure would litter the channel.
+async function ytCreateStream(title) {
   const j = await ytCall('/liveStreams', {
-    params: { part: 'id,snippet,cdn,contentDetails,status', mine: true, maxResults: 50 },
+    method: 'POST',
+    params: { part: 'id,snippet,cdn,contentDetails' },
+    body: {
+      snippet: { title: String(title || 'VxD Relay Ingest').slice(0, 128) },
+      cdn: { frameRate: 'variable', ingestionType: 'rtmp', resolution: 'variable' },
+      contentDetails: { isReusable: true },
+    },
   });
-  const items = j.items || [];
-  const pick = items.find(x => x.contentDetails && x.contentDetails.isReusable) || items[0];
-  if (!pick) throw new Error('no reusable ingest stream found on the YouTube channel');
-  return pick.id;
+  const ing = (j.cdn && j.cdn.ingestionInfo) || {};
+  return {
+    streamId: j.id,
+    streamKey: ing.streamName,
+    rtmpUrl: ing.ingestionAddress,
+    backupUrl: ing.backupIngestionAddress,
+    title: j.snippet && j.snippet.title,
+  };
 }
 
 async function ytStartBroadcast(title, description) {
@@ -911,6 +944,41 @@ async function scanLiveVideos() {
 app.get('/api/live/scan', async (req, res) => {
   try { res.json({ ok: true, videos: await scanLiveVideos() }); }
   catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+// Diagnostic: what does liveStreams.list actually return, part by part?
+// Exists because a bare "Internal error encountered" tells you nothing about
+// which part combination Google objected to.
+app.get('/api/youtube/streams', async (req, res) => {
+  if (!ytConfigured()) return res.status(400).json({ error: 'YouTube is not configured' });
+  const out = { attempts: [] };
+  for (const part of ['id,snippet,cdn,contentDetails,status', 'id,snippet,cdn', 'id,cdn', 'id']) {
+    try {
+      const j = await ytCall('/liveStreams', { params: { part, mine: true, maxResults: 50 } });
+      out.attempts.push({ part, ok: true, count: (j.items || []).length });
+      out.streams = (j.items || []).map(s => ({
+        id: s.id,
+        title: s.snippet && s.snippet.title,
+        reusable: s.contentDetails ? s.contentDetails.isReusable : undefined,
+        status: s.status && s.status.streamStatus,
+      }));
+      break;
+    } catch (e) { out.attempts.push({ part, ok: false, error: e.message }); }
+  }
+  res.status(out.streams ? 200 : 502).json(out);
+});
+
+// Create a reusable ingest stream we own. POST so it cannot happen by
+// accident from a browser address bar.
+app.post('/api/youtube/stream/create', async (req, res) => {
+  if (!ytConfigured()) return res.status(400).json({ error: 'YouTube is not configured' });
+  try {
+    const made = await ytCreateStream(req.body && req.body.title);
+    res.json({
+      ok: true, ...made,
+      next: 'Set YT_STREAM_ID to streamId on Railway, and put streamKey into the OBS YouTube Branch Output filter.',
+    });
+  } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
 app.post('/api/live/end', async (req, res) => {
