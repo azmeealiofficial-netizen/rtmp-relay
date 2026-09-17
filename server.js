@@ -526,9 +526,25 @@ app.post('/api/obs/call', async (req, res) => {
 // ============================================================
 // MATCH AUTOMATION — Facebook Live via Graph API
 //
-// One call creates a live video on BOTH pages, writes each page's
-// stream key into the right place in OBS, and starts streaming.
-// Another call ends the match and closes both broadcasts.
+// One call creates a live video on the selected pages, writes each
+// page's stream key into the right place in OBS, and starts streaming.
+// Another call ends the match and closes what it opened.
+//
+// DESTINATIONS: POST /api/match/start accepts
+//   {"destinations": {"voice": true, "dhuvas": true, "youtube": false}}
+// Omit the object entirely and all three are used, so every older
+// caller behaves exactly as before. The three are genuinely independent
+// in OBS: VOICE is the main encoder output, DHUVAS and YouTube are
+// Branch Output filters which — under Interlock "Always ON" — broadcast
+// on their own the moment they are enabled. So a DHUVAS-only event is a
+// real thing: create the DHUVAS broadcast, arm its branch, and never
+// call StartStream at all. What changes per selection:
+//   voice    → create the VOICE video, SetStreamServiceSettings, StartStream
+//   dhuvas   → create the DHUVAS video, write the branch key, arm the branch
+//   youtube  → create the bound YouTube broadcast, arm the YouTube branch
+// VOICE stays the selected scene in OBS regardless — the branches encode
+// their own source scene, and clicking DHUVAS to "match" a DHUVAS-only
+// event would swap branding on every output.
 //
 // Sequence used by /api/match/start:
 //   1. create both live videos as UNPUBLISHED (nothing visible yet)
@@ -574,8 +590,50 @@ const matchState = {
   startedAt: 0,
   publishedAt: 0,
   videos: { voice: null, dhuvas: null },   // { id, permalink, published }
+  // Which destinations THIS event selected. Not cosmetic: /api/match/end
+  // must close only what was opened, and the publish timer has to know
+  // which signal proves ingest (see ingestProven()).
+  dests: { voice: false, dhuvas: false, youtube: false },
   lastError: '',
 };
+
+// ---- destination selection ---------------------------------------
+// Default is all three, so every existing caller — the PowerShell
+// snippets, the control panel, an older cached golive.html — keeps
+// behaving exactly as before. When `destinations` IS supplied, only
+// the keys explicitly set true are used: a partial object means
+// precisely what it names, never "these plus the rest".
+function pickDests(body) {
+  const want = body && body.destinations;
+  if (!want || typeof want !== 'object') {
+    return { voice: true, dhuvas: true, youtube: true };
+  }
+  return {
+    voice: want.voice === true,
+    dhuvas: want.dhuvas === true,
+    youtube: want.youtube === true,
+  };
+}
+
+// Proof that bytes are actually flowing before anything is published.
+// VOICE rides the main encoder, so GetStreamStatus is the signal. A
+// DHUVAS-only event never calls StartStream at all — under Interlock
+// "Always ON" the branch filter IS the output, so its enabled state is
+// what has to be true. Checking the wrong one would leave a perfectly
+// healthy DHUVAS event permanently UNPUBLISHED.
+async function ingestProven(dests) {
+  if (dests.voice) {
+    const st = await obs.call('GetStreamStatus');
+    return !!st.outputActive;
+  }
+  if (dests.dhuvas) {
+    const f = await obs.call('GetSourceFilter', {
+      sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
+    });
+    return !!f.filterEnabled;
+  }
+  return true;   // YouTube-only: nothing on Facebook to publish anyway
+}
 
 async function fbCall(path, params, method) {
   const url = new URL(FB_GRAPH + path);
@@ -841,21 +899,31 @@ app.post('/api/match/start', async (req, res) => {
   // else — absent, undefined, a stray string — behaves exactly as before,
   // so a real match can never be silently turned into a rehearsal.
   const autoPublish = !(req.body && req.body.publish === false);
+  const dests = pickDests(req.body);
   if (!title) return res.status(400).json({ error: 'title required' });
   if (matchState.live) return res.status(409).json({ error: 'a match is already live — end it first' });
+  if (!dests.voice && !dests.dhuvas && !dests.youtube) {
+    return res.status(400).json({ error: 'pick at least one destination' });
+  }
 
-  // Work with whatever pages are configured. A brand with no token is
-  // skipped entirely — its OBS destination is left exactly as it is, so
-  // a manually-configured persistent stream key keeps working.
-  const active = Object.entries(FB_PAGES).filter(([, p]) => p.id && p.token);
-  if (!active.length) {
-    return res.status(400).json({ error: 'no Facebook pages configured — set FB_*_PAGE_ID and FB_*_TOKEN' });
+  // Work with whatever pages are configured AND selected. A brand with no
+  // token is skipped entirely — its OBS destination is left exactly as it
+  // is, so a manually-configured persistent stream key keeps working.
+  const active = Object.entries(FB_PAGES).filter(([k, p]) => dests[k] && p.id && p.token);
+  if (!active.length && !dests.youtube) {
+    const why = (dests.voice || dests.dhuvas)
+      ? 'the selected Facebook page has no token — set FB_*_PAGE_ID and FB_*_TOKEN'
+      : 'no Facebook pages configured — set FB_*_PAGE_ID and FB_*_TOKEN';
+    return res.status(400).json({ error: why });
   }
   const skipped = Object.entries(FB_PAGES)
-    .filter(([, p]) => !(p.id && p.token))
+    .filter(([k, p]) => dests[k] && !(p.id && p.token))
     .map(([k]) => k);
 
-  // Stream settings can't be changed while streaming.
+  // Stream settings can't be changed while streaming. This still applies
+  // even to an event that never calls StartStream: OBS streaming with no
+  // event of ours running means someone started it by hand, and quietly
+  // arming a branch alongside it is how you end up with two broadcasts.
   if (obsState.streaming) {
     return res.status(409).json({ error: 'OBS is already streaming — stop it before starting a match' });
   }
@@ -884,23 +952,27 @@ app.post('/api/match/start', async (req, res) => {
     // still UNPUBLISHED at this point, so the bytes go somewhere invisible.
     // YouTube has no unpublished state and auto-starts on ingest, so it is
     // armed ONLY for a real go-live, never for a rehearsal.
-    if (created.dhuvas) await setBranchEnabled('dhuvas', true);
+    if (dests.dhuvas && created.dhuvas) await setBranchEnabled('dhuvas', true);
 
     // 2c. YouTube: create the broadcast and bind it to the persistent
     // stream BEFORE the branch starts pushing, so enableAutoStart fires
     // on OUR titled broadcast rather than whatever Studio had.
     // A YouTube failure must never take down the Facebook event — it is
     // recorded and surfaced, not thrown.
-    if (autoPublish && ytConfigured()) {
+    if (dests.youtube && autoPublish && ytConfigured()) {
       try { ytBroadcast = await ytStartBroadcast(title, description); }
       catch (e) { ytError = e.message; }
     }
-    if (autoPublish) await setBranchEnabled('youtube', true);
+    if (dests.youtube && autoPublish) await setBranchEnabled('youtube', true);
 
-    // 3. go
-    await obs.call('StartStream');
+    // 3. go. Only VOICE rides the main encoder — a DHUVAS-only or
+    //    YouTube-only event is already on air from the branch filter
+    //    alone, and StartStream would push the main output at whatever
+    //    stream key was last configured. So it is deliberately skipped.
+    if (dests.voice) await obs.call('StartStream');
 
     matchState.live = true;
+    matchState.dests = dests;
     matchState.rehearsal = !autoPublish;
     matchState.title = title;
     matchState.startedAt = Date.now();
@@ -919,9 +991,10 @@ app.post('/api/match/start', async (req, res) => {
     //    UNPUBLISHED until /api/match/end closes them.
     if (autoPublish) setTimeout(async () => {
       try {
-        const st = await obs.call('GetStreamStatus');
-        if (!st.outputActive) {
-          matchState.lastError = 'OBS did not start streaming — broadcasts left unpublished';
+        if (!await ingestProven(dests)) {
+          matchState.lastError = dests.voice
+            ? 'OBS did not start streaming — broadcasts left unpublished'
+            : 'the DHUVAS branch is not armed — broadcasts left unpublished';
           return;
         }
         for (const [brand, page] of active) {
@@ -937,7 +1010,7 @@ app.post('/api/match/start', async (req, res) => {
     }, Number(process.env.FB_PUBLISH_DELAY_MS || 10000));
 
     res.json({ ok: true, title, rehearsal: matchState.rehearsal, videos: matchState.videos,
-               skipped, youtube: ytBroadcast, youtubeError: ytError || undefined });
+               dests, skipped, youtube: ytBroadcast, youtubeError: ytError || undefined });
   } catch (e) {
     // Disarm first: under Always ON a branch we managed to enable before the
     // failure would keep broadcasting to a broadcast we are about to kill.
@@ -984,8 +1057,13 @@ app.post('/api/match/end', async (req, res) => {
       try { await setBranchEnabled(t, false); }
       catch (e) { errors.push(`branch ${t}: ${e.message}`); }
     }
-    try { await obs.call('StopStream'); }
-    catch (e) { errors.push('OBS: ' + e.message); }
+    // Only stop the encoder if it is actually running. A DHUVAS-only or
+    // YouTube-only event never started it, and StopStream on an idle OBS
+    // throws — which would report a clean end as "ended with problems".
+    if (obsState.streaming) {
+      try { await obs.call('StopStream'); }
+      catch (e) { errors.push('OBS: ' + e.message); }
+    }
   } else {
     errors.push('OBS not connected — stop the stream manually');
   }
@@ -1008,6 +1086,7 @@ app.post('/api/match/end', async (req, res) => {
   matchState.live = false;
   matchState.rehearsal = false;
   matchState.videos = { voice: null, dhuvas: null };
+  matchState.dests = { voice: false, dhuvas: false, youtube: false };
   matchState.youtube = null;
   matchState.lastError = errors.join(' | ');
 
@@ -1277,6 +1356,7 @@ app.get('/api/match/status', (req, res) => {
     startedAt: matchState.startedAt,
     publishedAt: matchState.publishedAt,
     videos: matchState.videos,
+    dests: matchState.dests,
     lastError: matchState.lastError,
     configured: {
       voice: !!(FB_PAGES.voice.id && FB_PAGES.voice.token),

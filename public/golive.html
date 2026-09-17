@@ -90,6 +90,12 @@ textarea::placeholder{color:var(--t3)}
 .pill.warn{background:#f59e0b12;border-color:#f59e0b30;color:var(--amb)}
 .pill.err{background:#ef444412;border-color:#ef444430;color:var(--red)}
 button.pill{min-height:34px}
+/* destination picker — deliberately NOT green. Green on this page means
+   "on air"; a selected-but-not-started destination is neither. */
+.pill.pick{background:#f2f0ec14;border-color:#f2f0ec30;color:var(--t1)}
+.dest.unpicked{opacity:.45}
+.dest.unpicked .pill{background:transparent;border-color:var(--bdr)}
+.sel-note{margin:-12px 0 18px 2px;font-size:12px;font-weight:600;color:var(--amb)}
 
 /* actions */
 .btn{width:100%;padding:18px;border-radius:14px;font-size:15px;font-weight:800;letter-spacing:.6px;
@@ -145,6 +151,7 @@ button.pill{min-height:34px}
 </div>
 
 <div class="dests" id="dests"></div>
+<div class="sel-note" id="selNote" hidden></div>
 
 <button class="btn go" id="go" onclick="tapGo()">GO LIVE</button>
 <button class="btn end" id="end" onclick="tapEnd()" hidden>END LIVE</button>
@@ -171,19 +178,40 @@ button.pill{min-height:34px}
 // ============================================================
 // GO LIVE — mobile-first front end for the event automation.
 //
-// Facebook is API-driven: one title creates a broadcast on both
-// pages and the relay publishes them once OBS confirms ingest.
-// YouTube is NOT — it rides a persistent stream key set in the
-// OBS Branch Output filter, so this page can only show whether
-// that branch is armed. That is the thing people forget after a
-// rehearsal, so it is a tappable control rather than a label.
+// Facebook is API-driven: one title creates a broadcast on the
+// selected pages and the relay publishes them once ingest is
+// confirmed. YouTube rides a persistent stream key bound to a
+// per-event broadcast.
+//
+// DESTINATIONS: the three rows are pickable while idle. Tap a row
+// to drop it from the next event — DHUVAS-only and YouTube-only
+// are real configurations, not a degraded mode: VOICE is the main
+// encoder output while the other two are Branch Output filters,
+// and under Interlock "Always ON" a branch broadcasts on its own.
+//
+// The selection RESETS TO ALL THREE on every load and after every
+// END LIVE. It is deliberately not remembered: a one-off DHUVAS-only
+// event silently persisting into next week's match is a far worse
+// failure than having to tap twice.
 //
 // Destructive actions use tap-to-arm rather than confirm(), which
 // is unreliable and ugly on phones, and easy to dismiss by reflex.
 // ============================================================
-let M={live:false,rehearsal:false,videos:{},title:'',startedAt:0,lastError:''};
-let connected=false, streaming=false, ytLive=false;
+let M={live:false,rehearsal:false,videos:{},dests:null,title:'',startedAt:0,lastError:''};
+let connected=false, streaming=false, ytLive=false, dhLive=false;
 let armed=null, armTimer=null;
+
+// Next event's destinations. Full house is the default, always.
+const ALL_DESTS={voice:true,dhuvas:true,youtube:true};
+let sel=Object.assign({},ALL_DESTS);
+const DEST_LABEL={voice:'VOICE',dhuvas:'DHUVAS',youtube:'YOUTUBE'};
+function selList(d){ return ['voice','dhuvas','youtube'].filter(k=>d[k]).map(k=>DEST_LABEL[k]); }
+function selText(d){
+  const n=selList(d);
+  if(!n.length) return 'nothing';
+  if(n.length===1) return n[0];
+  return n.slice(0,-1).join(', ')+' and '+n[n.length-1];
+}
 
 async function api(path,body){
   try{
@@ -241,12 +269,19 @@ function render(){
   const st=document.getElementById('state');
   const sub=document.getElementById('sub');
 
+  // Which destinations a running event uses belongs in the banner, not
+  // only in the rows: it is the one line you look at to know what is out
+  // there. Omitted when all three are up — that is the expected case and
+  // saying so every time would train the eye to skip the line.
+  const liveDests=M.live&&M.dests&&selList(M.dests).length<3
+    ? selText(M.dests)+' only · ' : '';
+
   if(M.live&&M.rehearsal){
     ban.className='banner reh'; st.textContent='REHEARSAL';
-    sub.innerHTML='Nothing is public · <span class="b-clock">'+clock(Date.now()-M.startedAt)+'</span>';
+    sub.innerHTML=esc(liveDests)+'Nothing is public · <span class="b-clock">'+clock(Date.now()-M.startedAt)+'</span>';
   }else if(M.live){
     ban.className='banner live'; st.textContent='● LIVE';
-    sub.innerHTML=(M.title?esc(M.title)+' · ':'')+'<span class="b-clock">'+clock(Date.now()-M.startedAt)+'</span>';
+    sub.innerHTML=esc(liveDests)+(M.title?esc(M.title)+' · ':'')+'<span class="b-clock">'+clock(Date.now()-M.startedAt)+'</span>';
   }else{
     ban.className='banner'; st.textContent='IDLE';
     sub.textContent = streaming ? 'OBS is streaming outside event control'
@@ -268,36 +303,79 @@ function render(){
   // empty disabled field just looks broken.
   document.getElementById('titleWrap').hidden = M.live;
 
-  const fb=(k,label)=>{
+  // Which destinations the RUNNING event chose. An older relay (or an
+  // event started before this field existed) reports nothing, in which
+  // case the historical behaviour — all three — is the honest reading.
+  const D = M.live ? (M.dests || ALL_DESTS) : sel;
+
+  const row=(k,note,pill)=>
+    '<div class="dest'+(D[k]?'':' unpicked')+'"><div><div class="d-name">'+DEST_LABEL[k]+'</div>'+
+    '<div class="d-note">'+note+'</div></div>'+pill+'</div>';
+
+  // A Facebook row. Idle → a picker. Live → what the broadcast is doing.
+  const fb=(k)=>{
     const v=M.videos&&M.videos[k];
     let cls='',txt='READY';
+    if(!M.live&&!manual){
+      // Same alarm the YouTube row has always had. Under Always ON an
+      // enabled DHUVAS branch is on air right now, event or no event —
+      // that outranks showing a picker for the next one.
+      if(k==='dhuvas'&&dhLive){
+        return row(k,'Facebook · branch armed with no event running',
+          '<button class="pill err" onclick="disarmDhuvas()">ARMED — PUSHING!</button>');
+      }
+      cls=D[k]?'pick':''; txt=D[k]?'ON':'OFF';
+      return row(k,'Facebook · tap to include or drop',
+        '<button class="pill '+cls+'" onclick="pickDest(\''+k+'\')">'+txt+'</button>');
+    }
+    if(!D[k]) return row(k,'Facebook · not part of this event','<span class="pill">NOT IN THIS EVENT</span>');
     if(v&&v.published){cls='on';txt='● LIVE';}
     else if(v){cls='warn';txt='UNPUBLISHED';}
-    return '<div class="dest"><div><div class="d-name">'+label+'</div>'+
-           '<div class="d-note">Facebook · title from this page</div></div>'+
-           '<span class="pill '+cls+'">'+txt+'</span></div>';
+    return row(k,'Facebook · title from this page','<span class="pill '+cls+'">'+txt+'</span>');
   };
 
-  // Interlock is Always ON, so an armed YouTube branch is BROADCASTING,
-  // not merely ready. Off between events is the correct state, so it reads
-  // neutral; armed outside an event is an alarm, not a reassurance.
-  let ytCls,ytTxt;
-  if(M.live&&!M.rehearsal){ ytCls=ytLive?'on':'warn'; ytTxt=ytLive?'● LIVE':'OFF — NOT GOING OUT'; }
+  // Interlock is Always ON, so an armed branch is BROADCASTING, not merely
+  // ready. Off between events is the correct state, so it reads neutral;
+  // armed outside an event is an alarm, not a reassurance — and the alarm
+  // outranks the picker, because a branch pushing right now is the more
+  // urgent fact than what the next event will use.
+  let ytCls,ytTxt,ytAction='toggleYt()';
+  if(M.live&&!D.youtube){ ytCls=ytLive?'err':''; ytTxt=ytLive?'PUSHING — NOT IN THIS EVENT!':'NOT IN THIS EVENT'; }
+  else if(M.live&&!M.rehearsal){ ytCls=ytLive?'on':'warn'; ytTxt=ytLive?'● LIVE':'OFF — NOT GOING OUT'; }
   else if(M.live&&M.rehearsal){ ytCls=ytLive?'err':''; ytTxt=ytLive?'PUSHING!':'OFF'; }
   else if(manual){ ytCls=ytLive?'warn':''; ytTxt=ytLive?'● LIVE (manual)':'OFF'; }
-  else { ytCls=ytLive?'err':''; ytTxt=ytLive?'ARMED — PUSHING!':'OFF'; }
+  else if(ytLive){ ytCls='err'; ytTxt='ARMED — PUSHING!'; }
+  else { ytCls=D.youtube?'pick':''; ytTxt=D.youtube?'ON':'OFF'; ytAction="pickDest('youtube')"; }
 
   // Once the relay creates the broadcast itself, the note becomes a link
   // to it — the fastest way to confirm the title actually landed.
   const ytNote = M.youtube
     ? '<a href="'+M.youtube.url+'" target="_blank" rel="noopener">'+esc(M.youtube.title)+' ↗</a>'
-    : 'Persistent key · title set in Studio';
+    : (!M.live&&!manual&&!ytLive ? 'Persistent key · tap to include or drop'
+                                 : 'Persistent key · bound per event');
 
   document.getElementById('dests').innerHTML =
-    fb('voice','VOICE') + fb('dhuvas','DHUVAS') +
-    '<div class="dest"><div><div class="d-name">YOUTUBE</div>'+
-    '<div class="d-note">'+ytNote+'</div></div>'+
-    '<button class="pill '+ytCls+'" onclick="toggleYt()">'+ytTxt+'</button></div>';
+    fb('voice') + fb('dhuvas') +
+    row('youtube',ytNote,'<button class="pill '+ytCls+'" onclick="'+ytAction+'">'+ytTxt+'</button>');
+
+  // An idle event going out to fewer than three needs saying once, plainly,
+  // above the button — not discovered afterwards in the Facebook feed.
+  const note=document.getElementById('selNote');
+  const n=selList(sel).length;
+  if(M.live||manual||n===3){ note.hidden=true; }
+  else { note.hidden=false; note.textContent = n
+      ? 'This event goes to '+selText(sel)+' only.'
+      : 'No destination selected — tap a row above to pick at least one.'; }
+}
+
+// A destination can be dropped only while idle: mid-event the rows are a
+// readout, and dhuvas cannot be added to a running event anyway (its key
+// is written before StartStream).
+function pickDest(k){
+  if(M.live||(streaming&&!M.live)) return;
+  sel[k]=!sel[k];
+  disarm();                     // the armed confirmation named the old set
+  render();
 }
 
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -305,7 +383,8 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 async function poll(){
   const [a,b]=await Promise.all([api('/api/match/status'),api('/api/obs')]);
   if(a.ok&&a.data) M=a.data;
-  if(b.ok&&b.data){ connected=!!b.data.connected; streaming=!!b.data.streaming; ytLive=!!b.data.ytLive; }
+  if(b.ok&&b.data){ connected=!!b.data.connected; streaming=!!b.data.streaming;
+                    ytLive=!!b.data.ytLive; dhLive=!!b.data.branchLive; }
   else connected=false;
   render();
 }
@@ -315,18 +394,24 @@ function captionVal(){ return (document.getElementById('caption').value||'').tri
 
 function tapGo(){
   const t=titleVal();
-  if(!t){ msg('Enter an event name first — it becomes the post title on both pages.','err'); return; }
+  if(!t){ msg('Enter an event name first — it becomes the post title on the selected pages.','err'); return; }
+  if(!selList(sel).length){ msg('Pick at least one destination — tap a row above.','err'); return; }
   arm('go','TAP AGAIN TO GO LIVE',()=>goLive(t));
-  if(armed) msg('This publishes to VOICE, DHUVAS and YouTube for real.','warn');
+  // Name the destinations in the confirmation, not just "for real". This is
+  // the last screen before it is public, and it is the only place the
+  // difference between all three and one is unmissable.
+  if(armed) msg('This publishes to '+selText(sel)+' for real.','warn');
 }
 
 async function goLive(t){
-  msg('Creating broadcasts…');
-  const r=await api('/api/match/start',{title:t,description:captionVal()});
+  const picked=Object.assign({},sel);
+  msg('Creating broadcasts for '+selText(picked)+'…');
+  const r=await api('/api/match/start',{title:t,description:captionVal(),destinations:picked});
   if(!r.ok){ msg('Failed: '+(r.data.error||'unknown error'),'err'); }
   else{
-    const on=Object.keys(r.data.videos||{}).filter(k=>r.data.videos[k]);
-    msg('Broadcasts created on '+on.join(' + ')+'. Publishing in ~10s once OBS confirms ingest.','ok');
+    const on=Object.keys(r.data.videos||{}).filter(k=>r.data.videos[k]).map(k=>DEST_LABEL[k]);
+    if(picked.youtube) on.push('YOUTUBE');
+    msg('Live on '+(on.join(' + ')||'nothing')+'. Publishing in ~10s once ingest is confirmed.','ok');
     setTimeout(poll,12000);
   }
   poll();
@@ -338,6 +423,7 @@ function tapReh(){ disarm(); rehearse(); }
 
 async function rehearse(){
   const t=titleVal()||'Rehearsal - not for broadcast';
+  if(!selList(sel).length){ msg('Pick at least one destination — tap a row above.','err'); return; }
   if(ytLive){
     msg('Disarming YouTube first — rehearsal only protects Facebook…','warn');
     await api('/api/obs/branch',{target:'youtube',enabled:false});
@@ -345,15 +431,20 @@ async function rehearse(){
     await poll();
     if(ytLive){ msg('Could not disarm YouTube. Aborted — nothing was started.','err'); return; }
   }
-  const r=await api('/api/match/start',{title:t,publish:false,description:captionVal()});
+  const r=await api('/api/match/start',
+    {title:t,publish:false,description:captionVal(),destinations:Object.assign({},sel)});
   if(!r.ok) msg('Failed: '+(r.data.error||'unknown error'),'err');
-  else msg('Rehearsal running. Nothing is public and no VOD is left behind.','warn');
+  else msg('Rehearsal running on '+selText(sel)+'. Nothing is public and no VOD is left behind.','warn');
   poll();
 }
 
 function tapEnd(){
   arm('end','TAP AGAIN TO END LIVE',endMatch);
-  if(armed) msg('This stops OBS and closes both broadcasts.','warn');
+  if(armed){
+    const d=M.dests||ALL_DESTS;
+    msg('This closes '+selText(d)+' and disarms every branch.'+
+        (d.voice?' The OBS encoder stops too.':' The OBS encoder was never started.'),'warn');
+  }
 }
 
 async function endMatch(){
@@ -361,8 +452,11 @@ async function endMatch(){
   const r=await api('/api/match/end',{});
   const errs=(r.data&&r.data.errors)||[];
   msg(errs.length?('Ended with problems:\n'+errs.join('\n')):'Ended cleanly.',errs.length?'err':'ok');
+  // Back to a full house. A one-off single-destination event must never
+  // become the silent default for whatever runs next.
+  sel=Object.assign({},ALL_DESTS);
   await poll();
-  if(ytLive) setTimeout(()=>msg('Ended, but a branch is still ARMED and pushing. Tap the pill to stop it.','err'),1600);
+  if(ytLive||dhLive) setTimeout(()=>msg('Ended, but a branch is still ARMED and pushing. Tap the pill to stop it.','err'),1600);
 }
 
 function tapStopManual(){
@@ -389,6 +483,14 @@ async function toggleYt(){
   msg(next?'Arming YouTube…':'Disarming YouTube…');
   await api('/api/obs/branch',{target:'youtube',enabled:next});
   setTimeout(async()=>{ await poll(); msg(ytLive?'YouTube armed.':'YouTube disarmed.',ytLive?'ok':'warn'); },700);
+}
+
+// The DHUVAS equivalent, reachable only from the ARMED alarm state — there
+// is no reason to arm it by hand, and every reason to be able to stop it.
+async function disarmDhuvas(){
+  msg('Disarming DHUVAS…');
+  await api('/api/obs/branch',{target:'dhuvas',enabled:false});
+  setTimeout(async()=>{ await poll(); msg(dhLive?'DHUVAS is STILL armed — check OBS.':'DHUVAS disarmed.',dhLive?'err':'warn'); },700);
 }
 
 // ---- broadcasts still open on the pages ----
