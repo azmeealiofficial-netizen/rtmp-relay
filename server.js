@@ -177,6 +177,13 @@ const OBS_BRANCH_FILTER = process.env.OBS_BRANCH_FILTER || 'Branch Output';
 // Second Branch Output filter, on the VOICE scene, pushing to YouTube.
 // Separate encode from the main stream — see the load note in the docs.
 const OBS_YT_FILTER     = process.env.OBS_YT_FILTER     || 'YouTube';
+// Third Branch Output filter, on the Program scene, writing the CLEAN feed
+// to a local file. Program carries no branding, so it is the only picture on
+// this box worth re-editing from. OBS's own Record button cannot be pointed
+// at it: native recording always takes the main output, which is the branded
+// VOICE scene. Leave the filter's server and key blank — Branch Output runs
+// as recording-only when there is no connection info.
+const OBS_REC_FILTER    = process.env.OBS_REC_FILTER    || 'Record';
 const OBS_AUDIO_INPUT   = process.env.OBS_AUDIO_INPUT   || 'CAM — PSM (NDI)';
 const OBS_FTB_VOICE     = process.env.OBS_FTB_VOICE     || 'FTB — Black (VOICE)';
 const OBS_FTB_DHUVAS    = process.env.OBS_FTB_DHUVAS    || 'FTB — Black (DHUVAS)';
@@ -192,6 +199,8 @@ const obsState = {
   streaming: false,
   branchLive: false,       // Branch Output filter enabled (Dhuvas -> Facebook)
   ytLive: false,           // Branch Output filter enabled (VOICE -> YouTube)
+  recording: false,        // clean-feed recording running
+  recMode: 'none',         // 'branch' (clean Program) | 'native' (branded) | 'none'
   ftb: false,
   currentScene: '',
   cams: [],                // [{ id, name, live }] inside Program
@@ -242,6 +251,29 @@ async function obsRefreshScene() {
     obsState.ytLive = !!y.filterEnabled;
   } catch (e) { obsState.ytLive = false; /* no YouTube filter — not fatal */ }
 
+  // Which recorder are we actually driving? The Branch Output filter on
+  // Program is preferred because it is the only one that produces the clean
+  // feed. If it is absent we fall back to OBS's own recorder, which captures
+  // the branded VOICE output — still useful, but not the same file. recMode
+  // is carried all the way to the panel so nothing ever labels a branded
+  // recording "clean".
+  try {
+    const r = await obs.call('GetSourceFilter', {
+      sourceName: OBS_SCENE_PROGRAM, filterName: OBS_REC_FILTER,
+    });
+    obsState.recMode = 'branch';
+    obsState.recording = !!r.filterEnabled;
+  } catch (e) {
+    try {
+      const rs = await obs.call('GetRecordStatus');
+      obsState.recMode = 'native';
+      obsState.recording = !!rs.outputActive;
+    } catch (e2) {
+      obsState.recMode = 'none';
+      obsState.recording = false;
+    }
+  }
+
   try {
     const v = await obs.call('GetInputVolume', { inputName: OBS_AUDIO_INPUT });
     obsState.volume = mulToSlider(v.inputVolumeMul);
@@ -288,6 +320,16 @@ async function obsPollStats() {
     lastBytes = bytes; lastBytesAt = now;
     obsState.stats.bytes = bytes;
   } catch (e) { /* ignore */ }
+
+  // Branch Output does not report through obs-websocket at all, so in branch
+  // mode filter-enabled IS the lamp — the same fidelity the Dhuvas and
+  // YouTube lamps have always had. Native mode gets the real thing.
+  if (obsState.recMode === 'native') {
+    try {
+      const rs = await obs.call('GetRecordStatus');
+      obsState.recording = !!rs.outputActive;
+    } catch (e) { /* ignore */ }
+  }
 }
 
 function obsScheduleReconnect() {
@@ -349,6 +391,12 @@ if (obs) {
     if (e.sourceName === OBS_SCENE_VOICE && e.filterName === OBS_YT_FILTER) {
       obsState.ytLive = !!e.filterEnabled;
     }
+    if (e.sourceName === OBS_SCENE_PROGRAM && e.filterName === OBS_REC_FILTER) {
+      obsState.recording = !!e.filterEnabled;
+    }
+  });
+  obs.on('RecordStateChanged', (e) => {
+    if (obsState.recMode === 'native') obsState.recording = !!e.outputActive;
   });
   obs.on('InputVolumeChanged', (e) => {
     if (e.inputName === OBS_AUDIO_INPUT) obsState.volume = mulToSlider(e.inputVolumeMul);
@@ -467,6 +515,19 @@ app.post('/api/obs/branch', async (req, res) => {
     });
     if (isYT) obsState.ytLive = enabled; else obsState.branchLive = enabled;
     res.json({ ok: true, target, enabled });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+// ---- recording (clean Program feed) -------------------------
+// Manual override. The event flow arms and disarms this on its own; this is
+// for starting a recording outside an event, or rescuing one left running.
+app.post('/api/obs/record', async (req, res) => {
+  if (!obsGuard(res)) return;
+  try {
+    const enabled = (req.body && typeof req.body.enabled === 'boolean')
+      ? req.body.enabled : !obsState.recording;
+    await setRecordEnabled(enabled);
+    res.json({ ok: true, recording: enabled, mode: obsState.recMode });
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
@@ -594,6 +655,9 @@ const matchState = {
   // must close only what was opened, and the publish timer has to know
   // which signal proves ingest (see ingestProven()).
   dests: { voice: false, dhuvas: false, youtube: false },
+  // True only when THIS event started the recording. A recording somebody
+  // armed by hand is theirs to stop — END LIVE must not silently kill it.
+  record: false,
   lastError: '',
 };
 
@@ -677,6 +741,28 @@ async function setBranchEnabled(target, enabled) {
     filterEnabled: enabled,
   });
   if (isYT) obsState.ytLive = enabled; else obsState.branchLive = enabled;
+}
+
+// Recording is deliberately NOT a destination. Nothing is published, nothing
+// goes public, and the failure mode is the opposite of a broadcast's: an event
+// that records nothing has lost an archive, not leaked one. So it is armed
+// FIRST and disarmed LAST — the file covers the whole event, ramp-up and
+// wind-down included — and a recording failure never aborts a go-live.
+async function setRecordEnabled(enabled) {
+  if (obsState.recMode === 'branch') {
+    await obs.call('SetSourceFilterEnabled', {
+      sourceName: OBS_SCENE_PROGRAM, filterName: OBS_REC_FILTER, filterEnabled: enabled,
+    });
+  } else if (obsState.recMode === 'native') {
+    // StartRecord on a running recorder throws, and so does StopRecord on an
+    // idle one — which would turn a clean end into "ended with problems".
+    if (enabled === obsState.recording) return;
+    await obs.call(enabled ? 'StartRecord' : 'StopRecord');
+  } else {
+    throw new Error('no recording output in OBS — add a "' + OBS_REC_FILTER +
+      '" Branch Output filter to the ' + OBS_SCENE_PROGRAM + ' scene, server and key blank');
+  }
+  obsState.recording = enabled;
 }
 
 async function setDestination(brand, server, key) {
@@ -899,6 +985,11 @@ app.post('/api/match/start', async (req, res) => {
   // else — absent, undefined, a stray string — behaves exactly as before,
   // so a real match can never be silently turned into a rehearsal.
   const autoPublish = !(req.body && req.body.publish === false);
+  // Recording defaults ON. Destinations default to nothing because a stray
+  // broadcast is public and irreversible; a stray recording is a file you
+  // delete. The costly mistake here is the one you only notice afterwards,
+  // when the match you wanted to cut from was never written to disk.
+  const wantRecord = !(req.body && req.body.record === false);
   const dests = pickDests(req.body);
   if (!title) return res.status(400).json({ error: 'title required' });
   if (matchState.live) return res.status(409).json({ error: 'a match is already live — end it first' });
@@ -929,8 +1020,17 @@ app.post('/api/match/start', async (req, res) => {
   }
 
   const created = {};
-  let ytBroadcast = null, ytError = '';
+  let ytBroadcast = null, ytError = '', recError = '', recArmed = false;
   try {
+    // 0. recording first, before anything touches Facebook, so the file
+    //    starts ahead of the broadcast rather than after it. A recording
+    //    failure is reported and stepped over — never a reason to stop an
+    //    event that is otherwise ready to go.
+    if (wantRecord) {
+      try { await setRecordEnabled(true); recArmed = true; }
+      catch (e) { recError = e.message; }
+    }
+
     // 1. create the broadcasts, unpublished
     for (const [brand, page] of active) {
       const v = await fbCall(`/${page.id}/live_videos`, {
@@ -984,7 +1084,10 @@ app.post('/api/match/start', async (req, res) => {
     }
     matchState.skipped = skipped;
     matchState.youtube = ytBroadcast;
+    matchState.record = recArmed;
     if (ytError) matchState.lastError = 'YouTube: ' + ytError;
+    if (recError) matchState.lastError =
+      (matchState.lastError ? matchState.lastError + ' | ' : '') + 'recording: ' + recError;
 
     // 4. publish once OBS confirms ingest is actually running.
     //    Skipped entirely in rehearsal mode — the broadcasts stay
@@ -1010,13 +1113,18 @@ app.post('/api/match/start', async (req, res) => {
     }, Number(process.env.FB_PUBLISH_DELAY_MS || 10000));
 
     res.json({ ok: true, title, rehearsal: matchState.rehearsal, videos: matchState.videos,
-               dests, skipped, youtube: ytBroadcast, youtubeError: ytError || undefined });
+               dests, skipped, youtube: ytBroadcast, youtubeError: ytError || undefined,
+               recording: recArmed, recordMode: obsState.recMode,
+               recordError: recError || undefined });
   } catch (e) {
     // Disarm first: under Always ON a branch we managed to enable before the
     // failure would keep broadcasting to a broadcast we are about to kill.
     for (const t of ['dhuvas', 'youtube']) {
       try { await setBranchEnabled(t, false); } catch (_) { /* best effort */ }
     }
+    // Only unwind a recording this call started. One that was already running
+    // belongs to whoever armed it.
+    if (recArmed) { try { await setRecordEnabled(false); } catch (_) {} }
     // Roll back anything we created so we don't leave orphan broadcasts.
     if (ytBroadcast) { try { await ytEndBroadcast(ytBroadcast.id); } catch (_) {} }
     for (const [brand, c] of Object.entries(created)) {
@@ -1064,6 +1172,12 @@ app.post('/api/match/end', async (req, res) => {
       try { await obs.call('StopStream'); }
       catch (e) { errors.push('OBS: ' + e.message); }
     }
+    // Recording last, so the file runs past the final whistle rather than
+    // stopping on it. Untouched if this event did not start it.
+    if (matchState.record) {
+      try { await setRecordEnabled(false); }
+      catch (e) { errors.push('recording: ' + e.message); }
+    }
   } else {
     errors.push('OBS not connected — stop the stream manually');
   }
@@ -1087,6 +1201,7 @@ app.post('/api/match/end', async (req, res) => {
   matchState.rehearsal = false;
   matchState.videos = { voice: null, dhuvas: null };
   matchState.dests = { voice: false, dhuvas: false, youtube: false };
+  matchState.record = false;
   matchState.youtube = null;
   matchState.lastError = errors.join(' | ');
 
@@ -1287,6 +1402,22 @@ app.get('/api/match/check', async (req, res) => {
   // Interlock is "Always ON", so an armed branch outside an event is not
   // merely untidy — it is broadcasting right now. Treat it as a failure.
   out.branches = { dhuvas: obsState.branchLive, youtube: obsState.ytLive, live: matchState.live };
+  // Say plainly which recorder is wired up. "Recording: on" means nothing if
+  // the file turns out to be the branded output you cannot re-cut.
+  out.recording = {
+    mode: obsState.recMode,
+    active: obsState.recording,
+    clean: obsState.recMode === 'branch',
+  };
+  if (obsState.recMode === 'none') {
+    out.warnings.push('No recording output in OBS — add a "' + OBS_REC_FILTER +
+      '" Branch Output filter to the ' + OBS_SCENE_PROGRAM +
+      ' scene (server and key blank) to archive the clean feed.');
+  } else if (obsState.recMode === 'native') {
+    out.warnings.push('Recording falls back to OBS\'s own recorder, which captures the BRANDED ' +
+      OBS_SCENE_VOICE + ' output — not the clean ' + OBS_SCENE_PROGRAM + ' feed.');
+  }
+
   out.youtube = { configured: ytConfigured(), privacy: YT_PRIVACY };
   if (ytConfigured()) {
     // Proves the refresh token still works. Google silently expires it
@@ -1342,6 +1473,11 @@ app.get('/api/match/check', async (req, res) => {
       out.warnings.push('YouTube branch is ARMED with no event running — it is pushing to YouTube right now.');
       out.ok = false;
     }
+    // Not a failure — nothing is public — but it is eating the disk the
+    // match is about to need, which is worth seeing before kickoff.
+    if (obsState.recording) {
+      out.warnings.push('Recording is RUNNING with no event — it is writing to disk right now.');
+    }
   }
   if (!out.warnings.length) delete out.warnings;
   res.status(out.ok ? 200 : 502).json(out);
@@ -1357,6 +1493,9 @@ app.get('/api/match/status', (req, res) => {
     publishedAt: matchState.publishedAt,
     videos: matchState.videos,
     dests: matchState.dests,
+    record: matchState.record,
+    recording: obsState.recording,
+    recMode: obsState.recMode,
     lastError: matchState.lastError,
     configured: {
       voice: !!(FB_PAGES.voice.id && FB_PAGES.voice.token),

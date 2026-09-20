@@ -93,6 +93,11 @@ button.pill{min-height:34px}
 /* destination picker — deliberately NOT green. Green on this page means
    "on air"; a selected-but-not-started destination is neither. */
 .pill.pick{background:#f2f0ec14;border-color:#f2f0ec30;color:var(--t1)}
+/* Recording is not a destination — nothing it does is public. The rule
+   above it says so without a heading. */
+.dest.rec{margin-top:6px;border-top-left-radius:12px;position:relative}
+.dests .dest.rec::before{content:'';position:absolute;left:16px;right:16px;top:-4px;
+  height:1px;background:var(--bdr)}
 .dest.unpicked{opacity:.45}
 .dest.unpicked .pill{background:transparent;border-color:var(--bdr)}
 .sel-note{margin:-12px 0 18px 2px;font-size:12px;font-weight:600;color:var(--amb)}
@@ -202,6 +207,12 @@ button.pill{min-height:34px}
 // ============================================================
 let M={live:false,rehearsal:false,videos:{},dests:null,title:'',startedAt:0,lastError:''};
 let connected=false, streaming=false, ytLive=false, dhLive=false;
+// Recording state as OBS reports it, and what the NEXT event should do.
+// recWanted starts ON, unlike the destinations: a stray broadcast is public
+// and permanent, a stray recording is a file you delete. The expensive
+// mistake here is the silent one — finding out afterwards that the match you
+// wanted to cut highlights from was never written to disk.
+let recording=false, recMode='none', recWanted=true;
 let armed=null, armTimer=null;
 
 // Next event's destinations. Nothing is picked until somebody picks it.
@@ -365,9 +376,39 @@ function render(){
     : (!M.live&&!manual&&!ytLive ? 'Persistent key · tap to include or drop'
                                  : 'Persistent key · bound per event');
 
+  // RECORD. Not a destination: it is excluded from nPicked, so it can never
+  // satisfy "pick at least one", and GO LIVE stays refused on recording
+  // alone. What it reports is which FILE you are getting — a branded
+  // fallback recording is honestly labelled as one rather than quietly
+  // passing for the clean feed.
+  const recNote = recMode==='branch' ? 'Clean Program feed · local file'
+    : recMode==='native' ? 'OBS recorder · BRANDED output, not the clean feed'
+    : 'No recording output in OBS — see preflight';
+  let recCls='', recTxt='', recAction='pickRec()';
+  if(recMode==='none'){ recCls=''; recTxt='UNAVAILABLE'; recAction=''; }
+  else if(M.live){
+    // Mid-event the row is a readout. "Armed but not recording" is the one
+    // that has to shout: the event is going out and nothing is being kept.
+    if(M.record&&recording){ recCls='on'; recTxt='● RECORDING'; }
+    else if(M.record){ recCls='err'; recTxt='STOPPED — NOT RECORDING!'; }
+    else { recCls=recording?'warn':''; recTxt=recording?'● RECORDING (manual)':'NOT IN THIS EVENT'; }
+    recAction='';
+  }
+  else if(recording){ recCls='err'; recTxt='RUNNING — NO EVENT'; recAction='stopRec()'; }
+  else { recCls=recWanted?'pick':''; recTxt=recWanted?'ON':'OFF'; }
+
+  const recRow =
+    '<div class="dest rec'+((M.live?M.record:recWanted)?'':' unpicked')+'">'+
+    '<div><div class="d-name">RECORD</div><div class="d-note">'+esc(recNote)+'</div></div>'+
+    (recAction
+      ? '<button class="pill '+recCls+'" onclick="'+recAction+'">'+recTxt+'</button>'
+      : '<span class="pill '+recCls+'">'+recTxt+'</span>')+
+    '</div>';
+
   document.getElementById('dests').innerHTML =
     fb('voice') + fb('dhuvas') +
-    row('youtube',ytNote,'<button class="pill '+ytCls+'" onclick="'+ytAction+'">'+ytTxt+'</button>');
+    row('youtube',ytNote,'<button class="pill '+ytCls+'" onclick="'+ytAction+'">'+ytTxt+'</button>') +
+    recRow;
 
   // What is about to go out, said once and plainly above the button —
   // not discovered afterwards in the Facebook feed. Shown for every
@@ -381,8 +422,12 @@ function render(){
     // colouring the ordinary case as a warning is how a warning stops
     // being read.
     note.className='sel-note'+(nPicked===3?' calm':'');
+    const keep = recMode==='none' ? ' Nothing is being recorded.'
+      : recWanted ? (recMode==='branch' ? ' Clean feed is being recorded.'
+                                        : ' Recording the BRANDED output.')
+      : ' Nothing is being recorded.';
     note.textContent = nPicked
-      ? 'This event goes to '+selText(sel)+'.'
+      ? 'This event goes to '+selText(sel)+'.'+keep
       : 'No destination selected — tap a row above to pick at least one.';
   }
 }
@@ -397,13 +442,34 @@ function pickDest(k){
   render();
 }
 
+// Recording can be switched off for the NEXT event only. Mid-event the row
+// is a readout, exactly like the destinations.
+function pickRec(){
+  if(M.live||(streaming&&!M.live)||recMode==='none') return;
+  recWanted=!recWanted;
+  disarm();                     // the armed confirmation named the old plan
+  render();
+}
+
+// A recorder left running between events is filling the disk the next match
+// needs. One tap stops it — no confirmation, because stopping is the safe
+// direction and the file already written is kept.
+async function stopRec(){
+  msg('Stopping the recording…');
+  const r=await api('/api/obs/record',{enabled:false});
+  msg(r.ok?'Recording stopped. The file is kept.':'Failed: '+(r.data.error||'unknown error'),
+      r.ok?'ok':'err');
+  poll();
+}
+
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
 async function poll(){
   const [a,b]=await Promise.all([api('/api/match/status'),api('/api/obs')]);
   if(a.ok&&a.data) M=a.data;
   if(b.ok&&b.data){ connected=!!b.data.connected; streaming=!!b.data.streaming;
-                    ytLive=!!b.data.ytLive; dhLive=!!b.data.branchLive; }
+                    ytLive=!!b.data.ytLive; dhLive=!!b.data.branchLive;
+                    recording=!!b.data.recording; recMode=b.data.recMode||'none'; }
   else connected=false;
   render();
 }
@@ -425,12 +491,20 @@ function tapGo(){
 async function goLive(t){
   const picked=Object.assign({},sel);
   msg('Creating broadcasts for '+selText(picked)+'…');
-  const r=await api('/api/match/start',{title:t,description:captionVal(),destinations:picked});
+  const r=await api('/api/match/start',
+    {title:t,description:captionVal(),destinations:picked,record:recWanted});
   if(!r.ok){ msg('Failed: '+(r.data.error||'unknown error'),'err'); }
   else{
     const on=Object.keys(r.data.videos||{}).filter(k=>r.data.videos[k]).map(k=>DEST_LABEL[k]);
     if(picked.youtube) on.push('YOUTUBE');
-    msg('Live on '+(on.join(' + ')||'nothing')+'. Publishing in ~10s once ingest is confirmed.','ok');
+    // A recording that failed to start must be said out loud here. It does
+    // not stop the event, so nothing else on the page would report it.
+    const recSay = r.data.recordError ? ' RECORDING FAILED: '+r.data.recordError
+      : r.data.recording ? (r.data.recordMode==='branch' ? ' Recording the clean feed.'
+                                                         : ' Recording the BRANDED output.')
+      : '';
+    msg('Live on '+(on.join(' + ')||'nothing')+'. Publishing in ~10s once ingest is confirmed.'+recSay,
+        r.data.recordError?'warn':'ok');
     setTimeout(poll,12000);
   }
   poll();
@@ -451,7 +525,8 @@ async function rehearse(){
     if(ytLive){ msg('Could not disarm YouTube. Aborted — nothing was started.','err'); return; }
   }
   const r=await api('/api/match/start',
-    {title:t,publish:false,description:captionVal(),destinations:Object.assign({},sel)});
+    {title:t,publish:false,description:captionVal(),destinations:Object.assign({},sel),
+     record:recWanted});
   if(!r.ok) msg('Failed: '+(r.data.error||'unknown error'),'err');
   else msg('Rehearsal running on '+selText(sel)+'. Nothing is public and no VOD is left behind.','warn');
   poll();
@@ -462,7 +537,8 @@ function tapEnd(){
   if(armed){
     const d=M.dests||ALL_DESTS;
     msg('This closes '+selText(d)+' and disarms every branch.'+
-        (d.voice?' The OBS encoder stops too.':' The OBS encoder was never started.'),'warn');
+        (d.voice?' The OBS encoder stops too.':' The OBS encoder was never started.')+
+        (M.record?' The recording stops and is saved.':''),'warn');
   }
 }
 
