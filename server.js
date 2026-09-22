@@ -2224,6 +2224,128 @@ app.post('/api/ticker/:id', async (req, res) => {
   res.json(tickers[id]);
 });
 
+// ---- VOICE news feed for on-air graphics -----------------------------------
+// voice.mv has no RSS or JSON API, so we read its public HTML server-side and
+// hand the overlays clean JSON. Homepage gives the latest article ids (and the
+// short homepage headline); each article page is fetched once and cached for
+// the full headline, category, time and original image.
+//
+//   GET /api/voice/latest?limit=10    -> { updated, source, stale, items: [...] }
+//   Refreshed in the background every 60 s.
+//
+// item: { id, url, headline, short, summary, category, date, time, image, thumb, author }
+const VOICE_BASE = 'https://voice.mv';
+const VOICE_HOME_TTL = 60 * 1000;          // re-read the homepage at most once a minute
+const VOICE_ARTICLE_MAX = 200;             // article cache size (they never change much)
+const VOICE_UA = 'Mozilla/5.0 (VxD Broadcast graphics; +https://mix.vxd.news)';
+
+const voiceCache = { list: [], updated: 0, error: null, inflight: null };
+const voiceArticles = new Map();           // id -> item
+
+function voiceDecode(s) {
+  return String(s || '')
+    .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d))
+    .replace(/\s+/g, ' ').trim();
+}
+const voiceOriginal = u => u ? u.replace(/\/(small|large)_thumb_/, '/original_') : '';
+
+async function voiceGet(path) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const r = await fetch(VOICE_BASE + path, { headers: { 'User-Agent': VOICE_UA, 'Accept': 'text/html' }, signal: ctrl.signal });
+    if (!r.ok) throw new Error(`voice.mv ${path} -> HTTP ${r.status}`);
+    return await r.text();
+  } finally { clearTimeout(t); }
+}
+
+// Homepage: every <a href="/12345"> card. Returns id -> { short, thumb, category, date }
+function voiceParseHome(html) {
+  const out = new Map();
+  const re = /<a href="\/(\d{4,7})"[^>]*>([\s\S]*?)<\/a>/g;
+  let m;
+  while ((m = re.exec(html))) {
+    const id = +m[1], body = m[2];
+    const rec = out.get(id) || { id };
+    const img = body.match(/<img[^>]+src="([^"]+naaboli[^"]+)"/);
+    if (img && !rec.thumb) rec.thumb = img[1];
+    const spans = [...body.matchAll(/<span[^>]*>([^<]+)<\/span>/g)].map(x => voiceDecode(x[1]));
+    if (spans.length >= 2 && !rec.category) { rec.date = spans[0]; rec.category = spans[1]; }
+    const texts = [...body.matchAll(/<div[^>]*class="[^"]*(?:waheed|dv-bold)[^"]*"[^>]*>([^<]{8,})<\/div>/g)].map(x => voiceDecode(x[1]));
+    if (texts.length && !rec.short) rec.short = texts[texts.length - 1];
+    out.set(id, rec);
+  }
+  return out;
+}
+
+// Article page: full Thaana headline, category, date | time, original image, author, summary
+function voiceParseArticle(id, html) {
+  const pick = (re) => { const m = html.match(re); return m ? voiceDecode(m[1]) : ''; };
+  const headline = pick(/<div class="dv-bold lg:text-4xl[^"]*"[^>]*>([^<]+)<\/div>/);
+  const category = pick(/<div class="lg:text-xl text-lg text-\[#FF4E00\] dv-bold rtl">([^<]+)<\/div>/);
+  const stamp = pick(/<div class="text-xs en-font ltr opacity-50[^"]*">([^<]+)<\/div>/);   // "22 Sep 2026 | 11:24"
+  const [date, time] = stamp.split('|').map(s => (s || '').trim());
+  const image = (html.match(/<img class="w-full lg:rounded-3xl[^"]*" src="([^"]+)"/) || [])[1]
+    || voiceOriginal((html.match(/<meta name="image" content="([^"]+)"/) || [])[1]);
+  const summary = pick(/<meta name="description" content="([^"]*)"/);
+  const author = pick(/<div class="opacity-75 waheed">([^<]+)<\/div>/);
+  if (!headline) throw new Error(`voice.mv /${id}: headline not found (markup changed?)`);
+  return { id, url: `${VOICE_BASE}/${id}`, headline, summary, category, date, time: time || '', image, author };
+}
+
+async function voiceRefresh(limit) {
+  const home = voiceParseHome(await voiceGet('/'));
+  const ids = [...home.keys()].sort((a, b) => b - a).slice(0, Math.max(limit, 12));
+  const items = [];
+  for (const id of ids) {                    // sequential on purpose: be gentle with voice.mv
+    let art = voiceArticles.get(id);
+    if (!art) {
+      try {
+        art = voiceParseArticle(id, await voiceGet('/' + id));
+        voiceArticles.set(id, art);
+        if (voiceArticles.size > VOICE_ARTICLE_MAX) voiceArticles.delete(voiceArticles.keys().next().value);
+      } catch (e) { console.error('voice article', id, e.message); continue; }
+    }
+    const h = home.get(id) || {};
+    items.push({ ...art, short: h.short || art.headline, thumb: h.thumb || '', image: art.image || voiceOriginal(h.thumb) });
+  }
+  if (!items.length) throw new Error('voice.mv: no articles parsed');
+  voiceCache.list = items;
+  voiceCache.updated = Date.now();
+  voiceCache.error = null;
+}
+
+function voiceKick() {
+  if (!voiceCache.inflight) {
+    voiceCache.inflight = voiceRefresh(12)
+      .catch(e => { voiceCache.error = e.message; console.error('voice feed:', e.message); })
+      .finally(() => { voiceCache.inflight = null; });
+  }
+  return voiceCache.inflight;
+}
+// Refresh in the background so overlays never wait on voice.mv: one homepage read a minute,
+// plus one article read per new story.
+voiceKick();
+setInterval(voiceKick, VOICE_HOME_TTL).unref();
+
+app.get('/api/voice/latest', async (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 30);
+  res.set('Access-Control-Allow-Origin', '*');   // public, read-only; lets any overlay/browser source read it
+  res.set('Cache-Control', 'no-store');
+  if (!voiceCache.list.length) await voiceKick();  // only the very first request after boot can wait
+  if (!voiceCache.list.length) return res.status(502).json({ error: voiceCache.error || 'voice feed unavailable' });
+  res.json({
+    updated: new Date(voiceCache.updated).toISOString(),
+    source: VOICE_BASE,
+    stale: !!voiceCache.error,          // true = voice.mv failed on the last try; serving the previous list
+    error: voiceCache.error || undefined,
+    items: voiceCache.list.slice(0, limit)
+  });
+});
+
 // Pages
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/tv', (req, res) => res.sendFile(path.join(__dirname, 'public', 'tv.html')));
@@ -2233,6 +2355,7 @@ app.get('/ticker', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ti
 app.get('/go', (req, res) => res.sendFile(path.join(__dirname, 'public', 'go.html')));
 app.get('/live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'live.html')));
 app.get('/golive', (req, res) => res.sendFile(path.join(__dirname, 'public', 'golive.html'))); // phone-friendly match start/end
+app.get('/news-scene', (req, res) => res.sendFile(path.join(__dirname, 'public', 'news-scene.html'))); // VOICE Stream news graphics (OBS browser source)
 // Required by Meta before the app can leave Development mode. Public pages,
 // no auth — a reviewer has to be able to open them while logged out.
 app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, 'public', 'privacy.html')));

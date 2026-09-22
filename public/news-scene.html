@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="dv">
+<head>
+<meta charset="UTF-8">
+<title>VOICE Stream — News scene</title>
+<!--
+  OBS browser source: 1920x1080, "Shutdown source when not visible" OFF.
+  URL: https://mix.vxd.news/news-scene?mode=general
+
+  Query options
+    mode     general | breaking | live          (default general)
+    rotate   seconds per story in the side panel (default 12)
+    strap    fixed strap text; if absent the strap follows the current story
+    location live-bar location text              (default މާލެ)
+    backdrop 0 = no navy frame (transparent everywhere except the graphics)
+    preview  1 = show a dark stand-in inside the video window (for checking in a normal browser)
+
+  The video window is 1240x810 at x=96,y=56. Put the program video under this
+  source, scaled/cropped to that rectangle.
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&display=swap">
+<style>
+  @font-face{font-family:'Aammu';src:url('fonts/MVAaamuFK.ttf') format('truetype');font-display:block}
+  @font-face{font-family:'MVType';src:url('fonts/MVTypewriter.ttf') format('truetype');font-display:block}
+  :root{--navy:#0e1c30;--red:#d7263d;--blue:#1d5fae;--cyan:#1fb5d6;--pale:#eef3f8;--acc:var(--blue)}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:transparent}
+  body.breaking{--acc:var(--red)}
+  .abs{position:absolute}
+
+  /* navy frame with a transparent hole for the video */
+  #win{left:96px;top:56px;width:1240px;height:810px;box-shadow:0 0 0 3000px #101a28;outline:2px solid rgba(255,255,255,.18);outline-offset:0}
+  body.nobackdrop #win{box-shadow:none;outline:none}
+  body.preview #win{background:linear-gradient(160deg,#34506c,#152131)}
+
+  /* side panel */
+  #panel{left:1360px;top:56px;width:464px;height:824px;background:#fff;overflow:hidden}
+  body.live #panel{top:156px;height:724px}
+  #img{position:relative;height:530px;background:#1c2a3a;overflow:hidden}
+  body.breaking #img{height:456px}
+  body.live #img{height:430px}
+  #img div{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity .8s ease}
+  #img div.on{opacity:1}
+  #band{display:none;height:74px;background:var(--red);color:#fff;font:44px/74px 'Aammu';direction:rtl;padding:0 24px;text-align:right}
+  body.breaking #band{display:block}
+  #rule{height:6px;background:var(--cyan)}
+  #head{direction:rtl;text-align:right;padding:16px 24px 0;font:30px/1.75 'Aammu';color:var(--navy);
+        display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5;overflow:hidden;transition:opacity .45s ease}
+  #head.fade{opacity:0}
+
+  /* logo */
+  #logo{left:1720px;top:56px;width:104px;height:80px;background:url('img/voice-stream-logo.png') center/contain no-repeat;
+        animation:glow 2.6s ease-in-out infinite}
+  body.general #logo,body.breaking #logo{transform:translate(-24px,24px)}
+  @keyframes glow{0%,100%{filter:drop-shadow(0 0 0 rgba(255,78,0,0)) drop-shadow(0 4px 8px rgba(0,0,0,.45))}
+                  50%{filter:drop-shadow(0 0 18px rgba(255,78,0,.95)) drop-shadow(0 4px 8px rgba(0,0,0,.45))}}
+
+  /* live bar */
+  #livebar{display:none;left:1360px;top:69px;height:54px;width:344px;direction:rtl}
+  body.live #livebar{display:flex}
+  #livebar .l{width:134px;background:var(--red);color:#fff;font:36px/54px 'Aammu';display:flex;align-items:center;justify-content:center;gap:12px}
+  #livebar .l i{width:16px;height:16px;border-radius:50%;background:#fff;animation:blink 1.4s ease-in-out infinite}
+  @keyframes blink{50%{opacity:.25}}
+  #livebar .p{flex:1;background:rgba(255,255,255,.92);color:var(--navy);font:30px/54px 'MVType';text-align:center}
+
+  /* strap */
+  #strap{left:96px;top:890px;width:1728px;height:76px;display:flex;direction:rtl}
+  #strap .lab{width:464px;background:var(--acc);color:#fff;font:50px/76px 'Aammu';padding:0 24px;text-align:right;transition:background .35s}
+  #strap .txt{flex:1;background:var(--navy);border-right:6px solid var(--cyan);color:#fff;font:42px/76px 'Aammu';
+              padding:0 26px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .45s}
+  #strap .txt.fade{opacity:0}
+
+  /* ticker */
+  #ticker{left:96px;top:966px;width:1728px;height:50px;display:flex;direction:rtl}
+  #ticker .brand{width:464px;background:#fff;border-right:8px solid var(--acc);color:var(--navy);
+                 font:700 32px/50px 'Barlow Condensed',sans-serif;letter-spacing:1.5px;direction:ltr;text-align:right;padding-right:16px}
+  #ticker .brand b{color:var(--acc);font-weight:700;margin:0 14px}
+  #ticker .run{flex:1;background:var(--pale);overflow:hidden;position:relative}
+  #tk{position:absolute;top:0;right:0;white-space:nowrap;font:28px/50px 'MVType';color:var(--navy);direction:rtl;will-change:transform}
+  #ticker .clk{width:120px;background:var(--navy);color:#fff;font:700 32px/50px 'Barlow Condensed',sans-serif;text-align:center;direction:ltr}
+
+  #err{display:none;left:1360px;top:40px;font:14px sans-serif;color:#fff;background:#b00;padding:2px 6px}
+  body.stale #err{display:block}
+</style>
+</head>
+<body class="general">
+  <div id="win" class="abs"></div>
+
+  <div id="panel" class="abs">
+    <div id="img"><div></div><div></div></div>
+    <div id="band">ކުއްލި ޚަބަރު</div>
+    <div id="rule"></div>
+    <div id="head"></div>
+  </div>
+
+  <div id="livebar" class="abs"><div class="l"><i></i>ވަގުތުން</div><div class="p" id="loc">މާލެ</div></div>
+  <div id="logo" class="abs"></div>
+
+  <div id="strap" class="abs"><div class="lab" id="slab">ޚަބަރު</div><div class="txt" id="stxt"></div></div>
+
+  <div id="ticker" class="abs">
+    <div class="brand">VOICE.MV<b>|</b>VOICE STREAM</div>
+    <div class="run"><div id="tk"></div></div>
+    <div class="clk" id="clk">--:--</div>
+  </div>
+  <div id="err" class="abs">feed stale</div>
+
+<script>
+const Q = new URLSearchParams(location.search);
+const MODE = ['general','breaking','live'].includes(Q.get('mode')) ? Q.get('mode') : 'general';
+const ROTATE = Math.max(5, +Q.get('rotate') || 12) * 1000;
+const FIXED_STRAP = Q.get('strap') || '';
+document.body.className = MODE + (Q.get('backdrop') === '0' ? ' nobackdrop' : '') + (Q.get('preview') === '1' ? ' preview' : '');
+if (Q.get('location')) document.getElementById('loc').textContent = Q.get('location');
+document.getElementById('slab').textContent = MODE === 'breaking' ? 'ކުއްލި ޚަބަރު' : 'ޚަބަރު';
+
+let items = [], idx = -1, imgFlip = 0;
+const $ = id => document.getElementById(id);
+
+async function load() {
+  try {
+    const r = await fetch('/api/voice/latest?limit=10', { cache: 'no-store' });
+    const j = await r.json();
+    if (!r.ok || !j.items) throw new Error(j.error || r.status);
+    const first = !items.length;
+    items = j.items;
+    document.body.classList.toggle('stale', !!j.stale);
+    items.forEach(it => { const im = new Image(); im.src = it.image; });   // preload
+    buildTicker();
+    if (first) next();
+  } catch (e) {
+    document.body.classList.add('stale');
+    console.error('news feed', e);
+  }
+}
+
+function next() {
+  if (!items.length) return;
+  idx = (idx + 1) % items.length;
+  const it = items[idx];
+  const layers = $('img').children;
+  imgFlip ^= 1;
+  layers[imgFlip].style.backgroundImage = `url("${it.image}")`;
+  layers[imgFlip].classList.add('on');
+  layers[imgFlip ^ 1].classList.remove('on');
+  $('head').classList.add('fade');
+  if (!FIXED_STRAP) $('stxt').classList.add('fade');
+  setTimeout(() => {
+    $('head').textContent = it.headline;
+    if (!FIXED_STRAP) $('stxt').textContent = it.short || it.headline;
+    $('head').classList.remove('fade');
+    $('stxt').classList.remove('fade');
+  }, 450);
+}
+if (FIXED_STRAP) $('stxt').textContent = FIXED_STRAP;
+
+// Ticker: every headline, scrolling left -> right (reads right-to-left)
+let tkX = 0, tkW = 0, runW = 0;
+function buildTicker() {
+  const t = items.map(i => i.short || i.headline).join('   •   ');
+  const el = $('tk');
+  if (el.dataset.t === t) return;
+  el.dataset.t = t;
+  el.textContent = t + '   •   ';
+  document.fonts.ready.then(() => { tkW = el.scrollWidth; runW = el.parentNode.clientWidth; tkX = -runW; });
+}
+function tick() {
+  if (tkW) { tkX += 1.6; if (tkX > tkW) tkX = -runW; $('tk').style.transform = `translateX(${tkX}px)`; }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+function clock() {
+  $('clk').textContent = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Indian/Maldives' }).format(new Date());
+}
+clock(); setInterval(clock, 10000);
+
+load();
+setInterval(load, 60000);
+setInterval(next, ROTATE);
+</script>
+</body>
+</html>
