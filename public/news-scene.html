@@ -12,7 +12,7 @@
     rotate   seconds per story in the side panel (default 12)
     strap    fixed strap text; if absent the strap follows the current story
     location live-bar location text              (default މާލެ)
-    side     left = mirror the layout (panel + logo on the left, video window at x=584)
+    side     left = story panel on the left (logo, strap and ticker stay); window at x=584
     backdrop 0 = no navy frame (transparent everywhere except the graphics)
     preview  1 = show a dark stand-in inside the video window (for checking in a normal browser)
 
@@ -81,17 +81,12 @@
   #ticker .clk{width:120px;background:var(--navy);color:#fff;font:700 32px/50px 'Barlow Condensed',sans-serif;text-align:center;direction:ltr}
 
 
-  /* ---- mirrored layout: ?side=left ---- */
+  /* ---- story block on the left: ?side=left ----
+     Only the picture + headline block moves. Logo, live bar, strap and ticker stay put;
+     the video window shifts right to x=584. */
   body.left #win{left:584px}
-  body.left #panel{left:96px}
-  body.left #logo{left:96px}
-  body.left.general #logo,body.left.breaking #logo{transform:translate(24px,24px)}
-  body.left #livebar{left:216px}
-  body.left #band,body.left #head{text-align:right}
-  body.left #strap,body.left #ticker{direction:ltr}
-  body.left #strap .lab,body.left #strap .txt{direction:rtl}
-  body.left #strap .txt{border-right:0;border-left:6px solid var(--cyan)}
-  body.left #ticker .brand{border-right:0;border-left:8px solid var(--acc);text-align:left;padding-right:0;padding-left:16px}
+  body.left #panel{left:96px;top:56px;height:824px}
+  body.left.live #img{height:530px}
 
   #err{display:none;left:1360px;top:40px;font:14px sans-serif;color:#fff;background:#b00;padding:2px 6px}
   body.stale #err{display:block}
