@@ -12,11 +12,12 @@
     rotate   seconds per story in the side panel (default 12)
     strap    fixed strap text; if absent the strap follows the current story
     location live-bar location text              (default މާލެ)
+    side     left = mirror the layout (panel + logo on the left, video window at x=584)
     backdrop 0 = no navy frame (transparent everywhere except the graphics)
     preview  1 = show a dark stand-in inside the video window (for checking in a normal browser)
 
-  The video window is 1240x810 at x=96,y=56. Put the program video under this
-  source, scaled/cropped to that rectangle.
+  The video window is 1240x810 at x=96,y=56 (x=584 with side=left). Put the program
+  video under this source, scaled/cropped to that rectangle.
 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&display=swap">
 <style>
@@ -79,6 +80,19 @@
   #tk{position:absolute;top:0;right:0;white-space:nowrap;font:28px/50px 'MVType';color:var(--navy);direction:rtl;will-change:transform}
   #ticker .clk{width:120px;background:var(--navy);color:#fff;font:700 32px/50px 'Barlow Condensed',sans-serif;text-align:center;direction:ltr}
 
+
+  /* ---- mirrored layout: ?side=left ---- */
+  body.left #win{left:584px}
+  body.left #panel{left:96px}
+  body.left #logo{left:96px}
+  body.left.general #logo,body.left.breaking #logo{transform:translate(24px,24px)}
+  body.left #livebar{left:216px}
+  body.left #band,body.left #head{text-align:right}
+  body.left #strap,body.left #ticker{direction:ltr}
+  body.left #strap .lab,body.left #strap .txt{direction:rtl}
+  body.left #strap .txt{border-right:0;border-left:6px solid var(--cyan)}
+  body.left #ticker .brand{border-right:0;border-left:8px solid var(--acc);text-align:left;padding-right:0;padding-left:16px}
+
   #err{display:none;left:1360px;top:40px;font:14px sans-serif;color:#fff;background:#b00;padding:2px 6px}
   body.stale #err{display:block}
 </style>
@@ -110,7 +124,7 @@ const Q = new URLSearchParams(location.search);
 const MODE = ['general','breaking','live'].includes(Q.get('mode')) ? Q.get('mode') : 'general';
 const ROTATE = Math.max(5, +Q.get('rotate') || 12) * 1000;
 const FIXED_STRAP = Q.get('strap') || '';
-document.body.className = MODE + (Q.get('backdrop') === '0' ? ' nobackdrop' : '') + (Q.get('preview') === '1' ? ' preview' : '');
+document.body.className = MODE + (Q.get('side') === 'left' ? ' left' : '') + (Q.get('backdrop') === '0' ? ' nobackdrop' : '') + (Q.get('preview') === '1' ? ' preview' : '');
 if (Q.get('location')) document.getElementById('loc').textContent = Q.get('location');
 document.getElementById('slab').textContent = MODE === 'breaking' ? 'ކުއްލި ޚަބަރު' : 'ޚަބަރު';
 
