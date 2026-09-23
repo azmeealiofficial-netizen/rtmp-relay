@@ -1,0 +1,21 @@
+{
+  "statusUrl":     "https://mix.vxd.news/api/match/status",
+  "syncUrl":       "https://mix.vxd.news/api/hiley/sync",
+  "deviceToken":   "PUT-THE-SAME-VALUE-AS-HILEY_TOKEN-ON-RAILWAY-HERE",
+
+  "obsUrl":        "ws://127.0.0.1:4455",
+  "obsPassword":   "the Dell's OBS websocket password",
+
+  "liveScene":     "LIVE",
+  "fillerScene":   "NEWS",
+  "ndiSourceName": "NDI Source",
+  "vlcSourceName": "",
+
+  "keepStreaming": false,
+
+  "pollMs":        3000,
+  "watchdogMs":    5000,
+  "freezeSamples": 4,
+  "recoverSamples": 2,
+  "agent":         "hiley-dell"
+}

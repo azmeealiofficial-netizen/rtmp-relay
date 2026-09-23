@@ -39,7 +39,12 @@ const AUTH_SECRET  = process.env.GOLIVE_SECRET
 
 // POSTs that must work without a PIN. Reporters in the field carry
 // no credentials; an SOS button that 401s is worse than useless.
-const AUTH_EXEMPT = new Set(['/api/auth/login', '/api/auth/logout', '/api/sos', '/api/msg/ack']);
+const AUTH_EXEMPT = new Set(['/api/auth/login', '/api/auth/logout', '/api/sos', '/api/msg/ack',
+  // The Hiley playout PC posts its heartbeat from a Node script with no
+  // cookie jar. It authenticates with HILEY_TOKEN instead — see the Hiley
+  // section. Leaving it behind the PIN would mean a PIN change silently
+  // takes Hiley's 24/7 channel off the dashboard.
+  '/api/hiley/sync']);
 
 const authRequired = () => !!GOLIVE_PIN;
 
@@ -2405,6 +2410,316 @@ app.get('/api/voice/latest', async (req, res) => {
   });
 });
 
+// ============================================================
+// HILEY TV — 24/7 PLAYOUT CONTROL  (dashboard at /hiley)
+//
+// The playout PC (the Dell, 192.168.18.35) runs `hiley-watcher`.
+// Nothing inbound ever reaches that machine — that was a deliberate
+// decision when the watcher was built and it has not changed here.
+// So this is a MAILBOX, not a control channel:
+//
+//   * the Dell POSTs /api/hiley/sync every poll (~3 s) with its own
+//     state, and the response hands back any commands waiting for it
+//   * the dashboard POSTs /api/hiley/command, which only ENQUEUES
+//   * the dashboard GETs /api/hiley/state, which is the Dell's last
+//     report plus a staleness verdict
+//
+// Consequences worth knowing before debugging this:
+//
+//  * Every button is a request, not an action. Round-trip is up to
+//    one poll interval. The UI shows commands as "queued" until the
+//    Dell reports back, which is honest rather than optimistic.
+//  * Commands EXPIRE after HILEY_CMD_TTL_MS. If the Dell is offline
+//    and someone taps STOP five times, those taps must not all fire
+//    at 3am when it comes back. Stale ones are dropped on handover.
+//  * State is in memory. A Railway restart forgets it; the Dell
+//    refills it within one poll. Nothing here is authoritative —
+//    the Dell is. Queued-but-undelivered commands are lost, which is
+//    the safe direction to lose them in.
+//  * Writes are PIN-gated by the global middleware (GOLIVE_PIN), the
+//    same lock as /golive. /api/hiley/sync is exempt because the Dell
+//    holds no cookie; it authenticates with HILEY_TOKEN instead.
+// ============================================================
+
+const HILEY_TOKEN     = String(process.env.HILEY_TOKEN || '').trim();
+const HILEY_STALE_MS  = Number(process.env.HILEY_STALE_MS || 15000);   // ~5 missed polls
+const HILEY_CMD_TTL_MS= Number(process.env.HILEY_CMD_TTL_MS || 120000);
+const HILEY_LOG_MAX   = 400;
+const HILEY_DONE_MAX  = 20;
+
+// Command allowlist. An array means the argument must be one of these;
+// '*' means any string the Dell reported as a scene name.
+const HILEY_CMDS = {
+  override: ['auto', 'live', 'filler'],
+  scene:    '*',
+  stream:   ['start', 'stop', 'restart'],
+  playlist: ['next', 'previous', 'restart', 'pause', 'play'],
+  reload:   [''],
+};
+
+function hileyBlank() {
+  return {
+    agent: '', version: '', host: '', bootedAt: 0, seenAt: 0,
+    override: 'auto',          // auto | live | filler | hold
+    held: '',                  // scene name when override === 'hold'
+    keepStreaming: false,
+    relay: { reachable: false, live: false, rehearsal: false, title: '' },
+    obs: {
+      connected: false, streaming: false, scene: '', scenes: [],
+      streamMs: 0, bitrateKbps: 0, dropped: 0, total: 0,
+      cpu: 0, fps: 0, congestion: 0, version: '',
+    },
+    ndi: { source: '', active: false, frozen: false, watchdog: 'ok', stillMs: 0 },
+    playlist: { source: '', playing: false, current: '', durationMs: 0, positionMs: 0, items: [] },
+    note: '',
+  };
+}
+
+let hileyState = hileyBlank();
+let hileyLog   = [];   // [{ seq, t, line }]
+let hileyLogSeq= 0;
+let hileyQueue = [];   // [{ id, cmd, arg, at }]
+let hileyDone  = [];   // [{ id, cmd, arg, ok, error, at }]
+
+const hileyNum  = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+const hileyStr  = (v, max = 200) => String(v == null ? '' : v).slice(0, max);
+const hileyBool = (v) => !!v;
+
+function hileyAge(ms) {
+  if (!Number.isFinite(ms)) return 'never';
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+  return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+}
+
+function hileyOnline(now) {
+  return !!hileyState.seenAt && (now - hileyState.seenAt) <= HILEY_STALE_MS;
+}
+
+// What the dashboard paints red. Computed here rather than in the page so
+// that anything else polling this endpoint (a phone shortcut, a future
+// alerter) sees the same verdicts.
+function hileyAlerts(now) {
+  const a = [];
+  const push = (level, text) => a.push({ level, text });
+
+  if (!hileyState.seenAt) {
+    push('warn', 'No heartbeat yet from the playout PC. Is hiley-watcher running on the Dell?');
+    return a;
+  }
+  const age = now - hileyState.seenAt;
+  if (age > HILEY_STALE_MS) {
+    push('crit', 'Playout PC unreachable — last heartbeat ' + hileyAge(age) + ' ago. Hiley may be off air and nothing here can reach it.');
+    return a;   // everything below is stale; do not editorialise on old data
+  }
+
+  const o = hileyState.obs;
+  if (!o.connected) push('crit', 'The watcher cannot reach OBS on the playout PC. Scene switching and the stream are both uncontrolled.');
+  else if (!o.streaming) push('crit', "Not streaming to Rumble — Hiley's channel is dark.");
+
+  if (hileyState.ndi.watchdog === 'disabled') {
+    push('warn', 'NDI watchdog is disabled — it could not sample "' + (hileyState.ndi.source || '?') + '". Failing open, so a dead feed will NOT fall back on its own.');
+  } else if (hileyState.ndi.frozen) {
+    push('warn', 'NDI feed frozen for ' + hileyAge(hileyState.ndi.stillMs) + ' — watchdog fell back off LIVE.');
+  }
+
+  if (hileyState.override === 'hold') push('warn', 'Scene held manually on "' + hileyState.held + '". The relay is not driving Hiley. Tap AUTO to release.');
+  else if (hileyState.override !== 'auto') push('warn', 'Manual override active: ' + hileyState.override.toUpperCase() + '. The relay is not driving Hiley. Tap AUTO to release.');
+
+  if (!hileyState.relay.reachable) push('warn', 'The watcher cannot read the relay event status — it is holding the current scene until it can.');
+
+  if (o.streaming && o.total > 300 && o.dropped / o.total > 0.02) {
+    push('warn', 'Dropped frames ' + (100 * o.dropped / o.total).toFixed(1) + '% — the uplink is struggling.');
+  }
+  if (o.streaming && o.congestion > 0.4) push('warn', 'Rumble upload congestion is high.');
+
+  return a;
+}
+
+function hileyView(now) {
+  return {
+    now,
+    online: hileyOnline(now),
+    ageMs: hileyState.seenAt ? now - hileyState.seenAt : null,
+    staleMs: HILEY_STALE_MS,
+    state: hileyState,
+    alerts: hileyAlerts(now),
+    queued: hileyQueue.map(c => ({ id: c.id, cmd: c.cmd, arg: c.arg, at: c.at })),
+    recent: hileyDone.slice(-HILEY_DONE_MAX),
+    logSeq: hileyLogSeq,
+    deviceTokenSet: !!HILEY_TOKEN,
+  };
+}
+
+// ---- the Dell's heartbeat -------------------------------------------------
+// Exempt from the PIN gate (see AUTH_EXEMPT) — the Dell has no cookie.
+app.post('/api/hiley/sync', (req, res) => {
+  if (HILEY_TOKEN) {
+    const got = String(req.headers['x-hiley-token'] || (req.body && req.body.token) || '');
+    const a = Buffer.from(got), b = Buffer.from(HILEY_TOKEN);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return res.status(401).json({ error: 'bad device token' });
+    }
+  }
+
+  const now = Date.now();
+  const b = req.body || {};
+  const s = hileyState;
+
+  s.seenAt  = now;
+  s.agent   = hileyStr(b.agent || s.agent, 40);
+  s.version = hileyStr(b.version || s.version, 20);
+  s.host    = hileyStr(b.host || s.host, 60);
+  s.bootedAt= hileyNum(b.bootedAt, s.bootedAt);
+  s.override= hileyStr(b.override || 'auto', 12);
+  s.held    = hileyStr(b.held, 120);
+  s.keepStreaming = hileyBool(b.keepStreaming);
+  s.note    = hileyStr(b.note, 300);
+
+  const r = b.relay || {};
+  s.relay = {
+    reachable: hileyBool(r.reachable),
+    live:      hileyBool(r.live),
+    rehearsal: hileyBool(r.rehearsal),
+    title:     hileyStr(r.title, 160),
+  };
+
+  const o = b.obs || {};
+  s.obs = {
+    connected:  hileyBool(o.connected),
+    streaming:  hileyBool(o.streaming),
+    scene:      hileyStr(o.scene, 120),
+    scenes:     Array.isArray(o.scenes) ? o.scenes.slice(0, 40).map(x => hileyStr(x, 120)) : s.obs.scenes,
+    streamMs:   hileyNum(o.streamMs),
+    bitrateKbps:hileyNum(o.bitrateKbps),
+    dropped:    hileyNum(o.dropped),
+    total:      hileyNum(o.total),
+    cpu:        hileyNum(o.cpu),
+    fps:        hileyNum(o.fps),
+    congestion: hileyNum(o.congestion),
+    version:    hileyStr(o.version, 20),
+  };
+
+  const n = b.ndi || {};
+  s.ndi = {
+    source:   hileyStr(n.source, 120),
+    active:   hileyBool(n.active),
+    frozen:   hileyBool(n.frozen),
+    watchdog: hileyStr(n.watchdog || 'ok', 12),
+    stillMs:  hileyNum(n.stillMs),
+  };
+
+  const p = b.playlist || {};
+  s.playlist = {
+    source:     hileyStr(p.source, 120),
+    playing:    hileyBool(p.playing),
+    current:    hileyStr(p.current, 260),
+    durationMs: hileyNum(p.durationMs),
+    positionMs: hileyNum(p.positionMs),
+    items:      Array.isArray(p.items) ? p.items.slice(0, 200).map(x => hileyStr(x, 260)) : s.playlist.items,
+  };
+
+  // log lines the agent has produced since its last successful sync
+  if (Array.isArray(b.logs)) {
+    for (const entry of b.logs.slice(0, 200)) {
+      hileyLog.push({
+        seq: ++hileyLogSeq,
+        t: hileyNum(entry && entry.t, now),
+        line: hileyStr(entry && (entry.line != null ? entry.line : entry), 400),
+      });
+    }
+    if (hileyLog.length > HILEY_LOG_MAX) hileyLog = hileyLog.slice(-HILEY_LOG_MAX);
+  }
+
+  // outcomes of commands handed over on a previous sync
+  if (Array.isArray(b.results)) {
+    for (const r2 of b.results.slice(0, 20)) {
+      hileyDone.push({
+        id:  hileyStr(r2 && r2.id, 24),
+        cmd: hileyStr(r2 && r2.cmd, 20),
+        arg: hileyStr(r2 && r2.arg, 120),
+        ok:  hileyBool(r2 && r2.ok),
+        error: hileyStr(r2 && r2.error, 200),
+        at: now,
+      });
+    }
+    if (hileyDone.length > HILEY_DONE_MAX) hileyDone = hileyDone.slice(-HILEY_DONE_MAX);
+  }
+
+  // Hand over the queue, dropping anything that has gone stale while the
+  // Dell was away. A tap nobody is watching must not fire hours later.
+  const fresh = [], expired = [];
+  for (const c of hileyQueue) ((now - c.at) > HILEY_CMD_TTL_MS ? expired : fresh).push(c);
+  hileyQueue = [];
+  for (const c of expired) {
+    hileyDone.push({ id: c.id, cmd: c.cmd, arg: c.arg, ok: false, error: 'expired before the playout PC came back', at: now });
+  }
+  if (hileyDone.length > HILEY_DONE_MAX) hileyDone = hileyDone.slice(-HILEY_DONE_MAX);
+
+  res.json({
+    ok: true,
+    serverTime: now,
+    commands: fresh.map(c => ({ id: c.id, cmd: c.cmd, arg: c.arg })),
+  });
+});
+
+// ---- dashboard reads ------------------------------------------------------
+app.get('/api/hiley/state', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const view = hileyView(Date.now());
+  if (req.query.log !== undefined) {
+    const since = hileyNum(req.query.since, 0);
+    view.log = hileyLog.filter(l => l.seq > since);
+  }
+  res.json(view);
+});
+
+app.get('/api/hiley/log', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const since = hileyNum(req.query.since, 0);
+  res.json({ logSeq: hileyLogSeq, log: hileyLog.filter(l => l.seq > since) });
+});
+
+// ---- dashboard writes (PIN-gated by the global middleware) ---------------
+app.post('/api/hiley/command', (req, res) => {
+  const cmd = hileyStr(req.body && req.body.cmd, 20);
+  const arg = hileyStr(req.body && req.body.arg, 120);
+  const spec = HILEY_CMDS[cmd];
+  if (!spec) return res.status(400).json({ error: 'unknown command: ' + cmd });
+
+  if (spec === '*') {
+    if (!arg) return res.status(400).json({ error: cmd + ' needs an argument' });
+    // Only scenes the Dell has actually reported. Typing a scene that does
+    // not exist there would make the watcher fail in a loop.
+    if (hileyState.obs.scenes.length && !hileyState.obs.scenes.includes(arg)) {
+      return res.status(400).json({ error: 'the playout PC has no scene named "' + arg + '"' });
+    }
+  } else if (!spec.includes(arg)) {
+    return res.status(400).json({ error: 'bad argument for ' + cmd + ': "' + arg + '"' });
+  }
+
+  const now = Date.now();
+  const entry = { id: now.toString(36) + Math.random().toString(36).slice(2, 6), cmd, arg, at: now };
+  hileyQueue.push(entry);
+  if (hileyQueue.length > 20) hileyQueue = hileyQueue.slice(-20);
+
+  res.json({
+    ok: true,
+    id: entry.id,
+    queued: hileyQueue.length,
+    online: hileyOnline(now),
+    warning: hileyOnline(now) ? '' : 'The playout PC is not reporting. This will run if it comes back within ' + Math.round(HILEY_CMD_TTL_MS / 1000) + 's, otherwise it is dropped.',
+  });
+});
+
+// Empty the queue — for when the Dell is away and the wrong things got tapped.
+app.post('/api/hiley/flush', (req, res) => {
+  const n = hileyQueue.length;
+  hileyQueue = [];
+  res.json({ ok: true, dropped: n });
+});
+
 // Pages
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/tv', (req, res) => res.sendFile(path.join(__dirname, 'public', 'tv.html')));
@@ -2415,6 +2730,8 @@ app.get('/go', (req, res) => res.sendFile(path.join(__dirname, 'public', 'go.htm
 app.get('/live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'live.html')));
 app.get('/golive', (req, res) => res.sendFile(path.join(__dirname, 'public', 'golive.html'))); // phone-friendly match start/end
 app.get('/news-scene', (req, res) => res.sendFile(path.join(__dirname, 'public', 'news-scene.html'))); // VOICE Stream news graphics (OBS browser source)
+app.get('/hiley', (req, res) => res.sendFile(path.join(__dirname, 'public', 'hiley.html'))); // Hiley TV 24/7 playout control
+app.get('/hiley-desk', (req, res) => res.sendFile(path.join(__dirname, 'public', 'hiley-desk.html'))); // same, desktop layout
 // Required by Meta before the app can leave Development mode. Public pages,
 // no auth — a reviewer has to be able to open them while logged out.
 app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, 'public', 'privacy.html')));

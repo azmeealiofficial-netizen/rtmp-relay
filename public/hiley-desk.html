@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#09090b">
+<title>Hiley TV — Playout Control</title>
+<style>
+:root{
+  --bg:#09090b;--card:#18181b;--card2:#1f1f23;--bdr:#27272a;--bdr2:#3f3f46;
+  --t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;
+  --red:#ef4444;--grn:#22c55e;--blu:#3b82f6;--amb:#f59e0b;--vio:#a78bfa;
+  /* Sparkline hue. Validated against the #18181b card surface: inside the
+     lightness band, above the chroma floor, >=3:1 contrast. Both sparklines
+     share it on purpose — they are small multiples of one machine's health,
+     each titled, not two categories in one set. */
+  --spark:#8b5cf6;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--t1);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body{padding:18px 22px 40px;max-width:1720px;margin:0 auto}
+button{font-family:inherit;cursor:pointer;border:none}
+[hidden]{display:none!important}
+a{color:var(--t2)}
+
+/* ---------- top bar ---------- */
+.top{display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.brand{font-size:18px;font-weight:800;letter-spacing:-.3px}
+.brand .v{color:var(--red)}.brand .x{color:var(--amb)}.brand .d{color:var(--grn)}
+.brand .h{color:var(--vio)}
+.top .spacer{flex:1}
+.who{font-size:11.5px;color:var(--t3);font-variant-numeric:tabular-nums}
+.conn{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.8px;
+  padding:6px 12px;border-radius:999px;background:var(--card2);color:var(--t3);
+  border:1px solid transparent;white-space:nowrap}
+.conn.on{background:#22c55e12;border-color:#22c55e30;color:var(--grn)}
+.conn.off{background:#ef444412;border-color:#ef444430;color:var(--red)}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.conn.on .dot{animation:pulse 2s infinite}
+.lnk{font-size:10px;font-weight:800;letter-spacing:.7px;padding:7px 13px;border-radius:999px;
+  background:var(--card2);border:1px solid var(--bdr);color:var(--t2);text-decoration:none}
+.lnk:hover{border-color:var(--bdr2);color:var(--t1)}
+
+/* ---------- grid ---------- */
+/* Three independent columns, not a row grid. Cards here differ wildly in
+   height — the banner is short, the log is 400px — and a row grid would
+   leave a void beside every short card. Each column stacks its own. */
+.wrap{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;align-items:start}
+.col{grid-column:span 4;display:flex;flex-direction:column;gap:14px;min-width:0}
+.s12{grid-column:span 12}
+@media (max-width:1180px){ .col{grid-column:span 12} }
+
+.card{background:var(--card);border:1px solid var(--bdr);border-radius:14px;padding:16px}
+.c-hdr{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.c-title{font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--t3)}
+.pill{flex:none;font-size:10px;font-weight:800;letter-spacing:.6px;padding:6px 11px;border-radius:999px;
+  background:var(--card2);color:var(--t3);border:1px solid transparent;white-space:nowrap}
+.pill.on{background:#22c55e12;border-color:#22c55e30;color:var(--grn)}
+.pill.warn{background:#f59e0b12;border-color:#f59e0b30;color:var(--amb)}
+.pill.err{background:#ef444412;border-color:#ef444430;color:var(--red)}
+
+/* ---------- alerts ---------- */
+.alerts{display:flex;flex-direction:column;gap:8px}
+.alert{display:flex;gap:11px;padding:13px 16px;border-radius:12px;font-size:13.5px;line-height:1.5;
+  border:1px solid var(--bdr);background:var(--card)}
+.alert .ic{flex:none;font-weight:900;font-size:12px}
+.alert.crit{background:#ef444410;border-color:#ef444435;color:#fecaca}
+.alert.crit .ic{color:var(--red)}
+.alert.warn{background:#f59e0b10;border-color:#f59e0b35;color:#fde68a}
+.alert.warn .ic{color:var(--amb)}
+
+/* ---------- on-air banner ---------- */
+.banner{border-radius:14px;padding:22px 18px;border:1px solid var(--bdr);background:var(--card);
+  text-align:center;transition:all .25s;min-height:186px;display:flex;flex-direction:column;
+  justify-content:center}
+.banner.live{border-color:#ef444440;background:linear-gradient(180deg,#1a0c0c 0%,var(--card) 100%)}
+.banner.rest{border-color:#3b82f640;background:linear-gradient(180deg,#0b1220 0%,var(--card) 100%)}
+.banner.dark{border-color:#ef444440;background:linear-gradient(180deg,#160a0a 0%,var(--card) 100%)}
+.b-eyebrow{font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--t3);
+  margin-bottom:10px}
+.b-state{font-size:32px;font-weight:900;letter-spacing:-.8px;margin-bottom:6px;color:var(--t3)}
+.banner.live .b-state{color:var(--red);animation:pulse 2s infinite}
+.banner.rest .b-state{color:var(--blu)}
+.banner.dark .b-state{color:var(--red)}
+.b-sub{font-size:12.5px;color:var(--t3);word-break:break-word}
+.b-clock{font-variant-numeric:tabular-nums;font-weight:700;color:var(--t2)}
+
+/* ---------- stat cells ---------- */
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+.cell{background:var(--card2);border:1px solid var(--bdr);border-radius:11px;padding:11px 12px}
+.cell .k{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--t3);
+  margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell .v{font-size:18px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell .v.ok{color:var(--grn)}.cell .v.bad{color:var(--red)}.cell .v.mid{color:var(--amb)}
+.cell .v.dim{color:var(--t3)}
+
+/* ---------- sparklines ---------- */
+.spark{margin-top:14px}
+.sp-hdr{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:2px}
+.sp-title{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--t3)}
+.sp-read{font-size:11.5px;color:var(--t2);font-variant-numeric:tabular-nums}
+.sp-box{position:relative;height:46px}
+.sp-box svg{display:block;width:100%;height:46px;overflow:visible}
+.sp-tip{position:absolute;pointer-events:none;transform:translate(-50%,-100%);
+  background:#0d0d0f;border:1px solid var(--bdr2);border-radius:7px;padding:4px 8px;
+  font-size:11px;color:var(--t1);white-space:nowrap;font-variant-numeric:tabular-nums;
+  z-index:5;box-shadow:0 4px 14px #00000080}
+.sp-empty{font-size:11px;color:var(--t3);padding:14px 0}
+.sp-note{font-size:10.5px;color:var(--t3);margin-top:8px}
+table.samples{width:100%;border-collapse:collapse;margin-top:10px;font-size:11.5px;
+  font-variant-numeric:tabular-nums}
+table.samples th{text-align:left;color:var(--t3);font-weight:700;font-size:9px;letter-spacing:1px;
+  text-transform:uppercase;padding:5px 8px;border-bottom:1px solid var(--bdr)}
+table.samples td{padding:5px 8px;color:var(--t2);border-bottom:1px solid var(--bdr)}
+
+/* ---------- controls ---------- */
+.seg{display:flex;gap:7px}
+.seg button{flex:1;padding:14px 8px;border-radius:11px;background:var(--card2);color:var(--t2);
+  border:1px solid var(--bdr);font-size:12px;font-weight:800;letter-spacing:.6px;transition:all .15s}
+.seg button:hover:not(:disabled){border-color:var(--bdr2);color:var(--t1)}
+.seg button.sel{background:#fafafa;color:#0a0a0a;border-color:#fafafa}
+.seg button.sel.hot{background:var(--amb);color:#1a1200;border-color:var(--amb)}
+.seg button:disabled{opacity:.35;cursor:not-allowed}
+
+.scenes{display:flex;flex-wrap:wrap;gap:7px}
+.scenes button{flex:1 1 30%;min-width:110px;padding:14px 10px;border-radius:11px;background:var(--card2);
+  color:var(--t2);border:1px solid var(--bdr);font-size:12.5px;font-weight:700;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scenes button:hover:not(:disabled){border-color:var(--bdr2);color:var(--t1)}
+.scenes button.live{background:#22c55e14;border-color:#22c55e35;color:var(--grn)}
+.scenes button.held{background:var(--amb);color:#1a1200;border-color:var(--amb)}
+.scenes button:disabled{opacity:.35;cursor:not-allowed}
+
+.acts{display:flex;gap:7px;margin-top:14px}
+.acts button{flex:1;padding:14px 8px;border-radius:11px;font-size:12px;font-weight:800;letter-spacing:.6px;
+  transition:all .15s;border:1px solid transparent}
+.acts .go{background:var(--grn);color:#052e12}
+.acts .stop{background:var(--card2);color:var(--t2);border-color:var(--bdr)}
+.acts .stop:hover:not(:disabled){border-color:var(--bdr2);color:var(--t1)}
+.acts .stop.arm{background:#fff;color:#0a0a0a;border-color:#fff}
+.acts button:disabled{opacity:.3;cursor:not-allowed}
+.hint{font-size:11.5px;color:var(--t3);margin-top:11px;line-height:1.55}
+
+/* ---------- playlist ---------- */
+.now{background:var(--card2);border:1px solid var(--bdr);border-radius:11px;padding:12px 13px;margin-bottom:10px}
+.now .k{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--t3);margin-bottom:4px}
+.now .n{font-size:14px;font-weight:600;word-break:break-all}
+.bar{height:3px;border-radius:2px;background:var(--bdr);margin-top:9px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--vio);width:0}
+.items{max-height:196px;overflow:auto;border:1px solid var(--bdr);border-radius:11px;background:var(--card2)}
+.items div{padding:9px 13px;font-size:12.5px;color:var(--t2);border-bottom:1px solid var(--bdr);word-break:break-all}
+.items div:last-child{border-bottom:0}
+.items div.cur{color:var(--vio);font-weight:700}
+
+/* ---------- queue / outcomes ---------- */
+.trail{display:flex;flex-direction:column;gap:7px;max-height:250px;overflow:auto}
+.ev{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:var(--card2);
+  border:1px solid var(--bdr);font-size:12.5px}
+.ev .tag{flex:none;font-size:9px;font-weight:800;letter-spacing:.7px;padding:3px 8px;border-radius:999px}
+.ev.q .tag{background:#f59e0b18;color:var(--amb)}
+.ev.ok .tag{background:#22c55e18;color:var(--grn)}
+.ev.no .tag{background:#ef444418;color:var(--red)}
+.ev .body{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t2)}
+.ev .ago{flex:none;font-size:10.5px;color:var(--t3);font-variant-numeric:tabular-nums}
+.empty{font-size:12px;color:var(--t3);padding:6px 2px}
+
+/* ---------- log ---------- */
+.logwrap{background:#0d0d0f;border:1px solid var(--bdr);border-radius:11px;padding:12px 14px;
+  height:400px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px;line-height:1.7;color:var(--t2);white-space:pre-wrap;word-break:break-word}
+.logwrap .t{color:var(--t3)}
+.logwrap .w{color:var(--amb)}
+.logwrap .e{color:var(--red)}
+.ghost{background:var(--card2);border:1px solid var(--bdr);color:var(--t2);border-radius:999px;
+  padding:6px 12px;font-size:10px;font-weight:800;letter-spacing:.6px}
+.ghost:hover{border-color:var(--bdr2);color:var(--t1)}
+.ghost.on{background:#fafafa;color:#0a0a0a;border-color:#fafafa}
+
+/* ---------- preview ---------- */
+.preview{position:relative;width:100%;aspect-ratio:16/9;background:#000;border:1px solid var(--bdr);
+  border-radius:11px;overflow:hidden}
+.preview video{width:100%;height:100%;object-fit:contain;display:block;background:#000}
+
+.msg{margin-top:14px;font-size:12.5px;line-height:1.6;color:var(--t3);white-space:pre-line;
+  word-break:break-word;min-height:18px}
+.msg.ok{color:var(--grn)}.msg.err{color:var(--red)}.msg.warn{color:var(--amb)}
+.foot{margin-top:18px;font-size:11px;color:var(--t3);display:flex;gap:18px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand"><span class="v">V</span><span class="x">x</span><span class="d">D</span>
+    &nbsp;·&nbsp;<span class="h">HILEY TV</span></div>
+  <div class="who" id="who">—</div>
+  <div class="spacer"></div>
+  <div class="conn" id="conn"><span class="dot"></span><span id="connTxt">CONNECTING</span></div>
+  <a class="lnk" href="/hiley">PHONE VIEW</a>
+  <a class="lnk" href="/golive">GO LIVE</a>
+</div>
+
+<div class="wrap">
+
+  <div class="s12 alerts" id="alerts"></div>
+
+  <div class="col">
+<!-- ON AIR -->
+  <div>
+    <div class="banner" id="banner">
+      <div class="b-eyebrow">On Hiley's Rumble channel</div>
+      <div class="b-state" id="bState">—</div>
+      <div class="b-sub" id="bSub">Waiting for the playout PC…</div>
+    </div>
+  </div>
+
+  <!-- OVERRIDE -->
+  <div class="card">
+    <div class="c-hdr"><div class="c-title">Control</div><div class="pill" id="ovPill">—</div></div>
+    <div class="seg" id="segOv">
+      <button data-arg="auto">AUTO</button>
+      <button data-arg="live">FORCE LIVE</button>
+      <button data-arg="filler">FORCE REST</button>
+    </div>
+    <div class="hint" id="ovNote">&nbsp;</div>
+  </div>
+
+  <!-- SCENES -->
+  <div class="card">
+    <div class="c-hdr"><div class="c-title">Scene on the playout PC</div><div class="pill" id="scPill">—</div></div>
+    <div class="scenes" id="scenes"></div>
+    <div class="hint" id="scNote">&nbsp;</div>
+  </div>
+
+    </div>
+
+  <div class="col">
+<!-- RUMBLE OUTPUT -->
+  <div class="card">
+    <div class="c-hdr">
+      <div class="c-title">Rumble output</div>
+      <div class="pill" id="strPill">—</div>
+    </div>
+    <div class="grid3">
+      <div class="cell"><div class="k">Uptime</div><div class="v" id="mUp">—</div></div>
+      <div class="cell"><div class="k">Bitrate</div><div class="v" id="mBr">—</div></div>
+      <div class="cell"><div class="k">Dropped</div><div class="v" id="mDr">—</div></div>
+    </div>
+
+    <div class="spark">
+      <div class="sp-hdr"><div class="sp-title">Bitrate</div><div class="sp-read" id="spBrRead">—</div></div>
+      <div class="sp-box" id="spBrBox"><svg id="spBr" preserveAspectRatio="none"></svg></div>
+    </div>
+    <div class="spark">
+      <div class="sp-hdr"><div class="sp-title">Dropped-frame rate</div><div class="sp-read" id="spDrRead">—</div></div>
+      <div class="sp-box" id="spDrBox"><svg id="spDr" preserveAspectRatio="none"></svg></div>
+    </div>
+    <div class="sp-note">
+      Sampled every 3 s since this page was opened — not history, it restarts on reload.
+      <button class="ghost" id="btnSamples" style="margin-left:6px">TABLE</button>
+    </div>
+    <div id="samplesWrap" hidden></div>
+
+    <div class="acts">
+      <button class="go"   id="btnStart">START</button>
+      <button class="stop" id="btnRestart">RESTART</button>
+      <button class="stop" id="btnStop">STOP</button>
+    </div>
+  </div>
+
+    </div>
+
+  <div class="col">
+<!-- PLAYOUT PC -->
+  <div class="card">
+    <div class="c-hdr"><div class="c-title">Playout PC</div><div class="pill" id="hostPill">—</div></div>
+    <div class="grid3">
+      <div class="cell"><div class="k">OBS</div><div class="v" id="mObs">—</div></div>
+      <div class="cell"><div class="k">NDI feed</div><div class="v" id="mNdi">—</div></div>
+      <div class="cell"><div class="k">Watchdog</div><div class="v" id="mWd">—</div></div>
+      <div class="cell"><div class="k">CPU</div><div class="v" id="mCpu">—</div></div>
+      <div class="cell"><div class="k">FPS</div><div class="v" id="mFps">—</div></div>
+      <div class="cell"><div class="k">Relay event</div><div class="v" id="mEvt">—</div></div>
+    </div>
+    <div class="grid2" style="margin-top:9px">
+      <div class="cell"><div class="k">Keep streaming</div><div class="v" id="mKeep">—</div></div>
+      <div class="cell"><div class="k">Agent uptime</div><div class="v" id="mBoot">—</div></div>
+    </div>
+    <div class="hint" id="pcNote">&nbsp;</div>
+  </div>
+
+  <!-- PLAYLIST -->
+  <div class="card" id="plCard">
+    <div class="c-hdr"><div class="c-title">Filler playlist</div><div class="pill" id="plPill">—</div></div>
+    <div class="now">
+      <div class="k">Now playing</div>
+      <div class="n" id="plNow">—</div>
+      <div class="bar"><i id="plBar"></i></div>
+    </div>
+    <div class="acts" style="margin-top:0;margin-bottom:10px">
+      <button class="stop" id="btnPrev">◀ PREV</button>
+      <button class="stop" id="btnPlay">PAUSE</button>
+      <button class="stop" id="btnNext">NEXT ▶</button>
+    </div>
+    <div class="items" id="plItems"></div>
+  </div>
+
+  <!-- QUEUE + PREVIEW -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div class="card" id="prevCard" hidden>
+      <div class="c-hdr"><div class="c-title">Hiley output preview</div><div class="pill on">HLS</div></div>
+      <div class="preview"><video id="prevVid" muted playsinline></video></div>
+    </div>
+    <div class="card">
+      <div class="c-hdr">
+        <div class="c-title">Commands</div>
+        <button class="ghost" id="btnFlush">FLUSH QUEUE</button>
+      </div>
+      <div class="trail" id="trail"><div class="empty">Nothing sent yet.</div></div>
+      <div class="msg" id="msg"></div>
+    </div>
+  </div>
+
+  </div>
+
+  <div class="s12">
+<!-- LOG -->
+  <div class="card">
+    <div class="c-hdr">
+      <div class="c-title">Watcher log — live</div>
+      <div style="display:flex;gap:7px">
+        <button class="ghost on" id="btnFollow">FOLLOW</button>
+        <button class="ghost" id="btnCopy">COPY STATE</button>
+      </div>
+    </div>
+    <div class="logwrap" id="log"><div class="empty">Waiting for the playout PC…</div></div>
+  </div>
+
+    </div>
+
+</div>
+
+<div class="foot">
+  <div id="fDiag">—</div>
+  <div>Commands are queued on the relay and collected by the playout PC on its next poll.</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+<script src="/authgate.js"></script>
+<script>
+'use strict';
+
+/* ------------------------------------------------------------------
+   Desktop twin of /hiley. Same mailbox, same rules — nothing here can
+   reach the playout PC directly. What the wide screen buys you:
+   bitrate and dropped-frame sparklines, the command trail, and the log
+   open permanently instead of behind a toggle.
+   ------------------------------------------------------------------ */
+
+var $ = function (id) { return document.getElementById(id); };
+var S = null, recvAt = 0;
+var logSeq = 0, logLines = [];
+var follow = true;
+var pendingIds = {};
+var armed = null;
+var hist = [];            // [{t, kbps, drop}] — sampled from each poll
+var HIST_MAX = 120;       // ~6 minutes at 3s
+var lastCounters = null;  // {dropped, total} for rate-from-cumulative
+
+function msg(t, k) { var m = $('msg'); m.textContent = t || ''; m.className = 'msg' + (k ? ' ' + k : ''); }
+function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtDur(ms) {
+  if (!ms || ms < 0) return '—';
+  var s = Math.floor(ms/1000), h = Math.floor(s/3600), m = Math.floor((s%3600)/60), x = s%60;
+  var p = function(n){ return (n<10?'0':'')+n; };
+  return h ? h+':'+p(m)+':'+p(x) : p(m)+':'+p(x);
+}
+function fmtAge(ms) {
+  if (ms == null) return 'never';
+  var s = Math.round(ms/1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  return Math.floor(s/3600) + 'h ago';
+}
+function hhmmss(t) { var d = new Date(t), p = function(n){return (n<10?'0':'')+n;};
+  return p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); }
+function base(p) { var i = p.lastIndexOf('\\'), j = p.lastIndexOf('/');
+  return p.slice(Math.max(i,j)+1) || p; }
+
+/* ---------- commands ---------- */
+function send(cmd, arg) {
+  msg('Sending ' + cmd + (arg ? ' ' + arg : '') + '…');
+  return fetch('/api/hiley/command', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cmd: cmd, arg: arg || '' })
+  }).then(function (r) {
+    return r.json().catch(function(){ return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
+  }).then(function (res) {
+    if (!res.ok) { msg(res.j.error || 'Rejected', 'err'); return; }
+    pendingIds[res.j.id] = true;
+    msg(res.j.warning || 'Queued — the playout PC picks this up within a few seconds.',
+        res.j.warning ? 'warn' : 'ok');
+    poll();
+  }).catch(function (e) { msg('Network error — ' + e.message, 'err'); });
+}
+function disarm() {
+  if (!armed) return;
+  clearInterval(armed.timer);
+  armed.btn.classList.remove('arm');
+  armed.btn.textContent = armed.label;
+  armed = null;
+}
+function arm(btn, label, cmd, arg, confirmText) {
+  if (armed && armed.btn === btn) { var a = armed; disarm(); send(a.cmd, a.arg); return; }
+  disarm();
+  armed = { btn: btn, label: label, cmd: cmd, arg: arg, left: 6, timer: null };
+  btn.classList.add('arm');
+  btn.textContent = confirmText + ' 6';
+  msg('Click again to confirm. This affects a partner channel.', 'warn');
+  armed.timer = setInterval(function () {
+    armed.left -= 1;
+    if (armed.left <= 0) { disarm(); msg(''); return; }
+    armed.btn.textContent = confirmText + ' ' + armed.left;
+  }, 1000);
+}
+
+/* ---------- sparklines ----------
+   Two charts, never one with two y-axes: kbps and a percentage share no
+   scale, and overlaying them would invent a correlation. Same hue in both
+   because it is one machine's health shown twice, each panel titled. */
+function drawSpark(svgId, boxId, readId, values, fmt, emptyText) {
+  var svg = $(svgId), box = $(boxId), read = $(readId);
+  var W = box.clientWidth || 300, H = 46, PAD = 3;
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+
+  if (values.length < 2) {
+    svg.innerHTML = '';
+    read.textContent = emptyText;
+    return;
+  }
+  var min = Math.min.apply(null, values), max = Math.max.apply(null, values);
+  if (max - min < 1e-9) { max = min + 1; }
+  var n = values.length;
+  var x = function (i) { return (i / (n - 1)) * W; };
+  var y = function (v) { return H - PAD - ((v - min) / (max - min)) * (H - PAD * 2); };
+
+  var d = '';
+  for (var i = 0; i < n; i++) d += (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(values[i]).toFixed(1);
+
+  var cur = values[n - 1];
+  // 2px line, no grid, one 4px endpoint dot with a 2px surface ring.
+  svg.innerHTML =
+    '<path d="' + d + '" fill="none" stroke="var(--spark)" stroke-width="2" ' +
+      'stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
+    '<circle cx="' + x(n-1).toFixed(1) + '" cy="' + y(cur).toFixed(1) + '" r="4" ' +
+      'fill="var(--spark)" stroke="var(--card)" stroke-width="2"/>' +
+    '<line id="' + svgId + '-cross" x1="0" y1="0" x2="0" y2="' + H + '" ' +
+      'stroke="var(--bdr2)" stroke-width="1" style="display:none"/>';
+
+  read.textContent = fmt(cur) + '  ·  min ' + fmt(min) + '  ·  max ' + fmt(max);
+  box._spark = { W: W, H: H, n: n, x: x, y: y, values: values, fmt: fmt };
+}
+
+function wireSparkHover(boxId, svgId) {
+  var box = $(boxId);
+  var tip = document.createElement('div');
+  tip.className = 'sp-tip'; tip.style.display = 'none';
+  box.appendChild(tip);
+  box.addEventListener('mousemove', function (e) {
+    var s = box._spark; if (!s) return;
+    var r = box.getBoundingClientRect();
+    var px = e.clientX - r.left;
+    var i = Math.round((px / s.W) * (s.n - 1));
+    i = Math.max(0, Math.min(s.n - 1, i));
+    var cross = document.getElementById(svgId + '-cross');
+    if (cross) { cross.setAttribute('x1', s.x(i)); cross.setAttribute('x2', s.x(i)); cross.style.display = ''; }
+    tip.style.display = '';
+    tip.style.left = s.x(i) + 'px';
+    tip.style.top = (s.y(s.values[i]) - 6) + 'px';
+    tip.textContent = s.fmt(s.values[i]) + ' · ' + hhmmss(hist[hist.length - s.n + i].t);
+  });
+  box.addEventListener('mouseleave', function () {
+    tip.style.display = 'none';
+    var cross = document.getElementById(svgId + '-cross');
+    if (cross) cross.style.display = 'none';
+  });
+}
+
+var fmtKbps = function (v) { return Math.round(v) + 'k'; };
+var fmtPct  = function (v) { return v.toFixed(2) + '%'; };
+
+function renderSparks() {
+  drawSpark('spBr', 'spBrBox', 'spBrRead', hist.map(function (h) { return h.kbps; }),
+            fmtKbps, 'no samples yet');
+  drawSpark('spDr', 'spDrBox', 'spDrRead', hist.map(function (h) { return h.drop; }),
+            fmtPct, 'no samples yet');
+  if (!$('samplesWrap').hidden) renderSamples();
+}
+
+/* The table-view twin. Every value in the sparklines is readable here. */
+function renderSamples() {
+  var rows = hist.slice(-14).reverse();
+  $('samplesWrap').innerHTML = rows.length
+    ? '<table class="samples"><thead><tr><th>Time</th><th>Bitrate</th><th>Dropped rate</th></tr></thead><tbody>' +
+      rows.map(function (h) {
+        return '<tr><td>' + hhmmss(h.t) + '</td><td>' + fmtKbps(h.kbps) + '</td><td>' + fmtPct(h.drop) + '</td></tr>';
+      }).join('') + '</tbody></table>'
+    : '<div class="empty">No samples yet.</div>';
+}
+
+/* ---------- render ---------- */
+function cell(id, val, kind) { var e = $(id); e.textContent = val; e.className = 'v ' + (kind || ''); }
+function setPill(id, text, kind) { var e = $(id); e.textContent = text; e.className = 'pill ' + (kind || ''); }
+/* Same rule as the phone page: when the Dell is silent nothing is a verdict. */
+function live(kind) { return (S && S.online) ? (kind || '') : 'dim'; }
+
+function render() {
+  var online = S && S.online;
+  var st = (S && S.state) || {};
+  var obs = st.obs || {}, ndi = st.ndi || {}, rel = st.relay || {}, pl = st.playlist || {};
+
+  var upMs = !obs.streaming ? 0
+    : online ? (obs.streamMs || 0) + (S.ageMs || 0) + Math.max(0, Date.now() - recvAt)
+    : (obs.streamMs || 0);
+
+  $('conn').className = 'conn ' + (online ? 'on' : 'off');
+  $('connTxt').textContent = online ? 'HEARTBEAT' : (S && S.ageMs != null ? 'SILENT ' + fmtAge(S.ageMs) : 'NO AGENT');
+  $('who').textContent = (st.agent || 'hiley-watcher') + (st.version ? ' v' + st.version : '') +
+    (st.host ? ' · ' + st.host : '');
+
+  var bn = $('banner'), bs = $('bState'), bsub = $('bSub');
+  if (!online) {
+    bn.className = 'banner dark'; bs.textContent = 'UNKNOWN';
+    bsub.textContent = 'The playout PC is not reporting. It may still be on air — this page just cannot see it.';
+  } else if (!obs.streaming) {
+    bn.className = 'banner dark'; bs.textContent = 'OFF AIR';
+    bsub.textContent = 'OBS is not streaming to Rumble.';
+  } else if (obs.scene && /live/i.test(obs.scene) && !ndi.frozen) {
+    bn.className = 'banner live'; bs.textContent = 'CARRYING LIVE';
+    bsub.innerHTML = 'Scene <b>' + esc(obs.scene) + '</b> · up <span class="b-clock">' + fmtDur(upMs) + '</span>' +
+      (rel.title ? '<br>' + esc(rel.title) : '');
+  } else {
+    bn.className = 'banner rest'; bs.textContent = (obs.scene || 'ON AIR').toUpperCase();
+    bsub.innerHTML = 'Resting output · up <span class="b-clock">' + fmtDur(upMs) + '</span>';
+  }
+
+  var al = $('alerts'); al.innerHTML = '';
+  ((S && S.alerts) || []).forEach(function (a) {
+    var d = document.createElement('div');
+    d.className = 'alert ' + a.level;
+    d.innerHTML = '<span class="ic">' + (a.level === 'crit' ? '!!' : '!') + '</span><span>' + esc(a.text) + '</span>';
+    al.appendChild(d);
+  });
+
+  setPill('strPill', !online ? 'LAST KNOWN' : obs.streaming ? 'STREAMING' : 'STOPPED',
+          !online ? 'warn' : obs.streaming ? 'on' : 'err');
+  $('mUp').textContent = obs.streaming ? fmtDur(upMs) : '—';
+  $('mBr').textContent = obs.streaming ? Math.round(obs.bitrateKbps || 0) + 'k' : '—';
+  var dropPct = obs.total > 0 ? (100 * (obs.dropped || 0) / obs.total) : 0;
+  var dr = $('mDr');
+  dr.textContent = obs.total > 0 ? dropPct.toFixed(2) + '%' : '—';
+  dr.className = 'v ' + live(dropPct > 2 ? 'bad' : dropPct > 0.5 ? 'mid' : obs.total > 0 ? 'ok' : 'dim');
+
+  $('btnStart').disabled = !online || obs.streaming;
+  $('btnStop').disabled = !online || !obs.streaming;
+  $('btnRestart').disabled = !online || !obs.streaming;
+
+  var ov = st.override || 'auto';
+  setPill('ovPill', ov === 'auto' ? 'AUTO' : ov === 'hold' ? 'HELD' : 'FORCED ' + ov.toUpperCase(),
+          live(ov === 'auto' ? 'on' : 'warn'));
+  Array.prototype.forEach.call($('segOv').children, function (b) {
+    var sel = (b.dataset.arg === ov);
+    b.className = sel ? ('sel' + (b.dataset.arg === 'auto' ? '' : ' hot')) : '';
+    b.disabled = !online;
+  });
+  $('ovNote').textContent = ov === 'auto'
+    ? 'AUTO follows the relay: Hiley cuts to LIVE when a VxD event goes live, and back when it ends. Rehearsals are ignored.'
+    : 'The relay is NOT driving Hiley right now. Click AUTO to hand control back.';
+
+  var sc = $('scenes');
+  var list = (obs.scenes && obs.scenes.length) ? obs.scenes : ['LIVE', 'NEWS', 'FILLER'];
+  var sig = list.join('|') + '#' + obs.scene + '#' + st.held + '#' + online;
+  if (sc.dataset.sig !== sig) {
+    sc.dataset.sig = sig;
+    sc.innerHTML = '';
+    list.forEach(function (name) {
+      var b = document.createElement('button');
+      b.textContent = name;
+      b.className = (st.held === name ? 'held' : (obs.scene === name ? 'live' : ''));
+      b.disabled = !online;
+      b.onclick = function () { disarm(); send('scene', name); };
+      sc.appendChild(b);
+    });
+  }
+  setPill('scPill', obs.scene || '—', live(st.held ? 'warn' : 'on'));
+  $('scNote').textContent = st.held
+    ? 'Held on ' + st.held + '. The relay cannot change it until you click AUTO.'
+    : 'Clicking a scene holds it until you click AUTO.';
+
+  if (!pl.source) { $('plCard').hidden = true; }
+  else {
+    $('plCard').hidden = false;
+    setPill('plPill', !online ? 'LAST KNOWN' : pl.playing ? 'PLAYING' : 'PAUSED', live(pl.playing ? 'on' : 'warn'));
+    $('plNow').textContent = pl.current ? base(pl.current) : '—';
+    $('plBar').style.width = (pl.durationMs > 0 ? Math.min(100, 100 * pl.positionMs / pl.durationMs) : 0) + '%';
+    $('btnPlay').textContent = pl.playing ? 'PAUSE' : 'PLAY';
+    ['btnPrev','btnPlay','btnNext'].forEach(function (id) { $(id).disabled = !online; });
+    var it = $('plItems');
+    var isig = (pl.items || []).join('|') + '#' + pl.current;
+    if (it.dataset.sig !== isig) {
+      it.dataset.sig = isig;
+      it.innerHTML = '';
+      (pl.items || []).forEach(function (p) {
+        var d = document.createElement('div');
+        d.textContent = base(p);
+        if (p === pl.current) d.className = 'cur';
+        it.appendChild(d);
+      });
+      if (!(pl.items || []).length) it.innerHTML = '<div>Playlist not reported.</div>';
+    }
+  }
+
+  cell('mObs', obs.connected ? 'OK' : 'DOWN', live(obs.connected ? 'ok' : 'bad'));
+  cell('mNdi', !ndi.source ? '—' : ndi.frozen ? 'FROZEN' : ndi.active ? 'MOVING' : 'IDLE',
+       live(ndi.frozen ? 'bad' : ndi.active ? 'ok' : 'dim'));
+  cell('mWd', ndi.watchdog === 'disabled' ? 'OFF' : (ndi.watchdog || 'ok').toUpperCase(),
+       live(ndi.watchdog === 'disabled' ? 'mid' : 'ok'));
+  cell('mCpu', obs.cpu ? obs.cpu.toFixed(1) + '%' : '—', live(obs.cpu > 70 ? 'bad' : obs.cpu > 40 ? 'mid' : 'ok'));
+  cell('mFps', obs.fps ? Math.round(obs.fps) : '—', 'dim');
+  cell('mEvt', !rel.reachable ? 'NO READ' : rel.rehearsal ? 'REHEARSAL' : rel.live ? 'LIVE' : 'IDLE',
+       live(!rel.reachable ? 'mid' : rel.live ? 'ok' : 'dim'));
+  cell('mKeep', st.keepStreaming ? 'ON' : 'OFF', live(st.keepStreaming ? 'ok' : 'mid'));
+  cell('mBoot', st.bootedAt ? fmtDur(Date.now() - st.bootedAt) : '—', 'dim');
+  $('pcNote').textContent = st.keepStreaming
+    ? 'keepStreaming is on — the watcher restarts the encoder by itself if OBS stops.'
+    : 'keepStreaming is OFF. If OBS stops, the channel stays dark until someone starts it.';
+  setPill('hostPill', st.host || st.agent || '—', live('on'));
+
+  renderTrail();
+
+  $('fDiag').textContent =
+    'stale after ' + Math.round((S && S.staleMs || 15000) / 1000) + 's · ' +
+    'device token ' + (S && S.deviceTokenSet ? 'set' : 'NOT SET') + ' · ' +
+    'commands expire after 2 min';
+}
+
+function renderTrail() {
+  var q = (S && S.queued) || [], r = ((S && S.recent) || []).slice().reverse();
+  var el = $('trail');
+  var html = q.map(function (c) {
+    return '<div class="ev q"><span class="tag">QUEUED</span><span class="body">' +
+      esc((c.cmd + ' ' + c.arg).trim()) + '</span><span class="ago">' + fmtAge(Date.now() - c.at) + '</span></div>';
+  }).concat(r.map(function (c) {
+    return '<div class="ev ' + (c.ok ? 'ok' : 'no') + '"><span class="tag">' + (c.ok ? 'DONE' : 'FAILED') +
+      '</span><span class="body">' + esc((c.cmd + ' ' + c.arg).trim()) +
+      (c.ok ? '' : ' — ' + esc(c.error)) + '</span><span class="ago">' + fmtAge(Date.now() - c.at) + '</span></div>';
+  })).join('');
+  el.innerHTML = html || '<div class="empty">Nothing sent yet.</div>';
+
+  ((S && S.recent) || []).forEach(function (c) {
+    if (!pendingIds[c.id]) return;
+    delete pendingIds[c.id];
+    if (c.ok) msg((c.cmd + ' ' + c.arg).trim() + ' — done on the playout PC.', 'ok');
+    else msg((c.cmd + ' ' + c.arg).trim() + ' FAILED — ' + (c.error || 'no reason given'), 'err');
+  });
+}
+
+function renderLog() {
+  var w = $('log');
+  if (!logLines.length) return;
+  w.innerHTML = logLines.map(function (l) {
+    var cls = /error|fail|cannot|refused/i.test(l.line) ? 'e'
+            : /warn|frozen|override|disabled/i.test(l.line) ? 'w' : '';
+    return '<span class="t">' + hhmmss(l.t) + '</span> <span class="' + cls + '">' + esc(l.line) + '</span>';
+  }).join('\n');
+  if (follow) w.scrollTop = w.scrollHeight;
+}
+
+/* ---------- poll ---------- */
+var polling = false;
+function poll() {
+  if (polling) return;
+  polling = true;
+  fetch('/api/hiley/state?log=1&since=' + logSeq + '&cb=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      S = j; recvAt = Date.now();
+      if (j.log && j.log.length) {
+        logLines = logLines.concat(j.log).slice(-600);
+        logSeq = j.log[j.log.length - 1].seq;
+        renderLog();
+      }
+      sample(j);
+      render();
+      renderSparks();
+    })
+    .catch(function (e) {
+      $('conn').className = 'conn off';
+      $('connTxt').textContent = 'RELAY DOWN';
+      msg('Cannot reach the relay — ' + e.message, 'err');
+    })
+    .then(function () { polling = false; });
+}
+
+/* OBS reports cumulative frame counters; the interesting number is the rate
+   between two samples, not the lifetime average. */
+function sample(j) {
+  if (!j.online || !j.state || !j.state.obs || !j.state.obs.streaming) { lastCounters = null; return; }
+  var o = j.state.obs;
+  var drop = 0;
+  if (lastCounters) {
+    var dT = (o.total || 0) - lastCounters.total;
+    var dD = (o.dropped || 0) - lastCounters.dropped;
+    if (dT > 0 && dD >= 0) drop = 100 * dD / dT;
+    else if (dT < 0) drop = 0;                       // counters reset on restart
+    else drop = hist.length ? hist[hist.length-1].drop : 0;
+  }
+  lastCounters = { dropped: o.dropped || 0, total: o.total || 0 };
+  hist.push({ t: Date.now(), kbps: o.bitrateKbps || 0, drop: drop });
+  if (hist.length > HIST_MAX) hist = hist.slice(-HIST_MAX);
+}
+
+/* ---------- Hiley output preview (only if the feed exists) ----------
+   The playout design has the Dell pushing a 480p monitor copy to the relay.
+   If that is not running, /hls/hiley.m3u8 404s and this card stays hidden
+   rather than showing a dead player. */
+var hls = null, prevUp = false, probeMisses = 0, probeTimer = null;
+
+/* Back off when the feed is absent. Nothing publishes to live/hiley today, so
+   a fixed 15s probe would put a failed request in the console every 15s for
+   as long as the page is open — and the console is where you debug this thing.
+   Three misses -> every minute, six -> every five. A success resets it. */
+function probeDelay() { return probeMisses < 3 ? 15000 : probeMisses < 6 ? 60000 : 300000; }
+function scheduleProbe() {
+  clearTimeout(probeTimer);
+  probeTimer = setTimeout(probePreview, probeDelay());
+}
+function probePreview() {
+  fetch('/hls/hiley.m3u8', { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.text() : ''; })
+    .then(function (txt) {
+      var up = txt.indexOf('#EXTM3U') === 0;   // a proxy error page also returns 200
+      probeMisses = up ? 0 : probeMisses + 1;
+      scheduleProbe();
+      if (up === prevUp) return;
+      prevUp = up;
+      $('prevCard').hidden = !up;
+      var v = $('prevVid');
+      if (!up) { if (hls) { try { hls.destroy(); } catch (e) {} hls = null; } v.removeAttribute('src'); return; }
+      if (window.Hls && Hls.isSupported()) {
+        hls = new Hls({ liveSyncDuration: 6, maxBufferLength: 12 });
+        hls.loadSource('/hls/hiley.m3u8');
+        hls.attachMedia(v);
+        hls.on(Hls.Events.MANIFEST_PARSED, function () { v.play().catch(function () {}); });
+      } else {
+        v.src = '/hls/hiley.m3u8'; v.play().catch(function () {});
+      }
+    })
+    .catch(function () { probeMisses += 1; scheduleProbe(); });
+}
+
+/* ---------- wiring ---------- */
+Array.prototype.forEach.call($('segOv').children, function (b) {
+  b.onclick = function () { disarm(); send('override', b.dataset.arg); };
+});
+$('btnStart').onclick   = function () { disarm(); send('stream', 'start'); };
+$('btnStop').onclick    = function () { arm(this, 'STOP', 'stream', 'stop', 'CONFIRM STOP'); };
+$('btnRestart').onclick = function () { arm(this, 'RESTART', 'stream', 'restart', 'CONFIRM'); };
+$('btnPrev').onclick    = function () { disarm(); send('playlist', 'previous'); };
+$('btnNext').onclick    = function () { disarm(); send('playlist', 'next'); };
+$('btnPlay').onclick    = function () {
+  disarm();
+  var p = S && S.state && S.state.playlist && S.state.playlist.playing;
+  send('playlist', p ? 'pause' : 'play');
+};
+$('btnFlush').onclick = function () {
+  fetch('/api/hiley/flush', { method: 'POST' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) { msg('Dropped ' + j.dropped + ' queued command(s).', 'ok'); poll(); })
+    .catch(function (e) { msg('Flush failed — ' + e.message, 'err'); });
+};
+$('btnFollow').onclick = function () { follow = !follow; this.className = 'ghost' + (follow ? ' on' : ''); if (follow) renderLog(); };
+$('btnSamples').onclick = function () {
+  var w = $('samplesWrap');
+  w.hidden = !w.hidden;
+  this.className = 'ghost' + (w.hidden ? '' : ' on');
+  if (!w.hidden) renderSamples();
+};
+$('btnCopy').onclick = function () {
+  var txt = JSON.stringify(S, null, 2);
+  (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject())
+    .then(function () { msg('Full relay state copied to the clipboard.', 'ok'); })
+    .catch(function () { msg('Could not copy — open /api/hiley/state?cb=1 instead.', 'warn'); });
+};
+$('log').addEventListener('scroll', function () {
+  // Scrolling up turns follow off, the way a terminal does.
+  var atBottom = (this.scrollTop + this.clientHeight) >= (this.scrollHeight - 30);
+  if (!atBottom && follow) { follow = false; $('btnFollow').className = 'ghost'; }
+});
+window.addEventListener('resize', function () { renderSparks(); });
+
+wireSparkHover('spBrBox', 'spBr');
+wireSparkHover('spDrBox', 'spDr');
+
+poll();
+probePreview();
+setInterval(poll, 3000);
+setInterval(function () { if (S) { render(); } }, 1000);
+</script>
+</body>
+</html>
