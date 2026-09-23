@@ -23,7 +23,7 @@
 <style>
   @font-face{font-family:'Aammu';src:url('fonts/MVAaamuFK.ttf') format('truetype');font-display:block}
   @font-face{font-family:'MVType';src:url('fonts/MVTypewriter.ttf') format('truetype');font-display:block}
-  :root{--navy:#0e1c30;--red:#d7263d;--blue:#1d5fae;--cyan:#1fb5d6;--pale:#eef3f8;--acc:var(--blue)}
+  :root{--navy:#0e1c30;--red:#d7263d;--orange:#ff4e00;--cyan:#1fb5d6;--pale:#eef3f8;--acc:var(--orange)}
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{width:1920px;height:1080px;overflow:hidden;background:transparent}
   body.breaking{--acc:var(--red)}
@@ -35,8 +35,8 @@
   body.preview #win{background:linear-gradient(160deg,#34506c,#152131)}
 
   /* side panel */
-  #panel{left:1360px;top:56px;width:464px;height:824px;background:#fff;overflow:hidden}
-  body.live #panel{top:156px;height:724px}
+  #panel{left:1360px;top:56px;width:464px;height:810px;background:#fff;overflow:hidden}
+  body.live #panel{top:156px;height:710px}
   #img{position:relative;height:530px;background:#1c2a3a;overflow:hidden}
   body.breaking #img{height:456px}
   body.live #img{height:430px}
@@ -66,7 +66,7 @@
 
   /* strap */
   #strap{left:96px;top:890px;width:1728px;height:76px;display:flex;direction:rtl}
-  #strap .lab{width:464px;background:var(--acc);color:#fff;font:50px/76px 'Aammu';padding:0 24px;text-align:right;transition:background .35s}
+  #strap .lab{width:232px;background:var(--acc);color:#fff;font:34px/76px 'Aammu';padding:0 20px;text-align:right;transition:background .35s}
   #strap .txt{flex:1;background:var(--navy);border-right:6px solid var(--cyan);color:#fff;font:42px/76px 'Aammu';
               padding:0 26px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .45s}
   #strap .txt.fade{opacity:0}
@@ -85,7 +85,7 @@
      Only the picture + headline block moves. Logo, live bar, strap and ticker stay put;
      the video window shifts right to x=584. */
   body.left #win{left:584px}
-  body.left #panel{left:96px;top:56px;height:824px}
+  body.left #panel{left:96px;top:56px;height:810px}
   body.left.live #img{height:530px}
 
   #err{display:none;left:1360px;top:40px;font:14px sans-serif;color:#fff;background:#b00;padding:2px 6px}
