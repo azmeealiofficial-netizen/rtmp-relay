@@ -38,20 +38,20 @@
   /* side panel */
   #panel{left:1360px;top:56px;width:464px;height:810px;background:#fff;overflow:hidden}
   body.live #panel{top:156px;height:710px}
-  #img{position:relative;height:530px;background:#1c2a3a;overflow:hidden}
-  body.breaking #img{height:456px}
-  body.live #img{height:430px}
+  #img{position:relative;height:470px;background:#1c2a3a;overflow:hidden}
+  body.breaking #img{height:396px}
+  body.live #img{height:370px}
   #img div.pic{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity .8s ease}
-  #qr{position:absolute;left:16px;bottom:16px;width:122px;background:#fff;padding:8px 8px 2px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
-  #qr img{width:106px;height:106px;display:block}
-  #qr span{display:block;text-align:center;font:700 13px/18px 'Barlow Condensed',sans-serif;color:var(--navy);letter-spacing:2px}
+  #qr{position:absolute;left:24px;bottom:24px;width:186px;background:#fff;border:2px solid #d8dee6;padding:4px 4px 2px}
+  #qr img{width:174px;height:174px;display:block}
+  #qr span{display:block;text-align:center;font:700 15px/20px 'Barlow Condensed',sans-serif;color:var(--navy);letter-spacing:2px}
   body.noqr #qr{display:none}
   #img div.pic.on{opacity:1}
   #band{display:none;height:74px;background:var(--red);color:#fff;font:44px/74px 'Aammu';direction:rtl;padding:0 24px;text-align:right}
   body.breaking #band{display:block}
   #rule{height:6px;background:var(--cyan)}
-  #head{direction:rtl;text-align:right;padding:16px 24px 0;font:30px/1.75 'Aammu';color:var(--navy);
-        display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5;overflow:hidden;transition:opacity .45s ease}
+  #head{direction:rtl;text-align:right;padding:16px 24px 0;font:26px/1.55 'Aammu';color:var(--navy);
+        display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;transition:opacity .45s ease}
   #head.fade{opacity:0}
 
   /* logo */
@@ -91,7 +91,7 @@
      the video window shifts right to x=584. */
   body.left #win{left:584px}
   body.left #panel{left:96px;top:56px;height:810px}
-  body.left.live #img{height:530px}
+  body.left.live #img{height:470px}
 
   #err{display:none;left:1360px;top:40px;font:14px sans-serif;color:#fff;background:#b00;padding:2px 6px}
   body.stale #err{display:block}
@@ -101,11 +101,11 @@
   <div id="win" class="abs"></div>
 
   <div id="panel" class="abs">
-    <div id="img"><div class="pic"></div><div class="pic"></div>
-      <div id="qr"><img alt=""><span>SCAN</span></div></div>
+    <div id="img"><div class="pic"></div><div class="pic"></div></div>
     <div id="band">ކުއްލި ޚަބަރު</div>
     <div id="rule"></div>
     <div id="head"></div>
+    <div id="qr"><img alt=""><span>SCAN</span></div>
   </div>
 
   <div id="livebar" class="abs"><div class="l"><i></i>ވަގުތުން</div><div class="p" id="loc">މާލެ</div></div>

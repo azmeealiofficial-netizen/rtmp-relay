@@ -2332,18 +2332,55 @@ voiceKick();
 setInterval(voiceKick, VOICE_HOME_TTL).unref();
 
 // QR of a story's page, so viewers can scan it off the screen.
+// Style F from the design page: rounded VOICE-orange modules, square navy eyes,
+// the VOICE mark in the middle (error correction H), 3-module quiet zone built in.
 const QRCodeLib = require('qrcode');
+const VOICE_QR_LOGO = (() => {
+  try { return 'data:image/png;base64,' + require('fs').readFileSync(path.join(__dirname, 'public', 'img', 'voice-stream-logo.png')).toString('base64'); }
+  catch (e) { console.error('QR logo missing:', e.message); return ''; }
+})();
+
+function voiceQrSvg(text) {
+  const q = QRCodeLib.create(text, { errorCorrectionLevel: 'H' });
+  const n = q.modules.size, d = q.modules.data;
+  const QUIET = 3, S = n + QUIET * 2;
+  const NAVY = '#0e1c30', ORANGE = '#ff4e00';
+  const HOLE = 5, c = n / 2, h0 = c - HOLE / 2, h1 = c + HOLE / 2;
+  // the three finder patterns are drawn by hand, so skip them (plus their separator ring)
+  const skip = new Set();
+  for (const [oy, ox] of [[0, 0], [0, n - 7], [n - 7, 0]])
+    for (let y = -1; y < 8; y++)
+      for (let x = -1; x < 8; x++) {
+        const Y = oy + y, X = ox + x;
+        if (Y >= 0 && Y < n && X >= 0 && X < n) skip.add(Y * n + X);
+      }
+  let p = '';
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      if (!d[y * n + x] || skip.has(y * n + x)) continue;
+      if (x + 0.5 >= h0 && x + 0.5 <= h1 && y + 0.5 >= h0 && y + 0.5 <= h1) continue;  // centre hole
+      p += `<rect x="${x}" y="${y}" width="1" height="1" rx="0.3" fill="${ORANGE}"/>`;
+    }
+  for (const [oy, ox] of [[0, 0], [0, n - 7], [n - 7, 0]]) {
+    p += `<rect x="${ox + 0.5}" y="${oy + 0.5}" width="6" height="6" fill="none" stroke="${NAVY}" stroke-width="1"/>`;
+    p += `<rect x="${ox + 2}" y="${oy + 2}" width="3" height="3" fill="${ORANGE}"/>`;
+  }
+  p += `<rect x="${h0 - 0.4}" y="${h0 - 0.4}" width="${HOLE + 0.8}" height="${HOLE + 0.8}" fill="#ffffff"/>`;
+  if (VOICE_QR_LOGO) {
+    const w = HOLE - 0.2, h = w * 90 / 117;
+    p += `<image href="${VOICE_QR_LOGO}" x="${h0 + 0.1}" y="${c - h / 2}" width="${w}" height="${h}"/>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${S} ${S}" shape-rendering="geometricPrecision">` +
+         `<rect width="${S}" height="${S}" fill="#ffffff"/><g transform="translate(${QUIET} ${QUIET})">${p}</g></svg>`;
+}
+
 const voiceQr = new Map();                    // id -> svg
-app.get('/api/voice/qr/:id.svg', async (req, res) => {
+app.get('/api/voice/qr/:id.svg', (req, res) => {
   const id = String(req.params.id).replace(/\D/g, '');
   if (!id) return res.status(400).send('bad id');
   try {
     if (!voiceQr.has(id)) {
-      const svg = await QRCodeLib.toString(`${VOICE_BASE}/${id}`, {
-        type: 'svg', errorCorrectionLevel: 'M', margin: 0,
-        color: { dark: '#0e1c30', light: '#ffffff' }
-      });
-      voiceQr.set(id, svg);
+      voiceQr.set(id, voiceQrSvg(`${VOICE_BASE}/${id}`));
       if (voiceQr.size > 300) voiceQr.delete(voiceQr.keys().next().value);
     }
     res.set('Content-Type', 'image/svg+xml');
