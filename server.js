@@ -2331,6 +2331,28 @@ function voiceKick() {
 voiceKick();
 setInterval(voiceKick, VOICE_HOME_TTL).unref();
 
+// QR of a story's page, so viewers can scan it off the screen.
+const QRCodeLib = require('qrcode');
+const voiceQr = new Map();                    // id -> svg
+app.get('/api/voice/qr/:id.svg', async (req, res) => {
+  const id = String(req.params.id).replace(/\D/g, '');
+  if (!id) return res.status(400).send('bad id');
+  try {
+    if (!voiceQr.has(id)) {
+      const svg = await QRCodeLib.toString(`${VOICE_BASE}/${id}`, {
+        type: 'svg', errorCorrectionLevel: 'M', margin: 0,
+        color: { dark: '#0e1c30', light: '#ffffff' }
+      });
+      voiceQr.set(id, svg);
+      if (voiceQr.size > 300) voiceQr.delete(voiceQr.keys().next().value);
+    }
+    res.set('Content-Type', 'image/svg+xml');
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(voiceQr.get(id));
+  } catch (e) { res.status(500).send(e.message); }
+});
+
 app.get('/api/voice/latest', async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 30);
   res.set('Access-Control-Allow-Origin', '*');   // public, read-only; lets any overlay/browser source read it

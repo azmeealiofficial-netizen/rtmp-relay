@@ -13,6 +13,7 @@
     strap    fixed strap text; if absent the strap follows the current story
     location live-bar location text              (default މާލެ)
     side     left = story panel on the left (logo, strap and ticker stay); window at x=584
+    noqr     1 = hide the scan-me QR code on the story picture
     backdrop 0 = no navy frame (transparent everywhere except the graphics)
     preview  1 = show a dark stand-in inside the video window (for checking in a normal browser)
 
@@ -40,8 +41,12 @@
   #img{position:relative;height:530px;background:#1c2a3a;overflow:hidden}
   body.breaking #img{height:456px}
   body.live #img{height:430px}
-  #img div{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity .8s ease}
-  #img div.on{opacity:1}
+  #img div.pic{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity .8s ease}
+  #qr{position:absolute;left:16px;bottom:16px;width:122px;background:#fff;padding:8px 8px 2px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+  #qr img{width:106px;height:106px;display:block}
+  #qr span{display:block;text-align:center;font:700 13px/18px 'Barlow Condensed',sans-serif;color:var(--navy);letter-spacing:2px}
+  body.noqr #qr{display:none}
+  #img div.pic.on{opacity:1}
   #band{display:none;height:74px;background:var(--red);color:#fff;font:44px/74px 'Aammu';direction:rtl;padding:0 24px;text-align:right}
   body.breaking #band{display:block}
   #rule{height:6px;background:var(--cyan)}
@@ -96,7 +101,8 @@
   <div id="win" class="abs"></div>
 
   <div id="panel" class="abs">
-    <div id="img"><div></div><div></div></div>
+    <div id="img"><div class="pic"></div><div class="pic"></div>
+      <div id="qr"><img alt=""><span>SCAN</span></div></div>
     <div id="band">ކުއްލި ޚަބަރު</div>
     <div id="rule"></div>
     <div id="head"></div>
@@ -119,7 +125,7 @@ const Q = new URLSearchParams(location.search);
 const MODE = ['general','breaking','live'].includes(Q.get('mode')) ? Q.get('mode') : 'general';
 const ROTATE = Math.max(5, +Q.get('rotate') || 12) * 1000;
 const FIXED_STRAP = Q.get('strap') || '';
-document.body.className = MODE + (Q.get('side') === 'left' ? ' left' : '') + (Q.get('backdrop') === '0' ? ' nobackdrop' : '') + (Q.get('preview') === '1' ? ' preview' : '');
+document.body.className = MODE + (Q.get('side') === 'left' ? ' left' : '') + (Q.get('noqr') === '1' ? ' noqr' : '') + (Q.get('backdrop') === '0' ? ' nobackdrop' : '') + (Q.get('preview') === '1' ? ' preview' : '');
 if (Q.get('location')) document.getElementById('loc').textContent = Q.get('location');
 document.getElementById('slab').textContent = MODE === 'breaking' ? 'ކުއްލި ޚަބަރު' : 'ޚަބަރު';
 
@@ -147,11 +153,12 @@ function next() {
   if (!items.length) return;
   idx = (idx + 1) % items.length;
   const it = items[idx];
-  const layers = $('img').children;
+  const layers = $('img').querySelectorAll('.pic');
   imgFlip ^= 1;
   layers[imgFlip].style.backgroundImage = `url("${it.image}")`;
   layers[imgFlip].classList.add('on');
   layers[imgFlip ^ 1].classList.remove('on');
+  $('qr').firstElementChild.src = '/api/voice/qr/' + it.id + '.svg';
   $('head').classList.add('fade');
   if (!FIXED_STRAP) $('stxt').classList.add('fade');
   setTimeout(() => {
