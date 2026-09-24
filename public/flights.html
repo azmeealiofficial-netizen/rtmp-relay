@@ -236,6 +236,11 @@
   var DUTY    = qs.get("duty") ? num("duty", 90) * 1000 : 0;   // 0 = one full pass
   var ROWS    = Math.max(3, Math.min(12, num("rows", 9)));
   var MINROWS = Math.min(ROWS, num("min", 6));
+  /* Pages PER DIRECTION. One each is the point: the board is a filler slide,
+     not a terminal display, so it shows the next `rows` departures and the
+     next `rows` arrivals and stops. Three pages of departures is how a
+     20-second window ends up never reaching arrivals. */
+  var PAGES   = Math.max(1, Math.min(4, num("pages", 1)));
   var ALWAYS  = qs.get("always") === "1";
   var DEMO    = qs.get("demo") === "1";
   var API     = qs.get("api") || "/api/flights/domestic";
@@ -519,6 +524,30 @@
 
   function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 
+  /* OBS tells a browser source when its scene item is shown or hidden
+     (as long as "Shutdown source when not visible" is UNTICKED). The
+     watcher reveals this page for a fixed window, so the pass has to
+     start when the window opens — otherwise it is revealed halfway
+     through and the viewer sees departures and never arrivals. */
+  var abortPass = false;
+  function restartPass(){ abortPass = true; }
+  window.addEventListener('obsSourceVisibleChanged', function(e){
+    if (e && e.detail && e.detail.visible) restartPass();
+  });
+  window.addEventListener('obsSourceActiveChanged', function(e){
+    if (e && e.detail && e.detail.active) restartPass();
+  });
+
+  // sleep in slices so a restart does not wait out a full page turn
+  async function nap(ms){
+    var until = Date.now() + ms;
+    while (Date.now() < until){
+      if (abortPass) return true;
+      await sleep(Math.min(200, until - Date.now()));
+    }
+    return abortPass;
+  }
+
   function progress(ms){
     var bar = el("bar");
     bar.style.transition = "none"; bar.style.width = "0";
@@ -532,7 +561,7 @@
     await load();
 
     var depB = board(data.departures), arrB = board(data.arrivals);
-    var dep = pagesFor(depB.rows), arr = pagesFor(arrB.rows);
+    var dep = pagesFor(depB.rows).slice(0, PAGES), arr = pagesFor(arrB.rows).slice(0, PAGES);
     var seq = [];
     dep.forEach(function(p, i){ seq.push({ kind:"departure", page:p, i:i, n:dep.length, scope:depB.scope }); });
     arr.forEach(function(p, i){ seq.push({ kind:"arrival",   page:p, i:i, n:arr.length, scope:arrB.scope }); });
@@ -546,7 +575,7 @@
 
     var idx = 0;
     while (Date.now() - started + 200 < duty){
-      await sleep(ROTATE);
+      if (await nap(ROTATE)) { abortPass = false; return Date.now() - started; }
       if (Date.now() - started + 200 >= duty) break;
       idx = (idx + 1) % seq.length;
       var s = seq[idx];

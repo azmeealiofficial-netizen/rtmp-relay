@@ -102,7 +102,7 @@ const fs   = require('fs');
 const path = require('path');
 const OBSWebSocket = require('obs-websocket-js/json').default;
 
-const VERSION  = '2.2';
+const VERSION  = '2.4';
 const DIR      = __dirname;
 const CFG_PATH = path.join(DIR, 'config.json');
 const OVR_PATH = path.join(DIR, 'override.txt');
@@ -145,7 +145,13 @@ const DEFAULTS = {
   boardSourceName: '',            // e.g. 'FLIGHT BOARD'
   boardEveryLaps:  1,             // show after every N laps of the playlist
   boardMs:         60000,         // how long it stays on screen
-  boardPauseMedia: true,          // pause the videos while it is up
+  /* VLC IGNORES PAUSE. TriggerMediaInputAction returns OK for a vlc_source
+     and the playlist keeps running — same family of limitation as OBS not
+     reporting which entry is playing. Left configurable because an
+     ffmpeg_source does honour it, but for a VLC playlist the thing that
+     actually works is restarting the playlist when the board comes down. */
+  boardPauseMedia:   true,        // attempt a pause; a VLC source will ignore it
+  boardRestartOnHide: true,       // restart the playlist from entry 1 when it goes
   boardMaxMs:      180000,        // hard cap; a board up longer than this is a fault
 
   // Non-auto overrides revert to auto after this long. 0 disables.
@@ -238,6 +244,8 @@ let boardVisible = false;
 let boardShownAt = 0;
 let boardEnded   = 0;
 let boardWarned  = false;
+let boardPauseWarned = false;
+let boardTimer   = null;
 
 let streamStats = { streaming: false, streamMs: 0, bitrateKbps: 0, dropped: 0, total: 0, congestion: 0 };
 let obsStats    = { cpu: 0, fps: 0, version: '' };
@@ -305,6 +313,20 @@ obs.on('MediaInputPlaybackEnded', (d) => {
      deliberate: vlcIndex is null until something moves the playlist, so
      it cannot be the trigger for anything that has to work from boot. */
   if (!CFG.boardSourceName) return;
+
+  /* Endings behind a visible board do not count. Without this the counter
+     runs on while the board covers the screen, every lap arrives early, and
+     the rotation walks forward through the playlist a little more each time —
+     which is exactly what 2.2 did on the Dell (laps 1, 2, 4, 6, 8 …). */
+  if (boardVisible) {
+    if (CFG.boardPauseMedia && !boardPauseWarned) {
+      boardPauseWarned = true;
+      log('the playlist source ignored PAUSE and kept playing behind the board — ' +
+          'expected for a VLC source; boardRestartOnHide is what keeps the loop honest');
+    }
+    return;
+  }
+
   boardEnded += 1;
   const perLap = Math.max(1, vlcItems.length || 1) * Math.max(1, Number(CFG.boardEveryLaps) || 1);
   if (boardEnded % perLap !== 0) return;
@@ -676,13 +698,39 @@ async function setBoard(on, why) {
   boardVisible = !!on;
   boardShownAt = on ? Date.now() : 0;
 
+  /* Hide on a timer rather than waiting for the next poll. tick() runs every
+     pollMs (3s), which used to leave the board up to three seconds over its
+     window — long enough to start repeating the first page after the pass had
+     finished. tick() stays as the backstop if this timer is ever lost. */
+  if (boardTimer) { clearTimeout(boardTimer); boardTimer = null; }
+  if (on) {
+    boardTimer = setTimeout(function () {
+      boardTimer = null;
+      setBoard(false, 'its time is up').catch(function () {});
+    }, Number(CFG.boardMs) || 60000);
+  }
+
   /* Pause the videos underneath, so the clip the board covers is not
      simply lost every lap. Failure to pause is not a reason to abandon
      the board — it just means the viewer sees a clip start behind it. */
-  if (CFG.boardPauseMedia && vlcSource) {
-    try { await mediaAction(on ? 'pause' : 'play'); }
-    catch (e) { log('flight board: could not ' + (on ? 'pause' : 'resume') + ' the playlist: ' + e.message); }
+  if (vlcSource) {
+    try {
+      if (on) {
+        if (CFG.boardPauseMedia) await mediaAction('pause');
+      } else if (CFG.boardRestartOnHide) {
+        /* Restart rather than resume: after a minute of board the playlist is
+           somewhere arbitrary, and dropping the viewer into the middle of a
+           clip looks like a fault. This also puts the lap counter and the
+           playlist back in step with each other. */
+        await mediaAction('restart');
+      } else if (CFG.boardPauseMedia) {
+        await mediaAction('play');
+      }
+    } catch (e) {
+      log('flight board: playlist ' + (on ? 'pause' : 'restart') + ' failed: ' + e.message);
+    }
   }
+  if (!on) boardEnded = 0;      // count laps from the restart, not from boot
   log('flight board ' + (on ? 'SHOWN' : 'hidden') + (why ? ' (' + why + ')' : ''));
 }
 
