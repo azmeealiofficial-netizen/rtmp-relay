@@ -48,9 +48,23 @@
       #05070c;
   }
 
-  /* ---------- stage: the whole board fades as one ---------- */
-  #stage{
-    position:absolute;inset:0;
+  /* ---------- stage: positioning and scale only ---------- */
+  #stage{position:absolute;inset:0}
+
+  /* Inset mode — the board is scaled into a hole in another overlay (the VOICE
+     news-scene frame has one at 96,56 1240x810). The layout is still authored at
+     1920 wide and scaled down as a whole, so nothing has to be re-sized by hand. */
+  body.inset #stage{
+    inset:auto;
+    left:var(--sx);top:var(--sy);
+    width:var(--sw);height:var(--sh);
+    transform:scale(var(--sc));
+    transform-origin:0 0;
+  }
+  body.inset .panel{left:0;right:0;top:0;bottom:0;border-radius:0}
+
+  .panel{
+    position:absolute;left:96px;right:96px;top:74px;bottom:74px;
     opacity:0;
     transform:translateY(26px) scale(.985);
     filter:blur(6px);
@@ -58,11 +72,6 @@
                transform .75s cubic-bezier(.22,.61,.36,1),
                filter .75s ease;
     will-change:opacity,transform,filter;
-  }
-  #stage.on{opacity:1;transform:none;filter:none}
-
-  .panel{
-    position:absolute;left:96px;right:96px;top:74px;bottom:74px;
     background:linear-gradient(160deg,rgba(10,17,29,.94) 0%,rgba(13,22,38,.92) 55%,rgba(9,14,24,.95) 100%);
     border:1px solid var(--line);
     border-radius:26px;
@@ -71,6 +80,7 @@
     backdrop-filter:blur(2px);
     display:flex;flex-direction:column;
   }
+  #stage.on .panel{opacity:1;transform:none;filter:none}
   .panel > footer{position:static}
   /* soft moving sheen so a static board still breathes */
   .panel::before{
@@ -135,6 +145,11 @@
   .time{font-size:40px;font-weight:700;letter-spacing:.02em;display:flex;align-items:baseline;gap:12px}
   .time .was{font-size:25px;color:var(--past);text-decoration:line-through;font-weight:600}
   .time .est{color:var(--warn)}
+  .time .day{
+    font-size:15px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;
+    color:var(--accent);border:1px solid rgba(77,163,255,.4);border-radius:5px;
+    padding:2px 7px;align-self:center;
+  }
   .flight{font-size:36px;font-weight:700;letter-spacing:.04em}
   .flight .al{display:block;font-size:16px;letter-spacing:.16em;color:var(--dim);margin-top:4px;text-transform:uppercase;font-weight:600}
   .place{font-size:38px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -153,7 +168,8 @@
   .pill.live{animation:pulse 1.6s ease-in-out infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
 
-  .empty{padding:90px 46px;font-size:34px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+  .empty{padding:90px 46px;font-size:34px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;text-align:center}
+  .empty .why{display:block;margin-top:18px;font-size:20px;letter-spacing:.08em;color:var(--bad);text-transform:none}
 
   /* ---------- footer ---------- */
   footer{
@@ -213,11 +229,29 @@
   var PERIOD  = num("period", 420) * 1000;
   var DUTY    = qs.get("duty") ? num("duty", 90) * 1000 : 0;   // 0 = one full pass
   var ROWS    = Math.max(3, Math.min(12, num("rows", 9)));
+  var MINROWS = Math.min(ROWS, num("min", 6));
   var ALWAYS  = qs.get("always") === "1";
   var DEMO    = qs.get("demo") === "1";
   var API     = qs.get("api") || "/api/flights/domestic";
   var FALLBACK= "https://mix.vxd.news/api/flights/domestic";
   if (qs.get("preview") === "1") document.body.classList.add("preview");
+
+  // ?inset=1            → the VOICE news-scene video hole (96,56 1240x810)
+  // ?inset=x,y,w,h      → any other rectangle, in 1920x1080 coordinates
+  (function(){
+    var v = qs.get("inset");
+    if (!v) return;
+    var c = v === "1" ? [96, 56, 1240, 810] : v.split(",").map(Number);
+    if (c.length !== 4 || !c.every(function(n){ return isFinite(n); }) || c[2] <= 0) return;
+    var s = c[2] / 1920;
+    var st = document.documentElement.style;
+    st.setProperty("--sx", c[0] + "px");
+    st.setProperty("--sy", c[1] + "px");
+    st.setProperty("--sw", "1920px");
+    st.setProperty("--sh", Math.round(c[3] / s) + "px");
+    st.setProperty("--sc", s);
+    document.body.classList.add("inset");
+  })();
 
   var el = function(id){ return document.getElementById(id); };
   var stage = el("stage"), rowsEl = el("rows"), dotsEl = el("dots");
@@ -297,23 +331,84 @@
     });
   }
 
-  // Keep today's flights, drop anything that finished more than 25 min ago,
-  // sort by the time that is actually on the board.
+  // Sort on date + time, not time alone: once the board carries tomorrow's early
+  // flights, a 06:40 would otherwise sort above tonight's 23:30.
+  function sortKey(f){
+    var t = toMin(f.est || f.sched);
+    if (t === null) t = 9999;
+    return Number((f.date || todayStr()).replace(/-/g, "")) * 10000 + t;
+  }
+  function byTime(a, b){ return sortKey(a) - sortKey(b); }
+
+  // Preferred: today's flights that have not long finished.
+  // Late at night that is empty — Q2's last domestic movement is early evening — so fall
+  // back to the next published day, and failing that to today's completed schedule.
+  // An empty board at 23:00 is the single most confusing thing this page could show.
   function board(list){
     var now = mvMinutes(), today = todayStr();
-    return list
-      .filter(function(f){ return !f.date || f.date === today; })
-      .filter(function(f){
-        var t = toMin(f.est || f.sched);
-        if (t === null) return true;
-        var done = DONE[String(f.status).toLowerCase()];
-        return !(done && t < now - 25);
-      })
-      .sort(function(a, b){
-        var x = toMin(a.est || a.sched), y = toMin(b.est || b.sched);
-        if (x === null) return 1; if (y === null) return -1;
-        return x - y;
-      });
+
+    var todays = list.filter(function(f){ return !f.date || f.date === today; });
+    var live = todays.filter(function(f){
+      var t = toMin(f.est || f.sched);
+      if (t === null) return true;
+      var done = DONE[String(f.status).toLowerCase()];
+      if (done) return t >= now - 25;      // finished recently — keep it briefly
+      return t >= now - 90;                // never updated by FIS — keep 90 min, then drop
+    });
+    // Late in the day only a couple of movements are still ahead, which leaves a
+    // mostly empty board. Backfill with the most recent flights already gone —
+    // they render dimmed, so it reads as a board, not as padding.
+    if (live.length){
+      if (live.length < MINROWS){
+        // top up with the next day's earliest — at 23:30 that is what a viewer
+        // actually wants. Those rows carry a date tag so they can't be misread.
+        var ahead = list
+          .filter(function(f){ return f.date && f.date > today; })
+          .sort(byTime)
+          .slice(0, MINROWS - live.length);
+        live = live.concat(ahead);
+      }
+      if (live.length < MINROWS){
+        // still thin — fall back to what has just gone, rendered dimmed
+        var back = todays
+          .filter(function(f){ return live.indexOf(f) < 0; })
+          .sort(byTime).reverse()
+          .slice(0, MINROWS - live.length);
+        live = live.concat(back);
+      }
+      return { rows: live.sort(byTime), scope: "" };
+    }
+
+    var future = list.filter(function(f){ return f.date && f.date > today; });
+    if (future.length){
+      var next = future.map(function(f){ return f.date; }).sort()[0];
+      return {
+        rows: future.filter(function(f){ return f.date === next; }).sort(byTime),
+        scope: next === nextDayStr() ? "Tomorrow" : dayLabel(next)
+      };
+    }
+
+    if (todays.length) return { rows: todays.sort(byTime), scope: "Today's completed schedule" };
+    return { rows: [], scope: "" };
+  }
+
+  function nextDayStr(){
+    var d = mvNow(); d.setUTCDate(d.getUTCDate() + 1);
+    var p = function(n){ return n < 10 ? "0" + n : "" + n; };
+    return d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate());
+  }
+  function shortDay(s){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || "");
+    if (!m) return "";
+    if (s === nextDayStr()) return "Tomorrow";
+    var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    return DAYS[d.getUTCDay()].slice(0, 3) + " " + d.getUTCDate();
+  }
+  function dayLabel(s){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || "");
+    if (!m) return s || "";
+    var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    return DAYS[d.getUTCDay()] + " " + d.getUTCDate() + " " + MONS[d.getUTCMonth()];
   }
 
   function pagesFor(list){
@@ -349,10 +444,13 @@
   }
 
   /* ---------------- render ---------------- */
-  function render(kind, page, pageIdx, pageCount){
+  var SUB = "Velana International Airport &nbsp;·&nbsp; Domestic Terminal T2";
+
+  function render(kind, page, pageIdx, pageCount, scope){
     var arr = kind === "arrival";
     el("title").textContent = arr ? "Domestic Arrivals" : "Domestic Departures";
     el("colPlace").textContent = arr ? "Origin" : "Destination";
+    el("sub").innerHTML = SUB + (scope ? " &nbsp;·&nbsp; " + esc(scope) : "");
     el("title").classList.remove("swap"); void el("title").offsetWidth; el("title").classList.add("swap");
     el("mark").classList.toggle("flip", arr);
 
@@ -360,7 +458,11 @@
     if (!page.length){
       var d = document.createElement("div");
       d.className = "empty";
-      d.textContent = arr ? "No further arrivals today" : "No further departures today";
+      // Say which kind of nothing this is — an unreachable feed must never look
+      // like a quiet airport.
+      d.innerHTML = data.error
+        ? 'Flight feed unavailable<span class="why">' + esc(data.error) + '</span>'
+        : (arr ? "No domestic arrivals listed" : "No domestic departures listed");
       rowsEl.appendChild(d);
     }
     page.forEach(function(f, i){
@@ -375,6 +477,7 @@
           (delayed
             ? '<span class="est">' + esc(f.est) + '</span><span class="was">' + esc(f.sched) + '</span>'
             : '<span>' + esc(f.sched || f.est || "--:--") + '</span>') +
+          (f.date && f.date !== todayStr() ? '<span class="day">' + esc(shortDay(f.date)) + '</span>' : '') +
         '</div>' +
         '<div class="flight">' + esc(f.flightNumber) +
           (f.airline ? '<span class="al">' + esc(f.airline) + '</span>' : '') +
@@ -419,16 +522,16 @@
   async function showOnce(){
     await load();
 
-    var dep = pagesFor(board(data.departures));
-    var arr = pagesFor(board(data.arrivals));
+    var depB = board(data.departures), arrB = board(data.arrivals);
+    var dep = pagesFor(depB.rows), arr = pagesFor(arrB.rows);
     var seq = [];
-    dep.forEach(function(p, i){ seq.push({ kind:"departure", page:p, i:i, n:dep.length }); });
-    arr.forEach(function(p, i){ seq.push({ kind:"arrival",   page:p, i:i, n:arr.length }); });
+    dep.forEach(function(p, i){ seq.push({ kind:"departure", page:p, i:i, n:dep.length, scope:depB.scope }); });
+    arr.forEach(function(p, i){ seq.push({ kind:"arrival",   page:p, i:i, n:arr.length, scope:arrB.scope }); });
 
     var duty = DUTY || seq.length * ROTATE;
     var started = Date.now();
 
-    render(seq[0].kind, seq[0].page, seq[0].i, seq[0].n);
+    render(seq[0].kind, seq[0].page, seq[0].i, seq[0].n, seq[0].scope);
     stage.classList.add("on");
     progress(duty);
 
@@ -440,7 +543,7 @@
       var s = seq[idx];
       Array.prototype.forEach.call(rowsEl.children, function(c){ c.classList.add("out"); });
       await sleep(280);
-      render(s.kind, s.page, s.i, s.n);
+      render(s.kind, s.page, s.i, s.n, s.scope);
     }
     return Date.now() - started;
   }
