@@ -61,7 +61,13 @@
     transform:scale(var(--sc));
     transform-origin:0 0;
   }
-  body.inset .panel{left:0;right:0;top:0;bottom:0;border-radius:0}
+  body.inset .panel{
+    left:0;right:0;top:0;bottom:0;border-radius:0;
+    /* opaque in inset mode — it replaces the video, it does not tint it */
+    background:linear-gradient(160deg,#0a111d 0%,#0d1626 55%,#090e18 100%);
+    backdrop-filter:none;
+    box-shadow:none;
+  }
 
   .panel{
     position:absolute;left:96px;right:96px;top:74px;bottom:74px;
@@ -241,7 +247,10 @@
   (function(){
     var v = qs.get("inset");
     if (!v) return;
-    var c = v === "1" ? [96, 56, 1240, 810] : v.split(",").map(Number);
+    // news-scene.html puts its video window at 96,56 1240x810, or at 584,56 when
+    // it runs ?side=left (the story panel takes the left instead).
+    var PRESET = { "1": [96, 56, 1240, 810], "right": [96, 56, 1240, 810], "left": [584, 56, 1240, 810] };
+    var c = PRESET[v] || v.split(",").map(Number);
     if (c.length !== 4 || !c.every(function(n){ return isFinite(n); }) || c[2] <= 0) return;
     var s = c[2] / 1920;
     var st = document.documentElement.style;
