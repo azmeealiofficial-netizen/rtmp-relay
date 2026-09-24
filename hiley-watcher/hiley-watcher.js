@@ -1,7 +1,45 @@
 /* ============================================================
    hiley-watcher — VxD playout agent for the Hiley TV 24/7 channel
    Runs on the playout PC (the Dell). C:\VxD\hiley-watcher
-   Version 2.0 — adds the /hiley dashboard link.
+   Version 2.1 — see the 24 Sep post-mortem below.
+
+   WHAT 2.1 CHANGED, AND WHY (incident 24 Sep 2026, 09:02–09:14)
+     A press conference went live and this script never took Hiley to
+     LIVE; FORCE LIVE on /hiley worked and was then undone 1–3 minutes
+     later, over and over, until the operator killed the watcher and
+     drove the Dell by hand. Three separate faults:
+
+     1. THE WATCHDOG OUTRANKED THE OPERATOR. tick() exempted only
+        `hold:`, so `override live` — what the FORCE LIVE button writes —
+        left the freeze watchdog free to pull the scene to NEWS.
+        Tapping a scene by name was SAFE and tapping FORCE LIVE was NOT,
+        which is exactly backwards from how the buttons read.
+        → Now ANY explicit override suspends the watchdog. Only `auto`
+          lets it move the scene. An operator watching the output is a
+          better judge of a dead feed than a hash of a thumbnail.
+
+     2. THE FREEZE DETECTOR FALSE-TRIPPED ON A REAL FEED. It compared
+        sha1 of a 160x90 JPEG at quality 40. At that size JPEG
+        quantisation erases the sensor noise of a locked-off podium
+        camera, so a healthy low-motion shot hashed identical and read
+        as dead. It fired 5 times in 10 minutes on a stream that was up
+        15.8 hours at 2251 kbps with 0.09% dropped frames.
+        → Now a 320x180 LOSSLESS PNG, decoded here, compared by mean
+          absolute pixel difference against a threshold, over a 60s
+          window instead of 20s. The measured difference is logged, so
+          `stillThreshold` can be tuned from the dashboard log instead
+          of guessed at.
+        → NOTE THE LIMIT: no pixel test can tell a holding slate from a
+          dead feed. Both are a still picture. This is why fault 1
+          mattered more than fault 2.
+
+     3. A STALE OVERRIDE SILENTLY DISARMED EVERYTHING. Dashboard scene
+        testing at 00:21 left override.txt on `hold:NEWS`. Nothing
+        surfaced that, and 8h43m later GO LIVE was ignored.
+        → A non-auto override now expires back to auto after
+          `overrideTtlMs` (default 30 min), timed from override.txt's
+          mtime so a restart of this script does not reset the clock,
+          and it is reported to the dashboard as a note the whole time.
 
    WHAT IT DOES
      1. Polls the relay's event status and drives the local OBS:
@@ -32,6 +70,9 @@
      and it survives a restart of this script. Stop the watcher or set
      an override before testing scenes by hand — otherwise it pulls the
      scene back within a second and looks like a fault.
+
+     Every one of those four values EXCEPT `auto` also suspends the
+     freeze watchdog, and expires back to `auto` after overrideTtlMs.
    ============================================================ */
 
 'use strict';
@@ -40,7 +81,7 @@ const fs   = require('fs');
 const path = require('path');
 const OBSWebSocket = require('obs-websocket-js/json').default;
 
-const VERSION  = '2.0';
+const VERSION  = '2.1';
 const DIR      = __dirname;
 const CFG_PATH = path.join(DIR, 'config.json');
 const OVR_PATH = path.join(DIR, 'override.txt');
@@ -60,8 +101,27 @@ const DEFAULTS = {
   keepStreaming:  false,
   pollMs:         3000,
   watchdogMs:     5000,
-  freezeSamples:  4,           // ~20s of identical frames = dead feed
+
+  // Freeze watchdog. See sampleNDI() — these are the numbers to tune,
+  // and the log prints the measured difference next to the threshold.
+  sampleWidth:    320,
+  sampleHeight:   180,
+  /* Mean abs pixel difference below this counts as still. The pipeline is
+     lossless and OBS's scaler is deterministic, so two identical input
+     frames give EXACTLY 0 and any real change in the picture gives more.
+     The threshold therefore only has to sit above the noise floor of a
+     few stuck or flickering pixels (a single one in 320x180 moves this by
+     about 0.000006), not above camera noise — which is what 2.0's JPEG
+     hash effectively demanded and why it tore a live feed off air. Raise
+     it only if the log shows a genuinely dead feed reading above 0. */
+  stillThreshold: 0.05,
+  freezeMs:       60000,       // how long it must stay still to count as dead
   recoverSamples: 2,
+  // freezeSamples (<= 2.0) is RETIRED. It was ~20s and it false-tripped.
+
+  // Non-auto overrides revert to auto after this long. 0 disables.
+  overrideTtlMs:  30 * 60 * 1000,
+
   agent:          'hiley-dell',
 };
 
@@ -94,6 +154,14 @@ function loadConfig() {
       CFG.syncUrl = CFG.statusUrl.replace('/api/match/status', '/api/hiley/sync');
     }
     log('config loaded — resting scene "' + CFG.fillerScene + '", live scene "' + CFG.liveScene + '"');
+    // Say so out loud rather than honouring a value that caused an incident.
+    if (raw.freezeSamples != null) {
+      log('config: "freezeSamples" is RETIRED in 2.1 and is being ignored — ' +
+          'the freeze window is now freezeMs (' + CFG.freezeMs + 'ms). Remove it from config.json.');
+    }
+    log('watchdog: ' + CFG.sampleWidth + 'x' + CFG.sampleHeight + ' png, still below ' +
+        CFG.stillThreshold + ' mean abs diff, dead after ' + Math.round(CFG.freezeMs / 1000) + 's' +
+        ' · override ttl ' + (CFG.overrideTtlMs ? Math.round(CFG.overrideTtlMs / 60000) + 'm' : 'off'));
   } catch (e) {
     log('CONFIG ERROR ' + e.message + ' — using defaults');
   }
@@ -119,11 +187,13 @@ let relayTitle     = '';
 let ndiWatchdog = 'ok';            // ok | disabled
 let ndiFrozen   = false;
 let ndiActive   = false;
-let lastHash    = '';
-let sameCount   = 0;
+let lastFrame   = null;            // decoded previous sample
+let lastDiff    = null;            // mean abs pixel difference, last sample
+let lastSampleAt = 0;
 let changeCount = 0;
-let stillSince  = 0;
+let stillSince  = 0;               // when the still stretch began
 let sampleFails = 0;
+let heldOffFallback = false;       // logged once when an override outranks a freeze
 
 let vlcSource   = '';
 let vlcItems    = [];
@@ -137,7 +207,9 @@ let obsStats    = { cpu: 0, fps: 0, version: '' };
 
 let results     = [];              // command outcomes awaiting the next sync
 let lastOverride = null;
-let note = '';
+let noteAuth     = '';             // relay rejected the device token
+let noteOverride = '';             // OVERRIDE ACTIVE — automation disabled
+let overrideRemindedAt = 0;
 
 /* ---------------- OBS connection ----------------
    obs.connect() failing ALSO fires ConnectionClosed, so a naive catch
@@ -219,17 +291,28 @@ async function setScene(name) {
 }
 
 /* ---------------- override file ---------------- */
+/* setAt comes from the FILE'S MTIME, deliberately: the override outlives
+   this process, so the expiry clock has to outlive it too. Stamping it in
+   memory at startup would hand a forgotten hold: another full TTL every
+   time the watcher restarted — which is how a stale hold:NEWS survived
+   8h43m and swallowed a GO LIVE. */
 function readOverride() {
+  const blank = { mode: 'auto', held: '', setAt: 0 };
   try {
     const raw = String(fs.readFileSync(OVR_PATH, 'utf8')).trim();
-    if (!raw) return { mode: 'auto', held: '' };
-    if (/^hold:/i.test(raw)) return { mode: 'hold', held: raw.slice(5).trim() };
+    let setAt = 0;
+    try { setAt = fs.statSync(OVR_PATH).mtimeMs || 0; } catch (e) { /* keep 0 */ }
+    if (!raw) return blank;
+    if (/^hold:/i.test(raw)) return { mode: 'hold', held: raw.slice(5).trim(), setAt };
     const m = raw.toLowerCase();
-    if (m === 'live' || m === 'filler' || m === 'auto') return { mode: m, held: '' };
-    return { mode: 'auto', held: '' };
+    if (m === 'live' || m === 'filler' || m === 'auto') return { mode: m, held: '', setAt };
+    return blank;
   } catch (e) {
-    return { mode: 'auto', held: '' };   // no file = auto
+    return blank;   // no file = auto
   }
+}
+function overrideLabel(ovr) {
+  return ovr.mode === 'hold' ? 'hold:' + ovr.held : ovr.mode;
 }
 function writeOverride(text) {
   try { fs.writeFileSync(OVR_PATH, text + '\n'); return true; }
@@ -256,52 +339,166 @@ async function readRelay() {
 }
 
 /* ---------------- NDI freeze watchdog ----------------
-   A live camera never produces two pixel-identical frames. A static
-   full-screen graphic held for 20s WOULD false-trip — use the override
-   for that. Failing to sample at all disables the watchdog rather than
-   pulling the channel off LIVE. */
-const crypto = require('crypto');
+   2.0 hashed a 160x90 JPEG at quality 40 and called two identical hashes
+   a dead feed. That is not a liveness test: at that size JPEG
+   quantisation throws away the sensor noise that distinguishes a live
+   locked-off camera from a still picture, and on 24 Sep it tore a real
+   press conference off LIVE five times in ten minutes.
+
+   2.1 asks OBS for a LOSSLESS PNG, decodes it here and compares mean
+   absolute pixel difference against a threshold. Lossless is the whole
+   point — a real camera always moves a little, and nothing is left to
+   throw that away.
+
+   WHAT THIS STILL CANNOT DO: distinguish a holding slate from a dead
+   feed. Both are a still picture. That is a property of the problem, not
+   of the code, and it is why an explicit override now outranks this
+   verdict (see tick()). Failing to sample at all still disables the
+   watchdog rather than pulling the channel off LIVE. */
+const zlib = require('zlib');
+
+/* Minimal PNG reader: 8-bit, non-interlaced, which is what OBS emits.
+   No dependency — the Dell has exactly one (obs-websocket-js) and it
+   should stay that way. Anything unexpected throws, and a throw here is
+   a sample failure, which fails open. */
+function decodePNG(buf) {
+  if (buf.length < 8 || buf.readUInt32BE(0) !== 0x89504e47) throw new Error('not a PNG');
+  let pos = 8, ihdr = null;
+  const idat = [];
+  while (pos + 8 <= buf.length) {
+    const len  = buf.readUInt32BE(pos);
+    const type = buf.toString('latin1', pos + 4, pos + 8);
+    const at   = pos + 8;
+    if (at + len > buf.length) break;
+    if (type === 'IHDR') {
+      ihdr = {
+        width:     buf.readUInt32BE(at),
+        height:    buf.readUInt32BE(at + 4),
+        bitDepth:  buf[at + 8],
+        colorType: buf[at + 9],
+        interlace: buf[at + 12],
+      };
+    } else if (type === 'IDAT') {
+      idat.push(buf.subarray(at, at + len));
+    } else if (type === 'IEND') break;
+    pos = at + len + 4;
+  }
+  if (!ihdr) throw new Error('no IHDR');
+  if (ihdr.bitDepth !== 8)  throw new Error('bit depth ' + ihdr.bitDepth + ' unsupported');
+  if (ihdr.interlace !== 0) throw new Error('interlaced PNG unsupported');
+  const CH = { 0: 1, 2: 3, 4: 2, 6: 4 }[ihdr.colorType];
+  if (!CH) throw new Error('colour type ' + ihdr.colorType + ' unsupported');
+  if (!idat.length) throw new Error('no IDAT');
+
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  const w = ihdr.width, h = ihdr.height, stride = w * CH;
+  if (raw.length < (stride + 1) * h) throw new Error('short pixel data');
+
+  const out = Buffer.alloc(stride * h);
+  let rp = 0;
+  for (let y = 0; y < h; y++) {
+    const ft   = raw[rp++];
+    const row  = raw.subarray(rp, rp + stride); rp += stride;
+    const base = y * stride;
+    const pbase = base - stride;
+    for (let i = 0; i < stride; i++) {
+      const x = row[i];
+      const a = i >= CH        ? out[base + i - CH]  : 0;   // left
+      const b = y > 0          ? out[pbase + i]      : 0;   // up
+      const c = (y > 0 && i >= CH) ? out[pbase + i - CH] : 0;
+      let v;
+      if (ft === 0)      v = x;
+      else if (ft === 1) v = x + a;
+      else if (ft === 2) v = x + b;
+      else if (ft === 3) v = x + ((a + b) >> 1);
+      else if (ft === 4) {
+        const p = a + b - c;
+        const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+        v = x + (pa <= pb && pa <= pc ? a : (pb <= pc ? b : c));
+      } else throw new Error('filter ' + ft + ' unsupported');
+      out[base + i] = v & 0xff;
+    }
+  }
+  return { width: w, height: h, channels: CH, pixels: out };
+}
+
+/* Mean absolute difference over the colour channels, alpha ignored —
+   a fully transparent frame is not a moving one. Returns Infinity when
+   the frames are not comparable, which reads as motion and so errs
+   towards staying on air. */
+function meanAbsDiff(a, b) {
+  if (!a || !b) return Infinity;
+  if (a.channels !== b.channels || a.pixels.length !== b.pixels.length) return Infinity;
+  const pa = a.pixels, pb = b.pixels, n = pa.length;
+  const step = a.channels;
+  const lim  = (step === 4) ? 3 : (step === 2 ? 1 : step);   // drop alpha
+  let sum = 0, count = 0;
+  for (let i = 0; i + step <= n; i += step) {
+    for (let k = 0; k < lim; k++) {
+      const d = pa[i + k] - pb[i + k];
+      sum += d < 0 ? -d : d;
+      count++;
+    }
+  }
+  return count ? sum / count : Infinity;
+}
 
 async function sampleNDI() {
   if (!obsConnected || ndiWatchdog === 'disabled') return;
+  const now = Date.now();
+  let frame;
   try {
     const r = await obs.call('GetSourceScreenshot', {
       sourceName: CFG.ndiSourceName,
-      imageFormat: 'jpg',
-      imageWidth: 160,
-      imageHeight: 90,
-      imageCompressionQuality: 40,
+      imageFormat: 'png',
+      imageWidth:  CFG.sampleWidth,
+      imageHeight: CFG.sampleHeight,
     });
+    const data = String(r.imageData || '');
+    const b64  = data.slice(data.indexOf(',') + 1);
+    frame = decodePNG(Buffer.from(b64, 'base64'));
     sampleFails = 0;
-    const h = crypto.createHash('sha1').update(String(r.imageData || '')).digest('hex');
-    if (h === lastHash) {
-      changeCount = 0;
-      sameCount += 1;
-      if (!stillSince) stillSince = Date.now();
-      if (!ndiFrozen && sameCount >= CFG.freezeSamples) {
-        ndiFrozen = true;
-        ndiActive = false;
-        log('NDI FROZEN — ' + sameCount + ' identical samples; falling back off LIVE');
-      }
-    } else {
-      sameCount = 0;
-      stillSince = 0;
-      changeCount += 1;
-      ndiActive = true;
-      if (ndiFrozen && changeCount >= CFG.recoverSamples) {
-        ndiFrozen = false;
-        log('NDI recovered');
-      }
-    }
-    lastHash = h;
   } catch (e) {
     sampleFails += 1;
-    if (sampleFails >= 3) {
+    if (sampleFails >= 3 && ndiWatchdog !== 'disabled') {
       ndiWatchdog = 'disabled';
       ndiFrozen = false;
       log('NDI WATCHDOG DISABLED — cannot sample "' + CFG.ndiSourceName + '" (' + e.message +
           '). Failing open: a dead feed will NOT fall back on its own.');
     }
+    return;
+  }
+
+  const prev = lastFrame;
+  const prevAt = lastSampleAt;
+  lastFrame = frame;
+  lastSampleAt = now;
+  if (!prev) return;                       // nothing to compare the first sample to
+
+  const diff = meanAbsDiff(prev, frame);
+  lastDiff = Number.isFinite(diff) ? diff : null;
+
+  if (diff > CFG.stillThreshold) {
+    stillSince = 0;
+    changeCount += 1;
+    ndiActive = true;
+    if (ndiFrozen && changeCount >= CFG.recoverSamples) {
+      ndiFrozen = false;
+      heldOffFallback = false;
+      log('NDI recovered (diff ' + diff.toFixed(2) + ')');
+    }
+    return;
+  }
+
+  // Still. The stretch began at the PREVIOUS sample, not this one.
+  changeCount = 0;
+  if (!stillSince) stillSince = prevAt || now;
+  if (!ndiFrozen && (now - stillSince) >= CFG.freezeMs) {
+    ndiFrozen = true;
+    ndiActive = false;
+    log('NDI FROZEN — still for ' + Math.round((now - stillSince) / 1000) + 's ' +
+        '(diff ' + diff.toFixed(2) + ' vs threshold ' + CFG.stillThreshold + ')' +
+        '; will fall back off LIVE unless an override is set');
   }
 }
 
@@ -444,8 +641,10 @@ async function sync() {
     bootedAt: BOOTED,
     override: ovr.mode,
     held: ovr.held,
+    overrideSetAt: ovr.setAt || 0,
+    overrideTtlMs: Number(CFG.overrideTtlMs || 0),
     keepStreaming: !!CFG.keepStreaming,
-    note,
+    note: [noteAuth, noteOverride].filter(Boolean).join(' · '),
     relay: { reachable: relayReachable, live: relayLive, rehearsal: relayRehearsal, title: relayTitle },
     obs: {
       connected: obsConnected,
@@ -467,6 +666,11 @@ async function sync() {
       frozen: ndiFrozen,
       watchdog: ndiWatchdog,
       stillMs: stillSince ? Date.now() - stillSince : 0,
+      // diff and threshold ride along so the numbers can be tuned from
+      // the dashboard instead of guessed at.
+      diff: lastDiff,
+      threshold: Number(CFG.stillThreshold),
+      freezeMs: Number(CFG.freezeMs),
     },
     playlist: {
       source: vlcSource,
@@ -492,12 +696,13 @@ async function sync() {
     });
     if (!r.ok) {
       if (r.status === 401) {
-        note = 'relay rejected the device token';
+        noteAuth = 'relay rejected the device token';
         if (!sync._warned401) { sync._warned401 = true; log('SYNC 401 — HILEY_TOKEN on Railway and deviceToken here do not match'); }
       }
       return;
     }
     sync._warned401 = false;
+    noteAuth = '';
     j = await r.json();
   } catch (e) {
     return;   // relay down; the channel carries on regardless
@@ -520,11 +725,48 @@ async function sync() {
 
 /* ---------------- the decision ---------------- */
 async function tick() {
-  const ovr = readOverride();
-  const label = ovr.mode === 'hold' ? 'hold:' + ovr.held : ovr.mode;
+  let ovr = readOverride();
+  const now = Date.now();
+
+  /* Expire a forgotten override. On 24 Sep a hold:NEWS left behind by
+     dashboard testing at 00:21 swallowed the 09:02 GO LIVE in silence.
+     An override is an operator standing at the desk; when they walk
+     away, the automation has to come back on by itself. */
+  const ttl = Number(CFG.overrideTtlMs || 0);
+  if (ttl > 0 && ovr.mode !== 'auto' && ovr.setAt && (now - ovr.setAt) > ttl) {
+    const ageM = Math.round((now - ovr.setAt) / 60000);
+    log('OVERRIDE EXPIRED — "' + overrideLabel(ovr) + '" was set ' + ageM +
+        'm ago; reverting to auto and following the relay again');
+    writeOverride('auto');
+    ovr = { mode: 'auto', held: '', setAt: now };
+  }
+
+  const label = overrideLabel(ovr);
   if (label !== lastOverride) {
+    /* Log the STARTING value too. 2.0 suppressed the first one, so after the
+       24 Sep restart the log could not say whether the watcher came up on
+       auto or on the hold:NEWS left over from the night before — the single
+       fact that would have named fault 3 in seconds. */
     if (lastOverride !== null) log('override -> ' + label);
+    else log('override at startup: ' + label +
+             (ovr.setAt ? ' (override.txt last written ' +
+              Math.round((now - ovr.setAt) / 60000) + 'm ago)' : ' (no override.txt)'));
     lastOverride = label;
+    overrideRemindedAt = 0;
+  }
+
+  /* Say loudly, and keep saying, that the automation is off. */
+  if (ovr.mode !== 'auto') {
+    const leftM = ttl > 0 ? Math.max(0, Math.ceil((ttl - (now - ovr.setAt)) / 60000)) : 0;
+    noteOverride = 'OVERRIDE ACTIVE (' + label + ') — automation disabled' +
+                   (ttl > 0 ? ', reverts in ' + leftM + 'm' : ', no expiry');
+    if (now - overrideRemindedAt > 600000) {
+      overrideRemindedAt = now;
+      log('override still active: ' + noteOverride);
+    }
+  } else {
+    noteOverride = '';
+    overrideRemindedAt = 0;
   }
 
   let target = null;
@@ -539,10 +781,18 @@ async function tick() {
     else target = (relayLive && !relayRehearsal) ? CFG.liveScene : CFG.fillerScene;
   }
 
-  // The watchdog outranks everything except an explicit hold: if the LIVE
-  // picture is frozen, do not sit on a frozen frame on a partner's channel.
-  if (target === CFG.liveScene && ndiFrozen && ovr.mode !== 'hold') {
+  /* The watchdog only acts in auto. 2.0 exempted `hold:` but not `live`,
+     so FORCE LIVE — the button an operator reaches for precisely when
+     they can see the picture is fine — was the one that let the watchdog
+     win. It undid four FORCE LIVEs in nine minutes on 24 Sep. A person
+     watching the output beats a pixel difference; if they have forced a
+     scene, they own the channel until the override expires. */
+  if (target === CFG.liveScene && ndiFrozen && ovr.mode === 'auto') {
     target = CFG.fillerScene;
+  } else if (ndiFrozen && ovr.mode !== 'auto' && !heldOffFallback) {
+    heldOffFallback = true;
+    log('watchdog says the NDI picture is still, but override "' + label +
+        '" is set — holding the forced scene and NOT falling back');
   }
 
   if (target) await setScene(target);

@@ -1,0 +1,18 @@
+# Secrets — hiley-watcher/config.json holds HILEY_TOKEN and the Dell's
+# obs-websocket password. This repo is public.
+config.json
+hiley-watcher/config.json
+.env
+.env.*
+
+# Watcher runtime state on the playout PC
+hiley-watcher/override.txt
+hiley-watcher/node_modules/
+*.log
+*.log.1
+
+# Test media — 2 min of SMPTE bars, not source
+vxd-test-bars.mp4
+
+node_modules/
+Claude outputs/

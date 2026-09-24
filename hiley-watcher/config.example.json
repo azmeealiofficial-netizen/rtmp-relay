@@ -15,7 +15,14 @@
 
   "pollMs":        3000,
   "watchdogMs":    5000,
-  "freezeSamples": 4,
+
+  "sampleWidth":   320,
+  "sampleHeight":  180,
+  "stillThreshold": 0.05,
+  "freezeMs":      60000,
   "recoverSamples": 2,
+
+  "overrideTtlMs": 1800000,
+
   "agent":         "hiley-dell"
 }
