@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Domestic Flight Board — VxD</title>
+<!--
+  1920x1080 OBS Browser Source. Transparent background.
+
+  Drop it into the NEWS scene ON TOP of the video playlist. It fades itself in
+  for one full pass of the board, then fades out completely so the videos show
+  through. No scene switching, no watcher changes.
+
+  Query options
+    ?rotate=10      seconds per page            (default 10)
+    ?period=420     seconds between appearances (default 420 = every 7 min)
+    ?duty=90        seconds visible; default is exactly one full pass
+    ?rows=9         rows per page               (default 9)
+    ?always=1       never hide — permanent board (use for a dedicated scene)
+    ?preview=1      dark backdrop, for checking the look in a browser
+    ?demo=1         built-in sample data, no network needed
+    ?api=<url>      override the feed URL
+-->
+<style>
+  :root{
+    --ink:#f2f6fb;
+    --dim:#8fa2bd;
+    --line:rgba(255,255,255,.07);
+    --ok:#3ddc97;
+    --warn:#ffb020;
+    --bad:#ff5d5d;
+    --past:#6b7f9c;
+    --accent:#4da3ff;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:transparent}
+  body{
+    font-family:"Segoe UI Semibold","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    color:var(--ink);
+    font-feature-settings:"tnum" 1,"lnum" 1;
+    -webkit-font-smoothing:antialiased;
+  }
+  body.preview{background:#05070c}
+  body.preview::after{
+    content:"";position:fixed;inset:0;z-index:-1;
+    background:
+      radial-gradient(1200px 700px at 20% 15%,#16233a 0%,transparent 60%),
+      radial-gradient(900px 600px at 85% 90%,#101b2e 0%,transparent 60%),
+      #05070c;
+  }
+
+  /* ---------- stage: the whole board fades as one ---------- */
+  #stage{
+    position:absolute;inset:0;
+    opacity:0;
+    transform:translateY(26px) scale(.985);
+    filter:blur(6px);
+    transition:opacity .75s cubic-bezier(.22,.61,.36,1),
+               transform .75s cubic-bezier(.22,.61,.36,1),
+               filter .75s ease;
+    will-change:opacity,transform,filter;
+  }
+  #stage.on{opacity:1;transform:none;filter:none}
+
+  .panel{
+    position:absolute;left:96px;right:96px;top:74px;bottom:74px;
+    background:linear-gradient(160deg,rgba(10,17,29,.94) 0%,rgba(13,22,38,.92) 55%,rgba(9,14,24,.95) 100%);
+    border:1px solid var(--line);
+    border-radius:26px;
+    box-shadow:0 40px 110px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);
+    overflow:hidden;
+    backdrop-filter:blur(2px);
+    display:flex;flex-direction:column;
+  }
+  .panel > footer{position:static}
+  /* soft moving sheen so a static board still breathes */
+  .panel::before{
+    content:"";position:absolute;top:-40%;left:-30%;width:60%;height:180%;
+    background:linear-gradient(105deg,transparent,rgba(77,163,255,.07),transparent);
+    animation:sheen 11s linear infinite;
+    pointer-events:none;
+  }
+  @keyframes sheen{from{transform:translateX(-40%) rotate(8deg)}to{transform:translateX(280%) rotate(8deg)}}
+
+  /* ---------- header ---------- */
+  header{
+    position:relative;display:flex;align-items:center;gap:26px;
+    padding:30px 46px 24px;
+    border-bottom:1px solid var(--line);
+  }
+  .mark{
+    width:66px;height:66px;flex:none;border-radius:18px;
+    background:linear-gradient(145deg,rgba(77,163,255,.22),rgba(77,163,255,.04));
+    border:1px solid rgba(77,163,255,.28);
+    display:grid;place-items:center;
+  }
+  .mark svg{width:34px;height:34px;fill:var(--accent);transition:transform .6s cubic-bezier(.22,.61,.36,1)}
+  .mark.flip svg{transform:rotate(180deg)}
+  .titles{flex:1;min-width:0;overflow:hidden}
+  h1{
+    font-size:46px;line-height:1.05;letter-spacing:.13em;font-weight:700;
+    text-transform:uppercase;white-space:nowrap;
+  }
+  .sub{
+    margin-top:7px;font-size:19px;letter-spacing:.22em;color:var(--dim);
+    text-transform:uppercase;font-weight:600;white-space:nowrap;
+  }
+  .clock{text-align:right;flex:none}
+  .clock .t{font-size:52px;font-weight:700;letter-spacing:.04em;line-height:1}
+  .clock .d{margin-top:8px;font-size:17px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase}
+
+  /* title swap animation */
+  .swap{animation:swapIn .55s cubic-bezier(.22,.61,.36,1) both}
+  @keyframes swapIn{from{opacity:0;transform:translateX(34px)}to{opacity:1;transform:none}}
+
+  /* ---------- table ---------- */
+  .cols{
+    display:grid;grid-template-columns:230px 250px 1fr 300px;
+    gap:0 32px;padding:18px 46px 14px;
+    font-size:18px;letter-spacing:.24em;color:var(--dim);text-transform:uppercase;font-weight:700;
+  }
+  .cols .r{text-align:right}
+  #rows{padding:0 46px;flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0}
+  .row{
+    display:grid;grid-template-columns:230px 250px 1fr 300px;
+    gap:0 32px;align-items:center;
+    flex:1 1 0;min-height:76px;max-height:104px;border-bottom:1px solid rgba(255,255,255,.05);
+    opacity:0;transform:translateY(16px);
+    animation:rowIn .5s cubic-bezier(.22,.61,.36,1) forwards;
+  }
+  @keyframes rowIn{to{opacity:1;transform:none}}
+  .row.out{animation:rowOut .3s ease forwards}
+  @keyframes rowOut{to{opacity:0;transform:translateY(-12px)}}
+  .row.past{opacity:.55}
+
+  .time{font-size:40px;font-weight:700;letter-spacing:.02em;display:flex;align-items:baseline;gap:12px}
+  .time .was{font-size:25px;color:var(--past);text-decoration:line-through;font-weight:600}
+  .time .est{color:var(--warn)}
+  .flight{font-size:36px;font-weight:700;letter-spacing:.04em}
+  .flight .al{display:block;font-size:16px;letter-spacing:.16em;color:var(--dim);margin-top:4px;text-transform:uppercase;font-weight:600}
+  .place{font-size:38px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .place .code{color:var(--dim);font-size:26px;margin-left:12px;letter-spacing:.08em}
+  .place .via{display:block;font-size:17px;color:var(--dim);letter-spacing:.1em;margin-top:3px;text-transform:uppercase}
+  .st{justify-self:end}
+  .pill{
+    display:inline-block;padding:9px 22px;border-radius:999px;
+    font-size:21px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;
+    border:1px solid currentColor;white-space:nowrap;
+  }
+  .pill.ok{color:var(--ok);background:rgba(61,220,151,.09)}
+  .pill.warn{color:var(--warn);background:rgba(255,176,32,.1)}
+  .pill.bad{color:var(--bad);background:rgba(255,93,93,.1)}
+  .pill.mut{color:var(--past);background:rgba(107,127,156,.1)}
+  .pill.live{animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+  .empty{padding:90px 46px;font-size:34px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+
+  /* ---------- footer ---------- */
+  footer{
+    position:absolute;left:0;right:0;bottom:0;
+    display:flex;align-items:center;gap:22px;
+    padding:18px 46px;border-top:1px solid var(--line);
+    font-size:17px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;font-weight:600;
+    background:rgba(5,9,16,.4);
+  }
+  .dots{display:flex;gap:9px;margin-left:auto}
+  .dot{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.18);transition:all .35s ease}
+  .dot.on{background:var(--accent);width:26px;border-radius:5px}
+  .stale{color:var(--warn)}
+  .bar{
+    position:absolute;left:0;bottom:0;height:3px;width:0;
+    background:linear-gradient(90deg,var(--accent),rgba(77,163,255,.25));
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="panel">
+    <header>
+      <div class="mark" id="mark">
+        <svg viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5L21 16z"/></svg>
+      </div>
+      <div class="titles">
+        <h1 id="title">Domestic Departures</h1>
+        <div class="sub" id="sub">Velana International Airport &nbsp;·&nbsp; Domestic Terminal T2</div>
+      </div>
+      <div class="clock">
+        <div class="t" id="clock">--:--</div>
+        <div class="d" id="date">&nbsp;</div>
+      </div>
+    </header>
+
+    <div class="cols">
+      <div>Time</div><div>Flight</div><div id="colPlace">Destination</div><div class="r">Status</div>
+    </div>
+    <div id="rows"></div>
+
+    <footer>
+      <span id="note">Live flight information</span>
+      <span class="dots" id="dots"></span>
+    </footer>
+    <div class="bar" id="bar"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var qs = new URLSearchParams(location.search);
+  var num = function(k,d){ var v = parseFloat(qs.get(k)); return isFinite(v) && v > 0 ? v : d; };
+
+  var ROTATE  = num("rotate", 10) * 1000;
+  var PERIOD  = num("period", 420) * 1000;
+  var DUTY    = qs.get("duty") ? num("duty", 90) * 1000 : 0;   // 0 = one full pass
+  var ROWS    = Math.max(3, Math.min(12, num("rows", 9)));
+  var ALWAYS  = qs.get("always") === "1";
+  var DEMO    = qs.get("demo") === "1";
+  var API     = qs.get("api") || "/api/flights/domestic";
+  var FALLBACK= "https://mix.vxd.news/api/flights/domestic";
+  if (qs.get("preview") === "1") document.body.classList.add("preview");
+
+  var el = function(id){ return document.getElementById(id); };
+  var stage = el("stage"), rowsEl = el("rows"), dotsEl = el("dots");
+
+  /* ---------------- clock ---------------- */
+  function mvNow(){
+    // Maldives is UTC+5, no DST — independent of the machine's timezone.
+    return new Date(Date.now() + 5 * 3600000);
+  }
+  var DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  var MONS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function tickClock(){
+    var d = mvNow();
+    var p = function(n){ return n < 10 ? "0" + n : "" + n; };
+    el("clock").textContent = p(d.getUTCHours()) + ":" + p(d.getUTCMinutes());
+    el("date").textContent = DAYS[d.getUTCDay()] + " " + d.getUTCDate() + " " + MONS[d.getUTCMonth()];
+  }
+  tickClock(); setInterval(tickClock, 1000);
+
+  function mvMinutes(){ var d = mvNow(); return d.getUTCHours() * 60 + d.getUTCMinutes(); }
+  function toMin(hhmm){
+    if (!hhmm) return null;
+    var m = /^(\d{1,2}):(\d{2})/.exec(hhmm);
+    return m ? (+m[1]) * 60 + (+m[2]) : null;
+  }
+  function todayStr(){
+    var d = mvNow(), p = function(n){ return n < 10 ? "0" + n : "" + n; };
+    return d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate());
+  }
+
+  /* ---------------- status ---------------- */
+  var STATUS = {
+    "on-time":       { txt:"On Time",      cls:"ok"   },
+    "ontime":        { txt:"On Time",      cls:"ok"   },
+    "scheduled":     { txt:"Scheduled",    cls:"ok"   },
+    "boarding":      { txt:"Boarding",     cls:"ok",  live:true },
+    "final-call":    { txt:"Final Call",   cls:"warn",live:true },
+    "check-in":      { txt:"Check-In",     cls:"ok"   },
+    "check-in-open": { txt:"Check-In",     cls:"ok"   },
+    "check-in-closed":{txt:"Check-In Closed",cls:"warn"},
+    "gate-closed":   { txt:"Gate Closed",  cls:"warn" },
+    "delayed":       { txt:"Delayed",      cls:"warn" },
+    "departed":      { txt:"Departed",     cls:"mut"  },
+    "landed":        { txt:"Landed",       cls:"mut"  },
+    "arrived":       { txt:"Arrived",      cls:"mut"  },
+    "cancelled":     { txt:"Cancelled",    cls:"bad"  },
+    "canceled":      { txt:"Cancelled",    cls:"bad"  },
+    "diverted":      { txt:"Diverted",     cls:"bad"  }
+  };
+  function statusOf(f){
+    var key = String(f.status || "").toLowerCase().replace(/\s+/g, "-");
+    var s = STATUS[key];
+    if (!s) s = { txt: (f.status || "Scheduled").replace(/-/g, " "), cls: "mut" };
+    if ((f.delayMinutes || 0) > 0 && (s.cls === "ok")) s = { txt: "Delayed", cls: "warn" };
+    return s;
+  }
+  var DONE = { departed:1, landed:1, arrived:1, cancelled:1, canceled:1 };
+
+  /* ---------------- data ---------------- */
+  var data = { departures:[], arrivals:[], updated:null, stale:false, error:null };
+
+  function normalise(list){
+    return (list || []).map(function(f){
+      return {
+        flightNumber: f.flightNumber || ((f.airlineCode || "") + " " + (f.number || "")).trim(),
+        airline: f.airline || "",
+        place: f.type === "arrival" ? (f.origin || f.originCode || "") : (f.destination || f.destinationCode || ""),
+        code: f.type === "arrival" ? (f.originCode || "") : (f.destinationCode || ""),
+        sched: f.scheduledTime || "",
+        est: f.estimatedTime || "",
+        delay: f.delayMinutes || 0,
+        status: f.status || "",
+        via: (f.viaRoutes && f.viaRoutes.length) ? f.viaRoutes : null,
+        date: f.date || "",
+        type: f.type
+      };
+    });
+  }
+
+  // Keep today's flights, drop anything that finished more than 25 min ago,
+  // sort by the time that is actually on the board.
+  function board(list){
+    var now = mvMinutes(), today = todayStr();
+    return list
+      .filter(function(f){ return !f.date || f.date === today; })
+      .filter(function(f){
+        var t = toMin(f.est || f.sched);
+        if (t === null) return true;
+        var done = DONE[String(f.status).toLowerCase()];
+        return !(done && t < now - 25);
+      })
+      .sort(function(a, b){
+        var x = toMin(a.est || a.sched), y = toMin(b.est || b.sched);
+        if (x === null) return 1; if (y === null) return -1;
+        return x - y;
+      });
+  }
+
+  function pagesFor(list){
+    var out = [];
+    for (var i = 0; i < list.length; i += ROWS) out.push(list.slice(i, i + ROWS));
+    return out.length ? out : [[]];
+  }
+
+  async function load(){
+    if (DEMO){ data = demoData(); return; }
+    var urls = [API];
+    if (API === "/api/flights/domestic" && location.hostname !== "mix.vxd.news") urls.push(FALLBACK);
+    for (var i = 0; i < urls.length; i++){
+      try {
+        var r = await fetch(urls[i] + (urls[i].indexOf("?") < 0 ? "?" : "&") + "t=" + Date.now(), { cache:"no-store" });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        var j = await r.json();
+        data = {
+          departures: normalise(j.departures || (j.flights || []).filter(function(f){ return f.type === "departure"; })),
+          arrivals:   normalise(j.arrivals   || (j.flights || []).filter(function(f){ return f.type === "arrival"; })),
+          updated: j.updated || j.lastUpdated || null,
+          stale: !!j.stale,
+          error: j.error || null
+        };
+        return;
+      } catch (e){
+        if (i === urls.length - 1){
+          data.stale = true;
+          data.error = e.message;
+        }
+      }
+    }
+  }
+
+  /* ---------------- render ---------------- */
+  function render(kind, page, pageIdx, pageCount){
+    var arr = kind === "arrival";
+    el("title").textContent = arr ? "Domestic Arrivals" : "Domestic Departures";
+    el("colPlace").textContent = arr ? "Origin" : "Destination";
+    el("title").classList.remove("swap"); void el("title").offsetWidth; el("title").classList.add("swap");
+    el("mark").classList.toggle("flip", arr);
+
+    rowsEl.innerHTML = "";
+    if (!page.length){
+      var d = document.createElement("div");
+      d.className = "empty";
+      d.textContent = arr ? "No further arrivals today" : "No further departures today";
+      rowsEl.appendChild(d);
+    }
+    page.forEach(function(f, i){
+      var s = statusOf(f);
+      var delayed = f.est && f.sched && f.est !== f.sched;
+      var done = DONE[String(f.status).toLowerCase()];
+      var r = document.createElement("div");
+      r.className = "row" + (done ? " past" : "");
+      r.style.animationDelay = (i * 55) + "ms";
+      r.innerHTML =
+        '<div class="time">' +
+          (delayed
+            ? '<span class="est">' + esc(f.est) + '</span><span class="was">' + esc(f.sched) + '</span>'
+            : '<span>' + esc(f.sched || f.est || "--:--") + '</span>') +
+        '</div>' +
+        '<div class="flight">' + esc(f.flightNumber) +
+          (f.airline ? '<span class="al">' + esc(f.airline) + '</span>' : '') +
+        '</div>' +
+        '<div class="place">' + esc(f.place) +
+          (f.code ? '<span class="code">' + esc(f.code) + '</span>' : '') +
+          (f.via ? '<span class="via">via ' + esc(f.via.join(", ")) + '</span>' : '') +
+        '</div>' +
+        '<div class="st"><span class="pill ' + s.cls + (s.live ? ' live' : '') + '">' + esc(s.txt) + '</span></div>';
+      rowsEl.appendChild(r);
+    });
+
+    dotsEl.innerHTML = "";
+    for (var k = 0; k < pageCount; k++){
+      var dot = document.createElement("span");
+      dot.className = "dot" + (k === pageIdx ? " on" : "");
+      dotsEl.appendChild(dot);
+    }
+
+    var note = "Live flight information · fis.com.mv";
+    if (data.stale) note = "Last known information · feed unavailable";
+    el("note").innerHTML = data.stale ? '<span class="stale">' + note + '</span>' : note;
+  }
+
+  function esc(s){
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){
+      return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c];
+    });
+  }
+
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+  function progress(ms){
+    var bar = el("bar");
+    bar.style.transition = "none"; bar.style.width = "0";
+    void bar.offsetWidth;
+    bar.style.transition = "width " + ms + "ms linear";
+    bar.style.width = "100%";
+  }
+
+  /* ---------------- the loop ---------------- */
+  async function showOnce(){
+    await load();
+
+    var dep = pagesFor(board(data.departures));
+    var arr = pagesFor(board(data.arrivals));
+    var seq = [];
+    dep.forEach(function(p, i){ seq.push({ kind:"departure", page:p, i:i, n:dep.length }); });
+    arr.forEach(function(p, i){ seq.push({ kind:"arrival",   page:p, i:i, n:arr.length }); });
+
+    var duty = DUTY || seq.length * ROTATE;
+    var started = Date.now();
+
+    render(seq[0].kind, seq[0].page, seq[0].i, seq[0].n);
+    stage.classList.add("on");
+    progress(duty);
+
+    var idx = 0;
+    while (Date.now() - started + 200 < duty){
+      await sleep(ROTATE);
+      if (Date.now() - started + 200 >= duty) break;
+      idx = (idx + 1) % seq.length;
+      var s = seq[idx];
+      Array.prototype.forEach.call(rowsEl.children, function(c){ c.classList.add("out"); });
+      await sleep(280);
+      render(s.kind, s.page, s.i, s.n);
+    }
+    return Date.now() - started;
+  }
+
+  async function run(){
+    if (ALWAYS){
+      // permanent board: keep cycling forever, reloading data each pass
+      for (;;){ await showOnce(); }
+    }
+    for (;;){
+      var shown = await showOnce();
+      stage.classList.remove("on");
+      await sleep(Math.max(2000, PERIOD - shown));
+    }
+  }
+
+  /* ---------------- demo data ---------------- */
+  function demoData(){
+    var mk = function(t, n, al, pl, cd, st, type, est, via){
+      return { flightNumber:n, airline:al, origin:type === "arrival" ? pl : "Male",
+               originCode:type === "arrival" ? cd : "MLE",
+               destination:type === "arrival" ? "Male" : pl,
+               destinationCode:type === "arrival" ? "MLE" : cd,
+               scheduledTime:t, estimatedTime:est || t, status:st, type:type,
+               viaRoutes:via || null, date:todayStr(), terminal:"T2" };
+    };
+    return {
+      departures: normalise([
+        mk("14:05","Q2 470","Maldivian","Hoarafushi","HRF","on-time","departure"),
+        mk("14:20","Q2 128","Maldivian","Fuvahmulah","FVM","final-call","departure"),
+        mk("14:45","Q2 250","Maldivian","Hanimaadhoo","HAQ","on-time","departure","15:15"),
+        mk("15:10","Q2 183","Maldivian","Thimarafushi","TMF","on-time","departure",null,["Funadhoo"]),
+        mk("15:30","Q2 118","Maldivian","Gan","GAN","on-time","departure"),
+        mk("16:00","Q2 204","Maldivian","Kadhdhoo","KDO","cancelled","departure"),
+        mk("16:25","Q2 312","Maldivian","Dharavandhoo","DRV","on-time","departure"),
+        mk("17:05","Q2 140","Maldivian","Kooddoo","GKK","on-time","departure"),
+        mk("17:40","Q2 466","Maldivian","Ifuru","IFU","on-time","departure")
+      ]),
+      arrivals: normalise([
+        mk("14:15","Q2 471","Maldivian","Hoarafushi","HRF","on-time","arrival"),
+        mk("14:35","Q2 129","Maldivian","Fuvahmulah","FVM","landed","arrival"),
+        mk("15:05","Q2 251","Maldivian","Hanimaadhoo","HAQ","on-time","arrival","15:35"),
+        mk("15:40","Q2 119","Maldivian","Gan","GAN","on-time","arrival"),
+        mk("16:10","Q2 313","Maldivian","Dharavandhoo","DRV","on-time","arrival")
+      ]),
+      updated:new Date().toISOString(), stale:false, error:null
+    };
+  }
+
+  run();
+})();
+</script>
+</body>
+</html>
