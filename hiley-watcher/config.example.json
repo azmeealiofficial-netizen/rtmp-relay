@@ -13,6 +13,12 @@
 
   "keepStreaming": false,
 
+  "boardSourceName": "FLIGHT BOARD",
+  "boardEveryLaps":  1,
+  "boardMs":         60000,
+  "boardPauseMedia": true,
+  "boardMaxMs":      180000,
+
   "pollMs":        3000,
   "watchdogMs":    5000,
 

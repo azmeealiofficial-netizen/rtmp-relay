@@ -1,7 +1,28 @@
 /* ============================================================
    hiley-watcher — VxD playout agent for the Hiley TV 24/7 channel
    Runs on the playout PC (the Dell). C:\VxD\hiley-watcher
+   Version 2.2 — adds the flight-board rotation (see FLIGHT BOARD below).
    Version 2.1 — see the 24 Sep post-mortem below.
+
+   FLIGHT BOARD (2.2)
+     The domestic flight board is a browser source sitting in the filler
+     scene, above the video and below the news-scene frame. This script
+     shows it for boardMs once the VLC playlist has finished a lap, then
+     hides it again — so the loop reads videos -> board -> videos instead
+     of the board landing mid-clip on its own timer.
+
+     It is a SCENE ITEM toggle, never a scene switch, so it does not
+     touch tick()'s target, the override file or the freeze watchdog.
+     The page must run with ?always=1: this script owns its visibility.
+
+     Three safeties, all of them because a board stuck over a dead
+     playlist is the 3am failure nobody is awake to see:
+       - boardMaxMs is a hard cap; past it the board is hidden and the
+         playlist resumed whatever else is going on
+       - leaving the filler scene hides it immediately
+       - a fresh connection to OBS forces it hidden and the media playing,
+         so a crash mid-board heals itself on restart
+     Set boardSourceName to '' to switch the whole feature off.
 
    WHAT 2.1 CHANGED, AND WHY (incident 24 Sep 2026, 09:02–09:14)
      A press conference went live and this script never took Hiley to
@@ -81,7 +102,7 @@ const fs   = require('fs');
 const path = require('path');
 const OBSWebSocket = require('obs-websocket-js/json').default;
 
-const VERSION  = '2.1';
+const VERSION  = '2.2';
 const DIR      = __dirname;
 const CFG_PATH = path.join(DIR, 'config.json');
 const OVR_PATH = path.join(DIR, 'override.txt');
@@ -118,6 +139,14 @@ const DEFAULTS = {
   freezeMs:       60000,       // how long it must stay still to count as dead
   recoverSamples: 2,
   // freezeSamples (<= 2.0) is RETIRED. It was ~20s and it false-tripped.
+
+  /* Flight board — a scene item in the filler scene, shown once per lap
+     of the playlist. Blank source name disables the whole feature. */
+  boardSourceName: '',            // e.g. 'FLIGHT BOARD'
+  boardEveryLaps:  1,             // show after every N laps of the playlist
+  boardMs:         60000,         // how long it stays on screen
+  boardPauseMedia: true,          // pause the videos while it is up
+  boardMaxMs:      180000,        // hard cap; a board up longer than this is a fault
 
   // Non-auto overrides revert to auto after this long. 0 disables.
   overrideTtlMs:  30 * 60 * 1000,
@@ -202,6 +231,14 @@ let vlcPlaying  = false;
 let vlcDuration = 0;
 let vlcCursor   = 0;
 
+/* Flight board. boardEnded counts playback-ended events rather than
+   trusting vlcIndex, which is null until something moves the playlist. */
+let boardItemId = null;
+let boardVisible = false;
+let boardShownAt = 0;
+let boardEnded   = 0;
+let boardWarned  = false;
+
 let streamStats = { streaming: false, streamMs: 0, bitrateKbps: 0, dropped: 0, total: 0, congestion: 0 };
 let obsStats    = { cpu: 0, fps: 0, version: '' };
 
@@ -231,6 +268,14 @@ async function connectOBS() {
     log('OBS connected');
     await refreshScenes();
     await detectVlcSource();
+    /* Heal a crash that happened while the board was up: the scene item
+       is persisted in the collection, so OBS would still be showing it. */
+    boardItemId = null;
+    boardVisible = false;
+    if (CFG.boardSourceName) {
+      await resolveBoardItem();
+      if (boardItemId != null) await setBoard(false, 'startup reset');
+    }
   } catch (e) {
     connecting = false;
     obsConnected = false;
@@ -251,9 +296,21 @@ obs.on('ConnectionClosed', () => {
 obs.on('CurrentProgramSceneChanged', (d) => { currentScene = d.sceneName; });
 obs.on('SceneListChanged', () => { refreshScenes().catch(() => {}); });
 obs.on('MediaInputPlaybackEnded', (d) => {
-  if (vlcSource && d.inputName === vlcSource && vlcIndex != null && vlcItems.length) {
+  if (!vlcSource || d.inputName !== vlcSource) return;
+  if (vlcIndex != null && vlcItems.length) {
     vlcIndex = (vlcIndex + 1) % vlcItems.length;
   }
+
+  /* A lap is one playback-ended per playlist entry. Counting events is
+     deliberate: vlcIndex is null until something moves the playlist, so
+     it cannot be the trigger for anything that has to work from boot. */
+  if (!CFG.boardSourceName) return;
+  boardEnded += 1;
+  const perLap = Math.max(1, vlcItems.length || 1) * Math.max(1, Number(CFG.boardEveryLaps) || 1);
+  if (boardEnded % perLap !== 0) return;
+  if (boardVisible) return;
+  if (currentScene !== CFG.fillerScene) return;      // LIVE owns the screen
+  setBoard(true, 'playlist lap ' + (boardEnded / perLap)).catch(() => {});
 });
 
 async function refreshScenes() {
@@ -580,6 +637,55 @@ async function mediaAction(action) {
   }
 }
 
+/* ---------------- flight board ---------------- */
+async function resolveBoardItem() {
+  if (!CFG.boardSourceName || !obsConnected) { boardItemId = null; return; }
+  try {
+    const r = await obs.call('GetSceneItemId', {
+      sceneName: CFG.fillerScene,
+      sourceName: CFG.boardSourceName,
+    });
+    boardItemId = r.sceneItemId;
+    if (!boardWarned) log('flight board item "' + CFG.boardSourceName + '" found in ' + CFG.fillerScene);
+  } catch (e) {
+    boardItemId = null;
+    if (!boardWarned) {
+      boardWarned = true;
+      log('flight board DISABLED — no source "' + CFG.boardSourceName +
+          '" in scene "' + CFG.fillerScene + '": ' + e.message);
+    }
+  }
+}
+
+async function setBoard(on, why) {
+  if (!CFG.boardSourceName || !obsConnected) return;
+  if (boardItemId == null) await resolveBoardItem();
+  if (boardItemId == null) return;
+  try {
+    await obs.call('SetSceneItemEnabled', {
+      sceneName: CFG.fillerScene,
+      sceneItemId: boardItemId,
+      sceneItemEnabled: !!on,
+    });
+  } catch (e) {
+    // most often the item was deleted or renamed under us
+    boardItemId = null;
+    log('flight board ' + (on ? 'show' : 'hide') + ' FAILED: ' + e.message);
+    return;
+  }
+  boardVisible = !!on;
+  boardShownAt = on ? Date.now() : 0;
+
+  /* Pause the videos underneath, so the clip the board covers is not
+     simply lost every lap. Failure to pause is not a reason to abandon
+     the board — it just means the viewer sees a clip start behind it. */
+  if (CFG.boardPauseMedia && vlcSource) {
+    try { await mediaAction(on ? 'pause' : 'play'); }
+    catch (e) { log('flight board: could not ' + (on ? 'pause' : 'resume') + ' the playlist: ' + e.message); }
+  }
+  log('flight board ' + (on ? 'SHOWN' : 'hidden') + (why ? ' (' + why + ')' : ''));
+}
+
 /* ---------------- commands from the dashboard ---------------- */
 async function runCommand(c) {
   const arg = String(c.arg || '');
@@ -679,6 +785,14 @@ async function sync() {
       durationMs: vlcDuration,
       positionMs: vlcCursor,
       items: vlcItems,
+    },
+    board: {
+      source: CFG.boardSourceName || '',
+      enabled: !!CFG.boardSourceName && boardItemId != null,
+      visible: boardVisible,
+      upMs: boardVisible ? Date.now() - boardShownAt : 0,
+      showMs: Number(CFG.boardMs || 0),
+      laps: Math.floor(boardEnded / Math.max(1, (vlcItems.length || 1) * Math.max(1, Number(CFG.boardEveryLaps) || 1))),
     },
     logs: logPending,
     results,
@@ -793,6 +907,16 @@ async function tick() {
     heldOffFallback = true;
     log('watchdog says the NDI picture is still, but override "' + label +
         '" is set — holding the forced scene and NOT falling back');
+  }
+
+  /* Flight board, before the scene is set: it must never be left visible
+     on a scene that is about to change, and never outlive its cap. */
+  if (CFG.boardSourceName && boardVisible) {
+    const upMs = now - boardShownAt;
+    const cap  = Math.max(Number(CFG.boardMs) || 0, Number(CFG.boardMaxMs) || 0);
+    if (target && target !== CFG.fillerScene)      await setBoard(false, 'scene leaving ' + CFG.fillerScene);
+    else if (upMs >= (Number(CFG.boardMs) || 60000)) await setBoard(false, 'its time is up');
+    else if (upMs >= cap)                            await setBoard(false, 'HARD CAP — it should already have gone');
   }
 
   if (target) await setScene(target);

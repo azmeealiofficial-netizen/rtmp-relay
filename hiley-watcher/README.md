@@ -130,3 +130,45 @@ be driven by hand. Three faults, all fixed in 2.1:
 The log that diagnosed all three came from `GET /api/hiley/state?log=1` **after** the
 watcher was dead — the relay keeps the tail. That endpoint is the first thing to read
 next time, before touching the Dell.
+
+
+## Flight board rotation (2.2)
+
+The domestic flight board (`mix.vxd.news/flights`) is a **browser source inside the filler
+scene**, layered above the video playlist and below the `news-scene` frame. The watcher shows
+it for `boardMs` once the playlist has finished a lap, then hides it again, so the loop reads
+**videos -> board -> videos** instead of the board landing mid-clip on a timer of its own.
+
+Run the page with **`?always=1`** — it must not manage its own visibility, because this
+script owns it:
+
+```
+https://mix.vxd.news/flights?inset=left&always=1
+```
+
+| Key | Meaning |
+|---|---|
+| `boardSourceName` | the scene item to toggle. **Blank disables the whole feature.** |
+| `boardEveryLaps` | show after every N laps of the playlist (1 = every lap) |
+| `boardMs` | how long it stays on screen |
+| `boardPauseMedia` | pause the videos while it is up, so no clip is lost each lap |
+| `boardMaxMs` | hard cap; a board up longer than this is a fault and is pulled |
+
+**It is a scene-item toggle, never a scene switch.** It does not touch `tick()`'s target, the
+override file or the freeze watchdog — deliberately, given the 24 Sep incident.
+
+A lap is counted as one `MediaInputPlaybackEnded` per playlist entry. Events are counted
+rather than read off `vlcIndex`, which is `null` until something moves the playlist and so
+cannot be trusted from boot.
+
+Three safeties, all because a board stuck over a dead playlist is a 3am failure nobody is
+awake to see:
+
+- past `boardMaxMs` it is hidden and the playlist resumed regardless of anything else
+- leaving the filler scene hides it immediately, so a GO LIVE mid-board is clean
+- a fresh OBS connection forces it hidden and the media playing, so a crash while it was up
+  heals itself on restart
+
+Verified against a mock OBS: startup reset, one-ending-is-not-a-lap, show on the second
+ending, pause while up, hide after `boardMs`, resume, show again next lap, LIVE takeover
+hides it mid-show, and laps during LIVE never show it.
