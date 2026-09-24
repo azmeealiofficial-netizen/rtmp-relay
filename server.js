@@ -2463,13 +2463,22 @@ function hileyBlank() {
     override: 'auto',          // auto | live | filler | hold
     held: '',                  // scene name when override === 'hold'
     keepStreaming: false,
+    overrideSetAt: 0,
+    overrideTtlMs: 0,
     relay: { reachable: false, live: false, rehearsal: false, title: '' },
     obs: {
       connected: false, streaming: false, scene: '', scenes: [],
       streamMs: 0, bitrateKbps: 0, dropped: 0, total: 0,
       cpu: 0, fps: 0, congestion: 0, version: '',
     },
-    ndi: { source: '', active: false, frozen: false, watchdog: 'ok', stillMs: 0 },
+    ndi: {
+      source: '', active: false, frozen: false, watchdog: 'ok', stillMs: 0,
+      // watcher 2.1: the freeze detector's own numbers. diff is null until
+      // it has two frames to compare. Reported so stillThreshold is tuned
+      // from observed data instead of guessed at — the 2.0 detector was
+      // guessed at, and it tore a live press conference off air.
+      diff: null, threshold: 0, freezeMs: 0,
+    },
     playlist: { source: '', playing: false, current: '', durationMs: 0, positionMs: 0, items: [] },
     note: '',
   };
@@ -2574,6 +2583,11 @@ app.post('/api/hiley/sync', (req, res) => {
   s.bootedAt= hileyNum(b.bootedAt, s.bootedAt);
   s.override= hileyStr(b.override || 'auto', 12);
   s.held    = hileyStr(b.held, 120);
+  // watcher 2.1: when the override was set and when it self-expires, so the
+  // dashboard can say "reverts in 12m" rather than leaving a forgotten hold
+  // looking permanent. A stale hold:NEWS swallowed a GO LIVE on 24 Sep.
+  s.overrideSetAt = hileyNum(b.overrideSetAt);
+  s.overrideTtlMs = hileyNum(b.overrideTtlMs);
   s.keepStreaming = hileyBool(b.keepStreaming);
   s.note    = hileyStr(b.note, 300);
 
@@ -2608,6 +2622,11 @@ app.post('/api/hiley/sync', (req, res) => {
     frozen:   hileyBool(n.frozen),
     watchdog: hileyStr(n.watchdog || 'ok', 12),
     stillMs:  hileyNum(n.stillMs),
+    // null is meaningful here — "not measured yet" is not the same as 0,
+    // which is what a genuinely frozen feed reads.
+    diff:      (n.diff === null || n.diff === undefined) ? null : hileyNum(n.diff),
+    threshold: hileyNum(n.threshold),
+    freezeMs:  hileyNum(n.freezeMs),
   };
 
   const p = b.playlist || {};
