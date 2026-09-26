@@ -2395,18 +2395,110 @@ app.get('/api/voice/qr/:id.svg', (req, res) => {
   } catch (e) { res.status(500).send(e.message); }
 });
 
+// ---- VOICE English news feed (maldivesvoice.mv) ----------------------------
+// The English edition is a separate Naaboli site with its own article ids, so an
+// English story can NOT be matched to a voice.mv story by id. It is a parallel
+// feed, not a translation lookup.
+//
+// The homepage already carries the FULL English headline on every card (unlike
+// voice.mv, where the card headline is a short form), so this feed reads the
+// homepage only - one request a minute, no per-article fetches, nothing to break
+// when the article template changes.
+//
+//   GET /api/voice/latest?lang=en&limit=12  -> { updated, source, stale, items: [...] }
+//
+// item: { id, url, headline, short, date, image, thumb }
+const MV_BASE = 'https://maldivesvoice.mv';
+const mvCache = { list: [], updated: 0, error: null, inflight: null };
+
+async function mvGet(path) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const r = await fetch(MV_BASE + path, { headers: { 'User-Agent': VOICE_UA, 'Accept': 'text/html' }, signal: ctrl.signal });
+    if (!r.ok) throw new Error(`maldivesvoice.mv ${path} -> HTTP ${r.status}`);
+    return await r.text();
+  } finally { clearTimeout(t); }
+}
+
+// Homepage cards: <a href="/3230"> ... </a>. The hero card carries its picture as
+// a CSS background-image, the list cards as <img src>; both are handled.
+// Headline = the first div/p whose class contains "en-bold". Date = "25 Sep 2026".
+function mvParseHome(html) {
+  const out = new Map();
+  const re = /<a[^>]+href="\/(\d{3,7})"[^>]*>([\s\S]*?)<\/a>/g;
+  let m;
+  while ((m = re.exec(html))) {
+    const id = +m[1], body = m[2];
+    const rec = out.get(id) || { id };
+    if (!rec.thumb) {
+      const img = body.match(/<img[^>]+src="([^"]+naaboli[^"]+)"/)
+              || body.match(/background-image:\s*url\('([^']+naaboli[^']+)'\)/);
+      if (img) rec.thumb = img[1];
+    }
+    if (!rec.headline) {
+      const h = body.match(/<(?:div|p)[^>]*class="[^"]*en-bold[^"]*"[^>]*>([^<]{8,})<\/(?:div|p)>/);
+      if (h) rec.headline = voiceDecode(h[1]);
+    }
+    if (!rec.date) {
+      const d = body.match(/<div[^>]*class="[^"]*en-font[^"]*"[^>]*>\s*(\d{1,2} [A-Za-z]{3} \d{4})/);
+      if (d) rec.date = voiceDecode(d[1]);
+    }
+    out.set(id, rec);
+  }
+  return out;
+}
+
+async function mvRefresh() {
+  const home = mvParseHome(await mvGet('/'));
+  const items = [...home.values()]
+    .filter(r => r.headline)
+    .sort((a, b) => b.id - a.id)
+    .slice(0, 30)
+    .map(r => ({
+      id: r.id,
+      url: `${MV_BASE}/${r.id}`,
+      headline: r.headline,
+      short: r.headline,          // same contract as the Dhivehi feed
+      date: r.date || '',
+      thumb: r.thumb || '',
+      image: voiceOriginal(r.thumb || '')
+    }));
+  if (!items.length) throw new Error('maldivesvoice.mv: no headlines parsed (markup changed?)');
+  mvCache.list = items;
+  mvCache.updated = Date.now();
+  mvCache.error = null;
+}
+
+function mvKick() {
+  if (!mvCache.inflight) {
+    mvCache.inflight = mvRefresh()
+      .catch(e => { mvCache.error = e.message; console.error('voice EN feed:', e.message); })
+      .finally(() => { mvCache.inflight = null; });
+  }
+  return mvCache.inflight;
+}
+mvKick();
+setInterval(mvKick, VOICE_HOME_TTL).unref();
+
+// lang=dv (default) -> voice.mv, full article data. lang=en -> maldivesvoice.mv headlines.
 app.get('/api/voice/latest', async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 30);
+  const en = String(req.query.lang || '').toLowerCase() === 'en';
+  const cache = en ? mvCache : voiceCache;
+  const kick  = en ? mvKick : voiceKick;
+  const base  = en ? MV_BASE : VOICE_BASE;
   res.set('Access-Control-Allow-Origin', '*');   // public, read-only; lets any overlay/browser source read it
   res.set('Cache-Control', 'no-store');
-  if (!voiceCache.list.length) await voiceKick();  // only the very first request after boot can wait
-  if (!voiceCache.list.length) return res.status(502).json({ error: voiceCache.error || 'voice feed unavailable' });
+  if (!cache.list.length) await kick();  // only the very first request after boot can wait
+  if (!cache.list.length) return res.status(502).json({ error: cache.error || 'voice feed unavailable' });
   res.json({
-    updated: new Date(voiceCache.updated).toISOString(),
-    source: VOICE_BASE,
-    stale: !!voiceCache.error,          // true = voice.mv failed on the last try; serving the previous list
-    error: voiceCache.error || undefined,
-    items: voiceCache.list.slice(0, limit)
+    updated: new Date(cache.updated).toISOString(),
+    source: base,
+    lang: en ? 'en' : 'dv',
+    stale: !!cache.error,               // true = the source failed on the last try; serving the previous list
+    error: cache.error || undefined,
+    items: cache.list.slice(0, limit)
   });
 });
 
