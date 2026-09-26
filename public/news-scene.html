@@ -10,7 +10,9 @@
   Query options
     mode     general | breaking | live          (default general)
     rotate   seconds per story in the side panel (default 12)
-    strap    fixed strap text; if absent the strap follows the current story
+    strap    fixed strap text; if absent the strap rotates English headlines
+    straprot seconds per English headline in the strap (default 10)
+    brand    ticker brand text (default MALDIVESVOICE.MV | VOICE STREAM)
     location live-bar location text              (default މާލެ)
     side     left = story panel on the left (logo, strap and ticker stay); window at x=584
     noqr     1 = hide the scan-me QR code on the story picture
@@ -19,8 +21,13 @@
 
   The video window is 1240x810 at x=96,y=56 (x=584 with side=left). Put the program
   video under this source, scaled/cropped to that rectangle.
+
+  LANGUAGE: the side panel (picture + headline + QR) is Dhivehi from voice.mv.
+  The strap and the ticker are ENGLISH, from maldivesvoice.mv - a separate site
+  with its own article ids, so the strap rotates its own headlines rather than
+  translating the story in the panel.
 -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&display=swap">
 <style>
   @font-face{font-family:'Aammu';src:url('fonts/MVAaamuFK.ttf') format('truetype');font-display:block}
   @font-face{font-family:'MVType';src:url('fonts/MVTypewriter.ttf') format('truetype');font-display:block}
@@ -69,20 +76,24 @@
   @keyframes blink{50%{opacity:.25}}
   #livebar .p{flex:1;background:rgba(255,255,255,.92);color:var(--navy);font:30px/54px 'MVType';text-align:center}
 
-  /* strap */
-  #strap{left:96px;top:890px;width:1728px;height:76px;display:flex;direction:rtl}
-  #strap .lab{width:232px;background:var(--acc);color:#fff;font:34px/76px 'Aammu';padding:0 20px;text-align:right;transition:background .35s}
-  #strap .txt{flex:1;background:var(--navy);border-right:6px solid var(--cyan);color:#fff;font:42px/76px 'Aammu';
-              padding:0 26px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .45s}
+  /* strap - ENGLISH, left to right */
+  #strap{left:96px;top:890px;width:1728px;height:76px;display:flex;direction:ltr}
+  #strap .lab{min-width:232px;background:var(--acc);color:#fff;font:700 34px/76px 'Barlow Condensed',sans-serif;
+              letter-spacing:3px;padding:0 24px;text-align:center;text-transform:uppercase;white-space:nowrap;transition:background .35s}
+  #strap .txt{flex:1;background:var(--navy);border-left:6px solid var(--cyan);color:#fff;
+              font:600 44px/76px 'Barlow Condensed',sans-serif;letter-spacing:.4px;
+              padding:0 26px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .45s}
   #strap .txt.fade{opacity:0}
 
-  /* ticker */
-  #ticker{left:96px;top:966px;width:1728px;height:50px;display:flex;direction:rtl}
-  #ticker .brand{width:464px;background:#fff;border-right:8px solid var(--acc);color:var(--navy);
-                 font:700 32px/50px 'Barlow Condensed',sans-serif;letter-spacing:1.5px;direction:ltr;text-align:right;padding-right:16px}
-  #ticker .brand b{color:var(--acc);font-weight:700;margin:0 14px}
+  /* ticker - ENGLISH, scrolls right to left */
+  #ticker{left:96px;top:966px;width:1728px;height:50px;display:flex;direction:ltr}
+  #ticker .brand{width:464px;background:#fff;border-left:8px solid var(--acc);color:var(--navy);
+                 font:700 29px/50px 'Barlow Condensed',sans-serif;letter-spacing:.6px;text-align:left;padding-left:16px;white-space:nowrap;overflow:hidden}
+  #ticker .brand b{color:var(--acc);font-weight:700;margin:0 9px}
   #ticker .run{flex:1;background:var(--pale);overflow:hidden;position:relative}
-  #tk{position:absolute;top:0;right:0;white-space:nowrap;font:28px/50px 'MVType';color:var(--navy);direction:rtl;will-change:transform}
+  #tk{position:absolute;top:0;left:0;white-space:nowrap;font:600 30px/50px 'Barlow Condensed',sans-serif;
+      letter-spacing:.5px;color:var(--navy);direction:ltr;will-change:transform}
+  #tk i{color:var(--acc);font-style:normal;margin:0 18px}
   #ticker .clk{width:120px;background:var(--navy);color:#fff;font:700 32px/50px 'Barlow Condensed',sans-serif;text-align:center;direction:ltr}
 
 
@@ -111,10 +122,10 @@
   <div id="livebar" class="abs"><div class="l"><i></i>ވަގުތުން</div><div class="p" id="loc">މާލެ</div></div>
   <div id="logo" class="abs"></div>
 
-  <div id="strap" class="abs"><div class="lab" id="slab">ޚަބަރު</div><div class="txt" id="stxt"></div></div>
+  <div id="strap" class="abs"><div class="lab" id="slab">NEWS</div><div class="txt" id="stxt"></div></div>
 
   <div id="ticker" class="abs">
-    <div class="brand">VOICE.MV<b>|</b>VOICE STREAM</div>
+    <div class="brand" id="brand">MALDIVESVOICE.MV<b>|</b>VOICE STREAM</div>
     <div class="run"><div id="tk"></div></div>
     <div class="clk" id="clk">--:--</div>
   </div>
@@ -125,13 +136,19 @@ const Q = new URLSearchParams(location.search);
 const MODE = ['general','breaking','live'].includes(Q.get('mode')) ? Q.get('mode') : 'general';
 const ROTATE = Math.max(5, +Q.get('rotate') || 12) * 1000;
 const FIXED_STRAP = Q.get('strap') || '';
+const STRAP_ROTATE = Math.max(5, +Q.get('straprot') || 10) * 1000;
 document.body.className = MODE + (Q.get('side') === 'left' ? ' left' : '') + (Q.get('noqr') === '1' ? ' noqr' : '') + (Q.get('backdrop') === '0' ? ' nobackdrop' : '') + (Q.get('preview') === '1' ? ' preview' : '');
 if (Q.get('location')) document.getElementById('loc').textContent = Q.get('location');
-document.getElementById('slab').textContent = MODE === 'breaking' ? 'ކުއްލި ޚަބަރު' : 'ޚަބަރު';
+document.getElementById('slab').textContent = MODE === 'breaking' ? 'BREAKING NEWS' : 'NEWS';
+if (Q.get('brand')) document.getElementById('brand').textContent = Q.get('brand');
 
-let items = [], idx = -1, imgFlip = 0;
+let items = [], idx = -1, imgFlip = 0;   // Dhivehi, side panel
+let en = [], enIdx = -1;                 // English, strap + ticker
+let dvStale = false, enStale = false;
 const $ = id => document.getElementById(id);
+const markStale = () => document.body.classList.toggle('stale', dvStale || enStale);
 
+// Dhivehi feed -> side panel picture, headline and QR
 async function load() {
   try {
     const r = await fetch('/api/voice/latest?limit=10', { cache: 'no-store' });
@@ -139,13 +156,29 @@ async function load() {
     if (!r.ok || !j.items) throw new Error(j.error || r.status);
     const first = !items.length;
     items = j.items;
-    document.body.classList.toggle('stale', !!j.stale);
+    dvStale = !!j.stale; markStale();
     items.forEach(it => { const im = new Image(); im.src = it.image; });   // preload
-    buildTicker();
     if (first) next();
   } catch (e) {
-    document.body.classList.add('stale');
-    console.error('news feed', e);
+    dvStale = true; markStale();
+    console.error('news feed dv', e);
+  }
+}
+
+// English feed -> strap and ticker. Separate site, separate ids, its own rotation.
+async function loadEn() {
+  try {
+    const r = await fetch('/api/voice/latest?lang=en&limit=12', { cache: 'no-store' });
+    const j = await r.json();
+    if (!r.ok || !j.items) throw new Error(j.error || r.status);
+    const first = !en.length;
+    en = j.items;
+    enStale = !!j.stale; markStale();
+    buildTicker();
+    if (first && !FIXED_STRAP) strapNext();
+  } catch (e) {
+    enStale = true; markStale();
+    console.error('news feed en', e);
   }
 }
 
@@ -160,28 +193,39 @@ function next() {
   layers[imgFlip ^ 1].classList.remove('on');
   $('qr').firstElementChild.src = '/api/voice/qr/' + it.id + '.svg';
   $('head').classList.add('fade');
-  if (!FIXED_STRAP) $('stxt').classList.add('fade');
   setTimeout(() => {
     $('head').textContent = it.headline;
-    if (!FIXED_STRAP) $('stxt').textContent = it.short || it.headline;
     $('head').classList.remove('fade');
+  }, 450);
+}
+
+// Strap: English headlines, rotating on their own timer
+function strapNext() {
+  if (FIXED_STRAP || !en.length) return;
+  enIdx = (enIdx + 1) % en.length;
+  const txt = en[enIdx].headline;
+  $('stxt').classList.add('fade');
+  setTimeout(() => {
+    $('stxt').textContent = txt;
     $('stxt').classList.remove('fade');
   }, 450);
 }
 if (FIXED_STRAP) $('stxt').textContent = FIXED_STRAP;
 
-// Ticker: every headline, scrolling left -> right (reads right-to-left)
+// Ticker: every English headline, scrolling right -> left
 let tkX = 0, tkW = 0, runW = 0;
 function buildTicker() {
-  const t = items.map(i => i.short || i.headline).join('   •   ');
+  const list = en.map(i => i.headline).filter(Boolean);
+  if (!list.length) return;
   const el = $('tk');
+  const t = list.join('|');
   if (el.dataset.t === t) return;
   el.dataset.t = t;
-  el.textContent = t + '   •   ';
-  document.fonts.ready.then(() => { tkW = el.scrollWidth; runW = el.parentNode.clientWidth; tkX = -runW; });
+  el.innerHTML = list.map(h => h.replace(/[<&]/g, c => c === '<' ? '&lt;' : '&amp;')).join('<i>&bull;</i>') + '<i>&bull;</i>';
+  document.fonts.ready.then(() => { tkW = el.scrollWidth; runW = el.parentNode.clientWidth; tkX = runW; });
 }
 function tick() {
-  if (tkW) { tkX += 1.6; if (tkX > tkW) tkX = -runW; $('tk').style.transform = `translateX(${tkX}px)`; }
+  if (tkW) { tkX -= 1.6; if (tkX < -tkW) tkX = runW; $('tk').style.transform = `translateX(${tkX}px)`; }
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
@@ -191,9 +235,11 @@ function clock() {
 }
 clock(); setInterval(clock, 10000);
 
-load();
+load();       loadEn();
 setInterval(load, 60000);
+setInterval(loadEn, 60000);
 setInterval(next, ROTATE);
+setInterval(strapNext, STRAP_ROTATE);
 </script>
 </body>
 </html>
