@@ -2396,7 +2396,7 @@ app.get('/api/voice/qr/:id.svg', (req, res) => {
 });
 
 // ---- VOICE English news feed (maldivesvoice.mv) ----------------------------
-// The English edition is a separate Naaboli site with its own article ids, so an
+// The English edition is a separate site (Fanvaiy CMS since Oct 2026) with its own article ids, so an
 // English story can NOT be matched to a voice.mv story by id. It is a parallel
 // feed, not a translation lookup.
 //
@@ -2421,28 +2421,30 @@ async function mvGet(path) {
   } finally { clearTimeout(t); }
 }
 
-// Homepage cards: <a href="/3230"> ... </a>. The hero card carries its picture as
-// a CSS background-image, the list cards as <img src>; both are handled.
-// Headline = the first div/p whose class contains "en-bold". Date = "25 Sep 2026".
+// Homepage cards (Fanvaiy CMS since Oct 2026): <a href="/story/<uuid>"> ... </a>.
+// Headline = first <h1-4> in the card (fallback: the <img alt>). Date = "07 Oct 2026".
+// Ids are UUIDs with no order, so items are sorted by card date instead; the
+// first occurrence of a story wins, later cards only fill gaps.
 function mvParseHome(html) {
   const out = new Map();
-  const re = /<a[^>]+href="\/(\d{3,7})"[^>]*>([\s\S]*?)<\/a>/g;
+  const re = /<a[^>]+href="(?:https:\/\/maldivesvoice\.mv)?\/story\/([0-9a-f-]{16,})"[^>]*>([\s\S]*?)<\/a>/gi;
   let m;
   while ((m = re.exec(html))) {
-    const id = +m[1], body = m[2];
+    const id = m[1], body = m[2];
     const rec = out.get(id) || { id };
     if (!rec.thumb) {
-      const img = body.match(/<img[^>]+src="([^"]+naaboli[^"]+)"/)
-              || body.match(/background-image:\s*url\('([^']+naaboli[^']+)'\)/);
+      const img = body.match(/<img[^>]+src="(https:[^"]+)"/)
+              || body.match(/background-image:\s*url\(['"]?(https:[^'")]+)['"]?\)/);
       if (img) rec.thumb = img[1];
     }
     if (!rec.headline) {
-      const h = body.match(/<(?:div|p)[^>]*class="[^"]*en-bold[^"]*"[^>]*>([^<]{8,})<\/(?:div|p)>/);
+      const h = body.match(/<h[1-4][^>]*>\s*([^<]{8,}?)\s*<\/h[1-4]>/)
+             || body.match(/<img[^>]+alt="([^"]{8,})"/);
       if (h) rec.headline = voiceDecode(h[1]);
     }
     if (!rec.date) {
-      const d = body.match(/<div[^>]*class="[^"]*en-font[^"]*"[^>]*>\s*(\d{1,2} [A-Za-z]{3} \d{4})/);
-      if (d) rec.date = voiceDecode(d[1]);
+      const d = body.match(/>\s*(\d{1,2} [A-Z][a-z]{2} \d{4})\s*</);
+      if (d) rec.date = d[1];
     }
     out.set(id, rec);
   }
@@ -2453,16 +2455,18 @@ async function mvRefresh() {
   const home = mvParseHome(await mvGet('/'));
   const items = [...home.values()]
     .filter(r => r.headline)
-    .sort((a, b) => b.id - a.id)
+    // homepage also carries old section blocks (Reports 2024, Tech...), so sort by
+    // card date; Array.sort is stable, so same-day stories keep homepage order.
+    .sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0))
     .slice(0, 30)
     .map(r => ({
       id: r.id,
-      url: `${MV_BASE}/${r.id}`,
+      url: `${MV_BASE}/story/${r.id}`,
       headline: r.headline,
       short: r.headline,          // same contract as the Dhivehi feed
       date: r.date || '',
       thumb: r.thumb || '',
-      image: voiceOriginal(r.thumb || '')
+      image: r.thumb || ''        // Fanvaiy serves one image size per story
     }));
   if (!items.length) throw new Error('maldivesvoice.mv: no headlines parsed (markup changed?)');
   mvCache.list = items;
