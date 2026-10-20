@@ -363,6 +363,23 @@ async function obsConnect() {
 
     await obsRefreshScene();
     await obsPollStats();
+
+    // OBS came back mid-event (18 Oct 2026: it crashed 1s after go-live and
+    // was reopened by hand; the branches resumed on their own because they
+    // were enabled when it died, but the main VOICE stream never restarted
+    // and nobody noticed). The stream service settings survive a crash, so
+    // StartStream resumes the SAME VOICE broadcast. Only when an event of
+    // ours is live - never for a stream somebody stopped on purpose.
+    if (matchState.live && matchState.dests && matchState.dests.voice) {
+      try {
+        const st = await obs.call('GetStreamStatus');
+        if (!st.outputActive) {
+          await obs.call('StartStream');
+          mlog('OBS reconnected mid-event: VOICE stream restarted');
+          matchState.lastError = 'OBS restarted mid-event - VOICE stream was restarted automatically';
+        }
+      } catch (e) { mlog('resume after reconnect failed:', e.message); }
+    }
   } catch (e) {
     obsState.connected = false;
     obsState.lastError = e.message;
@@ -663,8 +680,19 @@ const matchState = {
   // True only when THIS event started the recording. A recording somebody
   // armed by hand is theirs to stop â€” END LIVE must not silently kill it.
   record: false,
+  // True from the first line of /api/match/start until it has either
+  // succeeded or rolled back. A go-live takes ~6s and the button stayed
+  // tappable the whole time: on 15 and 18 Oct 2026 a second tap started a
+  // second go-live in parallel, which rewrote the DHUVAS key (restarting
+  // the branch), failed on StartStream because the first one had already
+  // started it, and then ROLLED BACK — disarming DHUVAS and YouTube under
+  // the first event's feet. On the 18th that rollback crashed OBS. This
+  // flag is what makes a second start a 409 instead.
+  starting: false,
   lastError: '',
 };
+
+function mlog(...a) { console.log(new Date().toISOString(), '[match]', ...a); }
 
 // ---- destination selection ---------------------------------------
 // Default is all three, so every existing caller â€” the PowerShell
@@ -702,6 +730,22 @@ async function ingestProven(dests) {
     return !!f.filterEnabled;
   }
   return true;   // YouTube-only: nothing on Facebook to publish anyway
+}
+
+// Per-page proof, used at publish time. ingestProven() answers "is the
+// event up at all"; this answers "is THIS page's feed up", so a page
+// whose output died in the first seconds is left UNPUBLISHED (nothing
+// on the page) rather than published to a spinner. VOICE = main
+// encoder; DHUVAS = its branch filter still enabled.
+async function pageIngestUp(brand) {
+  if (brand === 'voice') {
+    const st = await obs.call('GetStreamStatus');
+    return !!st.outputActive;
+  }
+  const f = await obs.call('GetSourceFilter', {
+    sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
+  });
+  return !!f.filterEnabled;
 }
 
 async function fbCall(path, params, method) {
@@ -776,16 +820,21 @@ async function setDestination(brand, server, key) {
       streamServiceType: 'rtmp_custom',
       streamServiceSettings: { server, key, use_auth: false },
     });
-  } else {
-    const cur = await obs.call('GetSourceFilter', {
-      sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
-    });
-    await obs.call('SetSourceFilterSettings', {
-      sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
-      filterSettings: Object.assign({}, cur.filterSettings, { server, key }),
-      overlay: true,
-    });
+    return;
   }
+  const sourceName = brand === 'youtube' ? OBS_SCENE_VOICE : OBS_SCENE_DHUVAS;
+  const filterName = brand === 'youtube' ? OBS_YT_FILTER : OBS_BRANCH_FILTER;
+  const cur = await obs.call('GetSourceFilter', { sourceName, filterName });
+  // Writing identical settings still makes the plugin log "Settings change
+  // detected, Attempting restart" — harmless while disarmed, fatal while
+  // live. Skip the write when nothing changes.
+  const s = cur.filterSettings || {};
+  if (s.server === server && s.key === key) return;
+  await obs.call('SetSourceFilterSettings', {
+    sourceName, filterName,
+    filterSettings: Object.assign({}, s, { server, key }),
+    overlay: true,
+  });
 }
 
 // ============================================================
@@ -890,8 +939,56 @@ async function ytCreateStream(title) {
   };
 }
 
+// WHY THE TITLE WAS WRONG: the key in the OBS YouTube filter was the
+// channel's Studio "Stream now" default key. That key belongs to Studio's
+// own persistent broadcast, and when bytes arrive YouTube auto-starts
+// THAT broadcast — with whatever title Studio had — not the one we created
+// and bound. Our broadcast sits unused. The fix: the relay owns its own
+// reusable ingest stream (title YT_RELAY_STREAM_TITLE), binds each event's
+// broadcast to it, and writes ITS key into the OBS filter at go-live. The
+// default key is never pushed to, so Studio's broadcast never fires.
+const YT_RELAY_STREAM_TITLE = process.env.YT_RELAY_STREAM_TITLE || 'VxD Relay Ingest';
+let ytRelayStream = null;   // { id, key, server } once resolved
+
+async function ytStreamById(id) {
+  const j = await ytCall('/liveStreams', { params: { part: 'id,snippet,cdn', id } });
+  const s = (j.items || [])[0];
+  if (!s) throw new Error('YouTube stream ' + id + ' not found on this channel');
+  const ing = (s.cdn && s.cdn.ingestionInfo) || {};
+  if (!ing.streamName) throw new Error('YouTube stream ' + id + ' returned no stream key');
+  return { id: s.id, key: ing.streamName, server: ing.ingestionAddress || 'rtmp://a.rtmp.youtube.com/live2',
+           title: s.snippet && s.snippet.title };
+}
+
+async function ytEnsureRelayStream() {
+  if (ytRelayStream) return ytRelayStream;
+  // 1. pinned by env — trust it, just fetch its key
+  if (YT_STREAM_ID) { ytRelayStream = await ytStreamById(YT_STREAM_ID); return ytRelayStream; }
+  // 2. one we made earlier, found by title. The Studio default stream is
+  //    deliberately NOT a candidate — using it is the bug this fixes.
+  let found = null;
+  try {
+    const j = await ytCall('/liveStreams', { params: { part: 'id,snippet,cdn', mine: true, maxResults: 50 } });
+    found = (j.items || []).find(s => s.snippet && s.snippet.title === YT_RELAY_STREAM_TITLE);
+  } catch (e) { mlog('youtube: liveStreams.list failed, will create:', e.message); }
+  if (found) {
+    const ing = (found.cdn && found.cdn.ingestionInfo) || {};
+    if (ing.streamName) {
+      ytRelayStream = { id: found.id, key: ing.streamName,
+                        server: ing.ingestionAddress || 'rtmp://a.rtmp.youtube.com/live2' };
+      return ytRelayStream;
+    }
+  }
+  // 3. make one
+  const made = await ytCreateStream(YT_RELAY_STREAM_TITLE);
+  mlog('youtube: created relay ingest stream', made.streamId);
+  ytRelayStream = { id: made.streamId, key: made.streamKey,
+                    server: made.rtmpUrl || 'rtmp://a.rtmp.youtube.com/live2' };
+  return ytRelayStream;
+}
+
 async function ytStartBroadcast(title, description) {
-  const streamId = await ytFindStream();
+  const streamId = (await ytEnsureRelayStream()).id;
   const b = await ytCall('/liveBroadcasts', {
     method: 'POST',
     params: { part: 'snippet,status,contentDetails' },
@@ -998,10 +1095,20 @@ app.post('/api/match/start', async (req, res) => {
   const dests = pickDests(req.body);
   if (!title) return res.status(400).json({ error: 'title required' });
   if (matchState.live) return res.status(409).json({ error: 'a match is already live â€” end it first' });
+  if (matchState.starting) {
+    mlog('start REFUSED: another go-live is still in progress');
+    return res.status(409).json({ error: 'a go-live is already in progress - wait for it to finish' });
+  }
   if (!dests.voice && !dests.dhuvas && !dests.youtube) {
     return res.status(400).json({ error: 'pick at least one destination' });
   }
+  matchState.starting = true;
+  mlog('start', JSON.stringify({ title, dests, publish: autoPublish, record: wantRecord }));
+  try { await matchStartInner(req, res, { title, description, autoPublish, wantRecord, dests }); }
+  finally { matchState.starting = false; }
+});
 
+async function matchStartInner(req, res, { title, description, autoPublish, wantRecord, dests }) {
   // Work with whatever pages are configured AND selected. A brand with no
   // token is skipped entirely â€” its OBS destination is left exactly as it
   // is, so a manually-configured persistent stream key keeps working.
@@ -1032,8 +1139,8 @@ app.post('/api/match/start', async (req, res) => {
     //    failure is reported and stepped over â€” never a reason to stop an
     //    event that is otherwise ready to go.
     if (wantRecord) {
-      try { await setRecordEnabled(true); recArmed = true; }
-      catch (e) { recError = e.message; }
+      try { await setRecordEnabled(true); recArmed = true; mlog('recording armed'); }
+      catch (e) { recError = e.message; mlog('recording FAILED:', recError); }
     }
 
     // 1. create the broadcasts, unpublished
@@ -1046,11 +1153,13 @@ app.post('/api/match/start', async (req, res) => {
       }, 'POST');
       if (!v.secure_stream_url) throw new Error(`${page.label}: no secure_stream_url returned`);
       created[brand] = { id: v.id, ...splitStreamUrl(v.secure_stream_url) };
+      mlog(page.label, 'broadcast created', v.id);
     }
 
     // 2. point OBS at them
     for (const [brand, c] of Object.entries(created)) {
       await setDestination(brand, c.server, c.key);
+      mlog(brand, 'key written to OBS');
     }
 
     // 2b. arm the branches. Dhuvas is safe either way â€” its broadcast is
@@ -1065,16 +1174,23 @@ app.post('/api/match/start', async (req, res) => {
     // A YouTube failure must never take down the Facebook event â€” it is
     // recorded and surfaced, not thrown.
     if (dests.youtube && autoPublish && ytConfigured()) {
-      try { ytBroadcast = await ytStartBroadcast(title, description); }
-      catch (e) { ytError = e.message; }
+      try {
+        // Our own ingest stream's key goes into the OBS filter first, so
+        // the branch pushes to the stream our titled broadcast is bound to
+        // and never to Studio's default (which carries Studio's title).
+        const rs = await ytEnsureRelayStream();
+        await setDestination('youtube', rs.server, rs.key);
+        ytBroadcast = await ytStartBroadcast(title, description);
+        mlog('youtube broadcast created', ytBroadcast.id, 'on stream', rs.id);
+      } catch (e) { ytError = e.message; mlog('youtube FAILED:', ytError); }
     }
-    if (dests.youtube && autoPublish) await setBranchEnabled('youtube', true);
+    if (dests.youtube && autoPublish) { await setBranchEnabled('youtube', true); mlog('youtube branch armed'); }
 
     // 3. go. Only VOICE rides the main encoder â€” a DHUVAS-only or
     //    YouTube-only event is already on air from the branch filter
     //    alone, and StartStream would push the main output at whatever
     //    stream key was last configured. So it is deliberately skipped.
-    if (dests.voice) await obs.call('StartStream');
+    if (dests.voice) { await obs.call('StartStream'); mlog('VOICE StartStream sent'); }
 
     matchState.live = true;
     matchState.dests = dests;
@@ -1098,23 +1214,30 @@ app.post('/api/match/start', async (req, res) => {
     //    Skipped entirely in rehearsal mode â€” the broadcasts stay
     //    UNPUBLISHED until /api/match/end closes them.
     if (autoPublish) setTimeout(async () => {
-      try {
-        if (!await ingestProven(dests)) {
-          matchState.lastError = dests.voice
-            ? 'OBS did not start streaming â€” broadcasts left unpublished'
-            : 'the DHUVAS branch is not armed â€” broadcasts left unpublished';
-          return;
-        }
-        for (const [brand, page] of active) {
-          const vid = matchState.videos[brand];
-          if (!vid || vid.published) continue;
+      const errs = [];
+      // Each page on its own: one page's failure must never block the
+      // other, and a page whose feed is already dead stays UNPUBLISHED
+      // rather than going out as a spinner.
+      for (const [brand, page] of active) {
+        const vid = matchState.videos[brand];
+        if (!vid || vid.published) continue;
+        try {
+          if (!await pageIngestUp(brand)) {
+            errs.push(page.label + ': feed not running - left unpublished');
+            mlog(page.label, 'NOT published: feed not running');
+            continue;
+          }
           await fbCall(`/${vid.id}`, { status: 'LIVE_NOW', access_token: page.token }, 'POST');
           vid.published = true;
+          mlog(page.label, 'published', vid.id);
+        } catch (e) {
+          errs.push(page.label + ': publish failed: ' + e.message);
+          mlog(page.label, 'publish FAILED:', e.message);
         }
-        matchState.publishedAt = Date.now();
-      } catch (e) {
-        matchState.lastError = 'publish failed: ' + e.message;
       }
+      if (Object.values(matchState.videos).some(v => v && v.published)) matchState.publishedAt = Date.now();
+      if (errs.length) matchState.lastError =
+        (matchState.lastError ? matchState.lastError + ' | ' : '') + errs.join(' | ');
     }, Number(process.env.FB_PUBLISH_DELAY_MS || 10000));
 
     res.json({ ok: true, title, rehearsal: matchState.rehearsal, videos: matchState.videos,
@@ -1138,9 +1261,10 @@ app.post('/api/match/start', async (req, res) => {
       } catch (_) { /* best effort */ }
     }
     matchState.lastError = e.message;
+    mlog('start FAILED, rolled back:', e.message);
     res.status(502).json({ error: e.message });
   }
-});
+}
 
 app.post('/api/match/publish', async (req, res) => {
   if (!matchState.live) return res.status(409).json({ error: 'no match is live' });
@@ -1209,6 +1333,7 @@ app.post('/api/match/end', async (req, res) => {
   matchState.record = false;
   matchState.youtube = null;
   matchState.lastError = errors.join(' | ');
+  mlog('end', errors.length ? 'with problems: ' + errors.join(' | ') : 'clean');
 
   res.json({ ok: errors.length === 0, errors });
 });
@@ -1491,6 +1616,7 @@ app.get('/api/match/check', async (req, res) => {
 app.get('/api/match/status', (req, res) => {
   res.json({
     live: matchState.live,
+    starting: matchState.starting,
     rehearsal: matchState.rehearsal,
     youtube: matchState.youtube,
     title: matchState.title,

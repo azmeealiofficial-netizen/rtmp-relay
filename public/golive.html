@@ -214,6 +214,11 @@ let connected=false, streaming=false, ytLive=false, dhLive=false;
 // wanted to cut highlights from was never written to disk.
 let recording=false, recMode='none', recWanted=true;
 let armed=null, armTimer=null;
+// True from the moment GO LIVE / REHEARSE is sent until the relay answers.
+// The relay now refuses a second start, but the button must not even
+// offer one: two taps on 15 and 18 Oct 2026 started two go-lives at once
+// and the second one's rollback disarmed the first one's branches.
+let starting=false;
 
 // Next event's destinations. Nothing is picked until somebody picks it.
 // ALL_DESTS remains only as the reading for a RUNNING event whose relay
@@ -299,7 +304,11 @@ function render(){
     sub.innerHTML=esc(liveDests)+'Nothing is public · <span class="b-clock">'+clock(Date.now()-M.startedAt)+'</span>';
   }else if(M.live){
     ban.className='banner live'; st.textContent='● LIVE';
-    sub.innerHTML=esc(liveDests)+(M.title?esc(M.title)+' · ':'')+'<span class="b-clock">'+clock(Date.now()-M.startedAt)+'</span>';
+    sub.innerHTML=esc(liveDests)+(M.title?esc(M.title)+' · ':'')+'<span class="b-clock">'+clock(Date.now()-M.startedAt)+'</span>'+
+      // Relay-side problems during the event (a page left unpublished, a
+      // publish that failed, OBS restarted) used to sit in lastError
+      // where nothing displayed them. Now they are the first thing you see.
+      (M.lastError?'<div style="color:#ff6b6b;font-weight:700;margin-top:6px">⚠ '+esc(M.lastError)+'</div>':'');
   }else{
     ban.className='banner'; st.textContent='IDLE';
     sub.textContent = streaming ? 'OBS is streaming outside event control'
@@ -310,13 +319,21 @@ function render(){
   // hand (persistent keys, Live Producer). We can't end those broadcasts —
   // they aren't ours — but we can stop the encoder and disarm the branches.
   const manual = streaming && !M.live;
-  const busy = M.live || streaming;
+  const busy = M.live || streaming || starting || !!M.starting;
   // Nothing is selected by default, so both buttons start disabled. The
   // amber note directly above them says why — a dead button with no
   // explanation is the one thing worse than an extra tap.
   const nPicked = ['voice','dhuvas','youtube'].filter(k=>sel[k]).length;
   document.getElementById('go').disabled  = busy || !connected || !nPicked;
   document.getElementById('reh').disabled = busy || !connected || !nPicked;
+  if(starting||M.starting){
+    disarm();
+    document.getElementById('go').textContent='STARTING…';
+    document.getElementById('reh').textContent='STARTING…';
+  }else if(armed!=='go'){
+    document.getElementById('go').textContent=BTN_LABEL.go;
+    document.getElementById('reh').textContent='REHEARSE';
+  }
   document.getElementById('go').hidden    = M.live || manual;
   document.getElementById('reh').hidden   = M.live || manual;
   document.getElementById('end').hidden   = !M.live;
@@ -489,10 +506,13 @@ function tapGo(){
 }
 
 async function goLive(t){
+  if(starting) return;
   const picked=Object.assign({},sel);
+  starting=true; render();
   msg('Creating broadcasts for '+selText(picked)+'…');
   const r=await api('/api/match/start',
     {title:t,description:captionVal(),destinations:picked,record:recWanted});
+  starting=false;
   if(!r.ok){ msg('Failed: '+(r.data.error||'unknown error'),'err'); }
   else{
     const on=Object.keys(r.data.videos||{}).filter(k=>r.data.videos[k]).map(k=>DEST_LABEL[k]);
@@ -524,9 +544,12 @@ async function rehearse(){
     await poll();
     if(ytLive){ msg('Could not disarm YouTube. Aborted — nothing was started.','err'); return; }
   }
+  if(starting) return;
+  starting=true; render();
   const r=await api('/api/match/start',
     {title:t,publish:false,description:captionVal(),destinations:Object.assign({},sel),
      record:recWanted});
+  starting=false;
   if(!r.ok) msg('Failed: '+(r.data.error||'unknown error'),'err');
   else msg('Rehearsal running on '+selText(sel)+'. Nothing is public and no VOD is left behind.','warn');
   poll();
