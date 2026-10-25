@@ -2383,6 +2383,22 @@ function voiceDecode(s) {
 }
 const voiceOriginal = u => u ? u.replace(/\/(small|large)_thumb_/, '/original_') : '';
 
+// Fanvaiy CMS (voice.mv since Oct 2026): stories live at /story/<DD-MM-YYYY-HHMM-latin-slug>.
+// The slug IS the id. Its date/time prefix is Maldives local time and is what we sort by -
+// the homepage also carries old featured blocks, so homepage order is not recency.
+const VOICE_SLUG_RE = /^(\d{2})-(\d{2})-(\d{4})-(\d{2})(\d{2})-/;
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function voiceSlugTime(id) {                 // -> { key:'202610251251', date:'25 Oct 2026', time:'12:51' } | null
+  const m = String(id).match(VOICE_SLUG_RE);
+  if (!m) return null;
+  const [, d, mo, y, hh, mm] = m;
+  return { key: y + mo + d + hh + mm, date: `${d} ${MONTHS[+mo - 1] || mo} ${y}`, time: `${hh}:${mm}` };
+}
+// Short code for the on-air QR: the full story URL is ~120 chars and makes a QR too dense to
+// scan off a TV, so the QR carries mix.vxd.news/v/<code> and the relay redirects.
+const voiceShort = id => crypto.createHash('sha1').update(String(id)).digest('hex').slice(0, 8);
+const voiceShortMap = new Map();             // code -> slug
+
 async function voiceGet(path) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 15000);
@@ -2393,57 +2409,82 @@ async function voiceGet(path) {
   } finally { clearTimeout(t); }
 }
 
-// Homepage: every <a href="/12345"> card. Returns id -> { short, thumb, category, date }
+// Homepage: every <a href="/story/<slug>"> card. Returns slug -> { id, headline, thumb, category, date }
+// Cards carry the FULL headline (h2 on the hero, h3 on list cards; fallback the <img alt>).
 function voiceParseHome(html) {
   const out = new Map();
-  const re = /<a href="\/(\d{4,7})"[^>]*>([\s\S]*?)<\/a>/g;
+  const re = /<a[^>]+href="(?:https:\/\/voice\.mv)?\/story\/([a-z0-9-]{8,})"[^>]*>([\s\S]*?)<\/a>/gi;
   let m;
   while ((m = re.exec(html))) {
-    const id = +m[1], body = m[2];
+    const id = m[1].toLowerCase(), body = m[2];
     const rec = out.get(id) || { id };
-    const img = body.match(/<img[^>]+src="([^"]+naaboli[^"]+)"/);
-    if (img && !rec.thumb) rec.thumb = img[1];
-    const spans = [...body.matchAll(/<span[^>]*>([^<]+)<\/span>/g)].map(x => voiceDecode(x[1]));
-    if (spans.length >= 2 && !rec.category) { rec.date = spans[0]; rec.category = spans[1]; }
-    const texts = [...body.matchAll(/<div[^>]*class="[^"]*(?:waheed|dv-bold)[^"]*"[^>]*>([^<]{8,})<\/div>/g)].map(x => voiceDecode(x[1]));
-    if (texts.length && !rec.short) rec.short = texts[texts.length - 1];
+    if (!rec.thumb) { const img = body.match(/<img[^>]+src="(https:[^"]+)"/); if (img) rec.thumb = img[1]; }
+    if (!rec.headline) {
+      const h = body.match(/<h[1-4][^>]*>\s*([^<]{8,}?)\s*<\/h[1-4]>/) || body.match(/<img[^>]+alt="([^"]{8,})"/);
+      if (h) rec.headline = voiceDecode(h[1]);
+    }
+    if (!rec.category) { const c = body.match(/<div class="font-waheed[^"]*site-accent[^"]*"[^>]*>\s*([^<]+?)\s*<\/div>/); if (c) rec.category = voiceDecode(c[1]); }
+    if (!rec.date) { const d = body.match(/>\s*(\d{1,2} [A-Z][a-z]{2} \d{4})\s*</); if (d) rec.date = d[1]; }
     out.set(id, rec);
   }
   return out;
 }
 
-// Article page: full Thaana headline, category, date | time, original image, author, summary
+// Article page: full headline (<h1>), category/author/date from the NewsArticle JSON-LD,
+// summary from meta description, image from og:image. JSON-LD's own "headline" is truncated
+// by the CMS, so the <h1> is the headline source.
 function voiceParseArticle(id, html) {
   const pick = (re) => { const m = html.match(re); return m ? voiceDecode(m[1]) : ''; };
-  const headline = pick(/<div class="dv-bold lg:text-4xl[^"]*"[^>]*>([^<]+)<\/div>/);
-  const category = pick(/<div class="lg:text-xl text-lg text-\[#FF4E00\] dv-bold rtl">([^<]+)<\/div>/);
-  const stamp = pick(/<div class="text-xs en-font ltr opacity-50[^"]*">([^<]+)<\/div>/);   // "22 Sep 2026 | 11:24"
-  const [date, time] = stamp.split('|').map(s => (s || '').trim());
-  const image = (html.match(/<img class="w-full lg:rounded-3xl[^"]*" src="([^"]+)"/) || [])[1]
-    || voiceOriginal((html.match(/<meta name="image" content="([^"]+)"/) || [])[1]);
-  const summary = pick(/<meta name="description" content="([^"]*)"/);
-  const author = pick(/<div class="opacity-75 waheed">([^<]+)<\/div>/);
-  if (!headline) throw new Error(`voice.mv /${id}: headline not found (markup changed?)`);
-  return { id, url: `${VOICE_BASE}/${id}`, headline, summary, category, date, time: time || '', image, author };
+  let ld = {};
+  for (const s of html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) {
+    try { const j = JSON.parse(s[1]); if (j && /Article/.test(j['@type'])) { ld = j; break; } } catch (_) {}
+  }
+  const headline = pick(/<h1[^>]*>\s*([^<]+?)\s*<\/h1>/) || voiceDecode(ld.headline);
+  if (!headline) throw new Error(`voice.mv /story/${id}: headline not found (markup changed?)`);
+  const st = voiceSlugTime(id);
+  let date = st ? st.date : '', time = st ? st.time : '';
+  if (!st && ld.datePublished) {             // UTC in the JSON-LD -> Maldives time (UTC+5)
+    const t = new Date(Date.parse(ld.datePublished) + 5 * 3600e3);
+    if (!isNaN(t)) { date = `${String(t.getUTCDate()).padStart(2, '0')} ${MONTHS[t.getUTCMonth()]} ${t.getUTCFullYear()}`;
+                     time = `${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`; }
+  }
+  return {
+    id, url: `${VOICE_BASE}/story/${id}`, headline,
+    summary: pick(/<meta name="description" content="([^"]*)"/) || voiceDecode(ld.description),
+    category: voiceDecode(ld.articleSection),
+    date, time,
+    image: pick(/<meta property="og:image" content="([^"]+)"/) || (Array.isArray(ld.image) ? ld.image[0] : ld.image) || '',
+    author: voiceDecode(ld.author && ld.author.name)
+  };
 }
 
 async function voiceRefresh(limit) {
   const home = voiceParseHome(await voiceGet('/'));
-  const ids = [...home.keys()].sort((a, b) => b - a).slice(0, Math.max(limit, 12));
+  const order = r => (voiceSlugTime(r.id) || {}).key || '';
+  const recs = [...home.values()].filter(r => r.headline)
+    .sort((a, b) => order(b).localeCompare(order(a)))   // stable: undated slugs keep homepage order at the end
+    .slice(0, Math.max(limit, 12));
   const items = [];
-  for (const id of ids) {                    // sequential on purpose: be gentle with voice.mv
-    let art = voiceArticles.get(id);
+  for (const h of recs) {                    // sequential on purpose: be gentle with voice.mv
+    let art = voiceArticles.get(h.id);
     if (!art) {
       try {
-        art = voiceParseArticle(id, await voiceGet('/' + id));
-        voiceArticles.set(id, art);
+        art = voiceParseArticle(h.id, await voiceGet('/story/' + h.id));
+        voiceArticles.set(h.id, art);
         if (voiceArticles.size > VOICE_ARTICLE_MAX) voiceArticles.delete(voiceArticles.keys().next().value);
-      } catch (e) { console.error('voice article', id, e.message); continue; }
+      } catch (e) {                          // article page failed: the card alone is still airable
+        console.error('voice article', h.id, e.message);
+        const st = voiceSlugTime(h.id) || {};
+        art = { id: h.id, url: `${VOICE_BASE}/story/${h.id}`, headline: h.headline, summary: '', category: h.category || '',
+                date: st.date || h.date || '', time: st.time || '', image: h.thumb || '', author: '' };
+      }
     }
-    const h = home.get(id) || {};
-    items.push({ ...art, short: h.short || art.headline, thumb: h.thumb || '', image: art.image || voiceOriginal(h.thumb) });
+    voiceShortMap.set(voiceShort(h.id), h.id);
+    items.push({ ...art, short: h.headline || art.headline, thumb: h.thumb || '', image: art.image || h.thumb || '',
+                 category: art.category || h.category || '' });
   }
-  if (!items.length) throw new Error('voice.mv: no articles parsed');
+  if (voiceShortMap.size > 500) voiceShortMap.delete(voiceShortMap.keys().next().value);
+  if (!items.length) throw new Error('voice.mv: no articles parsed (markup changed?)');
   voiceCache.list = items;
   voiceCache.updated = Date.now();
   voiceCache.error = null;
@@ -2507,11 +2548,13 @@ function voiceQrSvg(text) {
 
 const voiceQr = new Map();                    // id -> svg
 app.get('/api/voice/qr/:id.svg', (req, res) => {
-  const id = String(req.params.id).replace(/\D/g, '');
+  const id = String(req.params.id).toLowerCase().replace(/[^a-z0-9-]/g, '');
   if (!id) return res.status(400).send('bad id');
   try {
     if (!voiceQr.has(id)) {
-      voiceQr.set(id, voiceQrSvg(`${VOICE_BASE}/${id}`));
+      const code = voiceShort(id);
+      voiceShortMap.set(code, id);
+      voiceQr.set(id, voiceQrSvg(`https://mix.vxd.news/v/${code}`));
       if (voiceQr.size > 300) voiceQr.delete(voiceQr.keys().next().value);
     }
     res.set('Content-Type', 'image/svg+xml');
@@ -2519,6 +2562,13 @@ app.get('/api/voice/qr/:id.svg', (req, res) => {
     res.set('Cache-Control', 'public, max-age=86400');
     res.send(voiceQr.get(id));
   } catch (e) { res.status(500).send(e.message); }
+});
+
+// Short link behind the on-air QR. Unknown code (e.g. after a redeploy, before the feed has
+// re-read that story) -> voice.mv homepage rather than a 404 in a viewer's hand.
+app.get('/v/:code', (req, res) => {
+  const slug = voiceShortMap.get(String(req.params.code).toLowerCase());
+  res.redirect(302, slug ? `${VOICE_BASE}/story/${slug}` : VOICE_BASE + '/');
 });
 
 // ---- VOICE English news feed (maldivesvoice.mv) ----------------------------
