@@ -1014,17 +1014,88 @@ async function ytStartBroadcast(title, description) {
   return { id: b.id, url: 'https://www.youtube.com/watch?v=' + b.id, title: String(title).slice(0, 100) };
 }
 
+async function ytBroadcastStatus(id) {
+  const j = await ytCall('/liveBroadcasts', { params: { part: 'id,snippet,status,contentDetails', id } });
+  const b = (j.items || [])[0];
+  if (!b) return null;
+  return {
+    id: b.id,
+    title: b.snippet && b.snippet.title,
+    status: (b.status && b.status.lifeCycleStatus) || '',
+    boundStreamId: (b.contentDetails && b.contentDetails.boundStreamId) || '',
+  };
+}
+
+const YT_ON_AIR = /^(live|liveStarting|testing|testStarting)$/;
+
+// End a broadcast properly for whatever state it is in. transition->complete
+// only works on one that is live; a broadcast that never started (ready /
+// created) stays bound to the ingest stream forever, and the NEXT push on
+// that stream auto-starts IT — with its old title. That is the "YouTube
+// keeps the last name" bug. So anything that never went live is DELETED,
+// not left behind.
 async function ytEndBroadcast(id) {
-  // autoStop usually handles this, but be explicit â€” a broadcast left
-  // "live" with no ingest sits on the channel looking broken.
+  let st = null;
+  try { st = await ytBroadcastStatus(id); } catch (_) { /* fall through to blind transition */ }
+  if (st && st.status === 'complete') return 'already complete';
+  if (st && st.status === 'revoked') return 'revoked';
+  if (st && !YT_ON_AIR.test(st.status)) {
+    await ytCall('/liveBroadcasts', { method: 'DELETE', params: { id } });
+    return 'deleted (never went live, was ' + st.status + ')';
+  }
   try {
     await ytCall('/liveBroadcasts/transition', {
       method: 'POST', params: { id, broadcastStatus: 'complete', part: 'id,status' },
     });
+    return 'completed';
   } catch (e) {
-    // Already complete, or never started: both are fine, not failures.
-    if (!/redundant|invalid transition|not currently live/i.test(e.message)) throw e;
+    if (/redundant|invalid transition|not currently live/i.test(e.message)) {
+      try { await ytCall('/liveBroadcasts', { method: 'DELETE', params: { id } }); return 'deleted'; }
+      catch (_) { return 'left as is: ' + e.message; }
+    }
+    throw e;
   }
+}
+
+// Sweep every broadcast still bound to OUR ingest stream, other than
+// `keepId`. Live ones are completed, never-started ones are deleted. This
+// is what makes a go-live safe after a relay restart mid-event, a failed
+// end, or a rollback that could not clean up: whatever is left bound to the
+// stream would otherwise be the broadcast YouTube auto-starts next time.
+// Only broadcasts bound to the relay's own stream are touched — anything
+// scheduled by hand on another stream is not ours to end.
+async function ytSweepStale(streamId, keepId) {
+  const swept = [];
+  for (const broadcastStatus of ['active', 'upcoming']) {
+    let j;
+    try {
+      j = await ytCall('/liveBroadcasts', {
+        params: { part: 'id,snippet,status,contentDetails', broadcastStatus, maxResults: 50 },
+      });
+    } catch (e) { mlog('youtube: sweep list', broadcastStatus, 'failed:', e.message); continue; }
+    for (const b of (j.items || [])) {
+      const bound = b.contentDetails && b.contentDetails.boundStreamId;
+      if (bound !== streamId || b.id === keepId) continue;
+      const title = (b.snippet && b.snippet.title) || '';
+      try {
+        const how = await ytEndBroadcast(b.id);
+        swept.push({ id: b.id, title, how });
+        mlog('youtube: swept stale broadcast', b.id, JSON.stringify(title), '->', how);
+      } catch (e) {
+        swept.push({ id: b.id, title, how: 'FAILED: ' + e.message });
+        mlog('youtube: sweep of', b.id, 'FAILED:', e.message);
+      }
+    }
+  }
+  return swept;
+}
+
+// Read the key the OBS YouTube filter is actually holding, so the preflight
+// can say whether the next push lands on our stream or on something else.
+async function ytObsFilterKey() {
+  const cur = await obs.call('GetSourceFilter', { sourceName: OBS_SCENE_VOICE, filterName: OBS_YT_FILTER });
+  const s = cur.filterSettings || {};
+  return { server: s.server || '', key: s.key || '' };
 }
 
 // ---- one-time OAuth, to obtain the refresh token -------------------
@@ -1173,18 +1244,49 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
     // on OUR titled broadcast rather than whatever Studio had.
     // A YouTube failure must never take down the Facebook event â€” it is
     // recorded and surfaced, not thrown.
-    if (dests.youtube && autoPublish && ytConfigured()) {
-      try {
-        // Our own ingest stream's key goes into the OBS filter first, so
-        // the branch pushes to the stream our titled broadcast is bound to
-        // and never to Studio's default (which carries Studio's title).
-        const rs = await ytEnsureRelayStream();
-        await setDestination('youtube', rs.server, rs.key);
-        ytBroadcast = await ytStartBroadcast(title, description);
-        mlog('youtube broadcast created', ytBroadcast.id, 'on stream', rs.id);
-      } catch (e) { ytError = e.message; mlog('youtube FAILED:', ytError); }
+    // The YouTube branch is armed ONLY after (a) our own ingest key is in the
+    // OBS filter and (b) a broadcast carrying THIS event's name is bound to
+    // that stream. If either step fails, YouTube is dropped from the event
+    // and said out loud — pushing anyway would start whatever broadcast was
+    // last bound to whatever key is in the filter, i.e. the previous name.
+    // YT_LEGACY_OK=1 restores the old push-blind behaviour as an escape
+    // hatch; it is off by default because that behaviour IS the bug.
+    let ytArmed = false, ytSwept = [];
+    if (dests.youtube && autoPublish) {
+      if (!ytConfigured()) {
+        ytError = 'YouTube API not configured on the server (YT_CLIENT_ID / YT_CLIENT_SECRET / YT_REFRESH_TOKEN)';
+        mlog('youtube SKIPPED:', ytError);
+      } else {
+        try {
+          const rs = await ytEnsureRelayStream();
+          // Clear anything still bound to our stream from an earlier event
+          // BEFORE creating the new broadcast, so the only candidate for
+          // auto-start is the one we are about to make.
+          ytSwept = await ytSweepStale(rs.id, null);
+          await setDestination('youtube', rs.server, rs.key);
+          const chk = await ytObsFilterKey();
+          if (chk.key !== rs.key) throw new Error('OBS YouTube filter did not take the relay key (holds ' +
+            (chk.key ? chk.key.slice(0, 4) + '…' : 'nothing') + ')');
+          ytBroadcast = await ytStartBroadcast(title, description);
+          mlog('youtube broadcast created', ytBroadcast.id, JSON.stringify(ytBroadcast.title), 'on stream', rs.id);
+          await setBranchEnabled('youtube', true); ytArmed = true;
+          mlog('youtube branch armed');
+        } catch (e) {
+          ytError = e.message; mlog('youtube FAILED:', ytError);
+          if (ytBroadcast) { try { await ytEndBroadcast(ytBroadcast.id); } catch (_) {} ytBroadcast = null; }
+        }
+      }
+      if (!ytArmed) {
+        if (process.env.YT_LEGACY_OK === '1') {
+          await setBranchEnabled('youtube', true); ytArmed = true;
+          mlog('youtube branch armed in LEGACY mode (YT_LEGACY_OK=1) — title is whatever Studio has');
+          ytError += ' — pushed anyway (YT_LEGACY_OK), title NOT set';
+        } else {
+          dests.youtube = false;
+          ytError += ' — YouTube DROPPED from this event so the old title cannot go out';
+        }
+      }
     }
-    if (dests.youtube && autoPublish) { await setBranchEnabled('youtube', true); mlog('youtube branch armed'); }
 
     // 3. go. Only VOICE rides the main encoder â€” a DHUVAS-only or
     //    YouTube-only event is already on air from the branch filter
@@ -1205,6 +1307,7 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
     }
     matchState.skipped = skipped;
     matchState.youtube = ytBroadcast;
+    matchState.youtubeSwept = ytSwept;
     matchState.record = recArmed;
     if (ytError) matchState.lastError = 'YouTube: ' + ytError;
     if (recError) matchState.lastError =
@@ -1239,6 +1342,27 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
       if (errs.length) matchState.lastError =
         (matchState.lastError ? matchState.lastError + ' | ' : '') + errs.join(' | ');
     }, Number(process.env.FB_PUBLISH_DELAY_MS || 10000));
+
+    // 5. YouTube: confirm OUR broadcast is the one that went live. If after
+    //    a minute it is still "ready", the bytes are landing somewhere else
+    //    (another key, another broadcast) and the name on YouTube is not
+    //    this event's. Say so where the operator is looking.
+    if (ytBroadcast) setTimeout(async () => {
+      if (!matchState.live || !matchState.youtube || matchState.youtube.id !== ytBroadcast.id) return;
+      try {
+        const st = await ytBroadcastStatus(ytBroadcast.id);
+        if (st && YT_ON_AIR.test(st.status)) {
+          matchState.youtube.status = st.status;
+          mlog('youtube broadcast', ytBroadcast.id, 'is', st.status);
+        } else {
+          matchState.youtube.status = st ? st.status : 'missing';
+          const m = 'YouTube: broadcast "' + ytBroadcast.title + '" is ' + (st ? st.status : 'missing') +
+            ' after 60s - OBS is not pushing to its key, check which broadcast is live in Studio';
+          mlog(m);
+          matchState.lastError = (matchState.lastError ? matchState.lastError + ' | ' : '') + m;
+        }
+      } catch (e) { mlog('youtube status check failed:', e.message); }
+    }, Number(process.env.YT_LIVE_CHECK_MS || 60000));
 
     res.json({ ok: true, title, rehearsal: matchState.rehearsal, videos: matchState.videos,
                dests, skipped, youtube: ytBroadcast, youtubeError: ytError || undefined,
@@ -1322,8 +1446,18 @@ app.post('/api/match/end', async (req, res) => {
   }
 
   if (matchState.youtube) {
-    try { await ytEndBroadcast(matchState.youtube.id); }
+    try { const how = await ytEndBroadcast(matchState.youtube.id); mlog('youtube', matchState.youtube.id, how); }
     catch (e) { errors.push('YouTube: ' + e.message); }
+  }
+  // Whatever else is still bound to our stream (an event the relay forgot
+  // across a restart, a failed earlier end) goes now, so the next GO LIVE
+  // starts clean even if its own sweep cannot run.
+  if (ytConfigured()) {
+    try {
+      const rs = await ytEnsureRelayStream();
+      const swept = await ytSweepStale(rs.id, null);
+      if (swept.length) mlog('youtube: end swept', swept.length, 'stale broadcast(s)');
+    } catch (e) { mlog('youtube: end sweep skipped:', e.message); }
   }
 
   matchState.live = false;
@@ -1580,15 +1714,52 @@ app.get('/api/match/check', async (req, res) => {
       } catch (e) {
         out.youtube.channel = 'unknown â€” ' + e.message;
       }
-      try { out.youtube.streamId = await ytFindStream(); }
-      catch (e) {
+      try {
+        const rs = await ytEnsureRelayStream();
+        out.youtube.streamId = rs.id;
+        out.youtube.streamTitle = rs.title || YT_RELAY_STREAM_TITLE;
+        // Is OBS actually going to push to that stream? GO LIVE rewrites the
+        // key, but seeing a mismatch here explains the last event.
+        if (obs && obsState.connected) {
+          try {
+            const k = await ytObsFilterKey();
+            out.youtube.obsKeyMatches = k.key === rs.key;
+            if (!out.youtube.obsKeyMatches) {
+              out.warnings.push('OBS YouTube filter holds a DIFFERENT key than the relay stream (' +
+                (k.key ? k.key.slice(0, 4) + '…' : 'blank') + ') — GO LIVE rewrites it; if a stream was started by hand it went to the old key.');
+            }
+          } catch (e) { out.youtube.obsKeyMatches = 'unknown: ' + e.message; }
+        }
+        // Anything still bound to our stream from before is what YouTube
+        // would auto-start next — under the OLD name. GO LIVE sweeps these
+        // itself; listing them here shows why the last one went wrong.
+        try {
+          const stale = [];
+          for (const bs of ['active', 'upcoming']) {
+            const j = await ytCall('/liveBroadcasts', { params: { part: 'id,snippet,status,contentDetails', broadcastStatus: bs, maxResults: 50 } });
+            for (const b of (j.items || [])) {
+              if ((b.contentDetails && b.contentDetails.boundStreamId) !== rs.id) continue;
+              if (matchState.youtube && b.id === matchState.youtube.id) continue;
+              stale.push({ id: b.id, title: b.snippet && b.snippet.title, status: b.status && b.status.lifeCycleStatus });
+            }
+          }
+          out.youtube.staleBound = stale;
+          if (stale.length) {
+            out.warnings.push('YouTube: ' + stale.length + ' old broadcast(s) still bound to the relay stream (' +
+              stale.map(x => '"' + x.title + '" ' + x.status).join(', ') + ') — GO LIVE will clear them first.');
+          }
+        } catch (e) { out.youtube.staleBound = 'unknown: ' + e.message; }
+      } catch (e) {
         out.youtube.streamId = 'MISSING';
-        out.warnings.push('YouTube: ' + e.message + ' â€” create a persistent stream key in YouTube Studio (Go live -> Stream), or set YT_STREAM_ID.');
+        out.warnings.push('YouTube: ' + e.message + ' — the relay could not get its own ingest stream; YouTube will be DROPPED from GO LIVE.');
         out.ok = false;
       }
+    } else {
+      out.warnings.push('YouTube token FAILED — YouTube will be DROPPED from GO LIVE until it is fixed (consent screen in Testing expires the refresh token every 7 days).');
+      out.ok = false;
     }
   } else {
-    out.warnings.push('YouTube is not configured â€” its title still comes from Studio.');
+    out.warnings.push('YouTube API is NOT configured on this server — YouTube will be DROPPED from GO LIVE (set YT_CLIENT_ID / YT_CLIENT_SECRET / YT_REFRESH_TOKEN).');
   }
   out.auth = { required: authRequired(), sessionHours: AUTH_HOURS };
   if (!authRequired()) {
@@ -1619,6 +1790,7 @@ app.get('/api/match/status', (req, res) => {
     starting: matchState.starting,
     rehearsal: matchState.rehearsal,
     youtube: matchState.youtube,
+    youtubeSwept: matchState.youtubeSwept || [],
     title: matchState.title,
     startedAt: matchState.startedAt,
     publishedAt: matchState.publishedAt,

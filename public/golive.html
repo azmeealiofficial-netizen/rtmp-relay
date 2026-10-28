@@ -516,15 +516,21 @@ async function goLive(t){
   if(!r.ok){ msg('Failed: '+(r.data.error||'unknown error'),'err'); }
   else{
     const on=Object.keys(r.data.videos||{}).filter(k=>r.data.videos[k]).map(k=>DEST_LABEL[k]);
-    if(picked.youtube) on.push('YOUTUBE');
+    // YouTube only counts if the server actually armed it on a titled
+    // broadcast. If it could not, it says so here, in red — the branch was
+    // NOT pushed, so the old name cannot go out, but the event is not on YouTube.
+    const ytOn = r.data.dests && r.data.dests.youtube && r.data.youtube;
+    if(ytOn) on.push('YOUTUBE');
+    const ytSay = r.data.youtubeError ? ' YOUTUBE DROPPED: '+r.data.youtubeError
+      : ytOn ? ' YouTube title: "'+r.data.youtube.title+'".' : '';
     // A recording that failed to start must be said out loud here. It does
     // not stop the event, so nothing else on the page would report it.
     const recSay = r.data.recordError ? ' RECORDING FAILED: '+r.data.recordError
       : r.data.recording ? (r.data.recordMode==='branch' ? ' Recording the clean feed.'
                                                          : ' Recording the BRANDED output.')
       : '';
-    msg('Live on '+(on.join(' + ')||'nothing')+'. Publishing in ~10s once ingest is confirmed.'+recSay,
-        r.data.recordError?'warn':'ok');
+    msg('Live on '+(on.join(' + ')||'nothing')+'. Publishing in ~10s once ingest is confirmed.'+ytSay+recSay,
+        (r.data.recordError||r.data.youtubeError)?'warn':'ok');
     setTimeout(poll,12000);
   }
   poll();
@@ -675,7 +681,9 @@ async function preflight(){
   if(d.youtube) out.push('YouTube API: '+(d.youtube.configured
       ? (d.youtube.token==='ok'
           ? 'ok · '+d.youtube.privacy+' · ingest '+
-            (d.youtube.streamId==='MISSING' ? 'MISSING' : 'ok')
+            (d.youtube.streamId==='MISSING' ? 'MISSING' : ('"'+(d.youtube.streamTitle||d.youtube.streamId)+'"'))+
+            (d.youtube.obsKeyMatches===true ? ' · OBS key ok' : d.youtube.obsKeyMatches===false ? ' · OBS KEY MISMATCH' : '')+
+            (Array.isArray(d.youtube.staleBound)&&d.youtube.staleBound.length ? ' · '+d.youtube.staleBound.length+' STALE' : '')
           : 'TOKEN FAILED')
       : 'not configured'));
   (d.warnings||[]).forEach(w=>out.push('⚠ '+w));
