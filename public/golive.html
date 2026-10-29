@@ -668,7 +668,8 @@ async function preflight(){
   const r=await api('/api/match/check');
   const d=r.data||{};
   const out=[];
-  if(d.obs) out.push('OBS: '+(d.obs.connected?'connected':'NOT CONNECTED')+(d.obs.streaming?' · already streaming':''));
+  if(d.obs) out.push('OBS: '+(d.obs.connected?'connected':'NOT CONNECTED')+(d.obs.streaming?' · already streaming':'')+
+                     (d.obs.engine?(d.obs.engine==='ok'?' · outputs ok':' · OUTPUTS '+d.obs.engine):''));
   for(const [k,p] of Object.entries(d.pages||{})){
     if(p.skipped){ out.push(k.toUpperCase()+': not configured (stays manual)'); continue; }
     out.push(k.toUpperCase()+': '+(p.ok?'ok':'FAIL '+(p.error||''))+

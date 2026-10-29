@@ -19,14 +19,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 //    says so loudly. Failing closed would mean a forgotten env var
 //    bricks /golive at kickoff, and in this system a locked-out
 //    operator at kickoff is worse than an open panel.
-//  * The cookie is an HMAC over its own expiry â€” stateless, so a
+//  * The cookie is an HMAC over its own expiry — stateless, so a
 //    Railway restart mid-event does NOT sign anybody out. Sessions
 //    are not stored anywhere.
 //  * The signing secret derives from the PIN, so changing the PIN
 //    invalidates every outstanding session for free.
 //  * GET stays open: OBS browser sources (scorebug, volleybug,
 //    tagbug) poll unauthenticated and must never see a 401.
-//  * Field reporters are exempt where they need to be â€” SOS and
+//  * Field reporters are exempt where they need to be — SOS and
 //    message-ack come from phones that will never hold the PIN.
 // ============================================================
 const crypto = require('crypto');
@@ -41,7 +41,7 @@ const AUTH_SECRET  = process.env.GOLIVE_SECRET
 // no credentials; an SOS button that 401s is worse than useless.
 const AUTH_EXEMPT = new Set(['/api/auth/login', '/api/auth/logout', '/api/sos', '/api/msg/ack',
   // The Hiley playout PC posts its heartbeat from a Node script with no
-  // cookie jar. It authenticates with HILEY_TOKEN instead â€” see the Hiley
+  // cookie jar. It authenticates with HILEY_TOKEN instead — see the Hiley
   // section. Leaving it behind the PIN would mean a PIN change silently
   // takes Hiley's 24/7 channel off the dashboard.
   '/api/hiley/sync']);
@@ -134,7 +134,7 @@ app.get('/api/auth/status', (req, res) => {
 // OPTIONAL POSTGRESQL PERSISTENCE
 // If DATABASE_URL is set (Railway Postgres), reporters + ticker
 // settings persist across deploys. If it's not set (or pg isn't
-// installed), the server still runs fine using in-memory only â€”
+// installed), the server still runs fine using in-memory only —
 // it just resets on deploy, like before. No crash either way.
 // ============================================================
 let pool = null;
@@ -151,7 +151,7 @@ if (process.env.DATABASE_URL) {
 }
 
 // ============================================================
-// OBS CONTROL (obs-websocket v5) â€” replaces the vMix HTTP API
+// OBS CONTROL (obs-websocket v5) — replaces the vMix HTTP API
 //
 // Inlined here on purpose. The Dockerfile does `COPY server.js ./`
 // and nothing else, so a separate obs.js would MODULE_NOT_FOUND on
@@ -160,7 +160,7 @@ if (process.env.DATABASE_URL) {
 //
 // The relay holds ONE long-lived websocket to OBS and keeps the last
 // known state in memory. The panel polls the relay exactly as it
-// always did; the relay never polls OBS â€” obs-websocket pushes
+// always did; the relay never polls OBS — obs-websocket pushes
 // events instead. Strictly less traffic than the old vMix setup.
 // ============================================================
 let OBSWebSocket = null;
@@ -180,21 +180,21 @@ const OBS_SCENE_DHUVAS  = process.env.OBS_SCENE_DHUVAS  || 'DHUVAS';
 const OBS_SCENE_PROGRAM = process.env.OBS_SCENE_PROGRAM || 'Program';
 const OBS_BRANCH_FILTER = process.env.OBS_BRANCH_FILTER || 'Branch Output';
 // Second Branch Output filter, on the VOICE scene, pushing to YouTube.
-// Separate encode from the main stream â€” see the load note in the docs.
+// Separate encode from the main stream — see the load note in the docs.
 const OBS_YT_FILTER     = process.env.OBS_YT_FILTER     || 'YouTube';
 // Third Branch Output filter, on the Program scene, writing the CLEAN feed
 // to a local file. Program carries no branding, so it is the only picture on
 // this box worth re-editing from. OBS's own Record button cannot be pointed
 // at it: native recording always takes the main output, which is the branded
-// VOICE scene. Leave the filter's server and key blank â€” Branch Output runs
+// VOICE scene. Leave the filter's server and key blank — Branch Output runs
 // as recording-only when there is no connection info.
 const OBS_REC_FILTER    = process.env.OBS_REC_FILTER    || 'Record';
-const OBS_AUDIO_INPUT   = process.env.OBS_AUDIO_INPUT   || 'CAM â€” PSM (NDI)';
-const OBS_FTB_VOICE     = process.env.OBS_FTB_VOICE     || 'FTB â€” Black (VOICE)';
-const OBS_FTB_DHUVAS    = process.env.OBS_FTB_DHUVAS    || 'FTB â€” Black (DHUVAS)';
+const OBS_AUDIO_INPUT   = process.env.OBS_AUDIO_INPUT   || 'CAM — PSM (NDI)';
+const OBS_FTB_VOICE     = process.env.OBS_FTB_VOICE     || 'FTB — Black (VOICE)';
+const OBS_FTB_DHUVAS    = process.env.OBS_FTB_DHUVAS    || 'FTB — Black (DHUVAS)';
 
 // Only scene items whose name starts with this take part in TAKE.
-// Overlays ("OVL â€” ...") are left alone.
+// Overlays ("OVL — ...") are left alone.
 const OBS_CAM_PREFIX = process.env.OBS_CAM_PREFIX || 'CAM';
 
 const obs = OBSWebSocket ? new OBSWebSocket() : null;
@@ -239,7 +239,7 @@ async function obsRefreshScene() {
     obsState.cams = (items.sceneItems || [])
       .filter((i) => String(i.sourceName || '').startsWith(OBS_CAM_PREFIX))
       .map((i) => ({ id: i.sceneItemId, name: i.sourceName, live: !!i.sceneItemEnabled }))
-      .reverse(); // top of the OBS list first â€” matches what the operator sees
+      .reverse(); // top of the OBS list first — matches what the operator sees
   } catch (e) { obsState.lastError = 'scene: ' + e.message; }
 
   try {
@@ -247,19 +247,19 @@ async function obsRefreshScene() {
       sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
     });
     obsState.branchLive = !!f.filterEnabled;
-  } catch (e) { /* filter may not exist yet â€” not fatal */ }
+  } catch (e) { /* filter may not exist yet — not fatal */ }
 
   try {
     const y = await obs.call('GetSourceFilter', {
       sourceName: OBS_SCENE_VOICE, filterName: OBS_YT_FILTER,
     });
     obsState.ytLive = !!y.filterEnabled;
-  } catch (e) { obsState.ytLive = false; /* no YouTube filter â€” not fatal */ }
+  } catch (e) { obsState.ytLive = false; /* no YouTube filter — not fatal */ }
 
   // Which recorder are we actually driving? The Branch Output filter on
   // Program is preferred because it is the only one that produces the clean
   // feed. If it is absent we fall back to OBS's own recorder, which captures
-  // the branded VOICE output â€” still useful, but not the same file. recMode
+  // the branded VOICE output — still useful, but not the same file. recMode
   // is carried all the way to the panel so nothing ever labels a branded
   // recording "clean".
   try {
@@ -284,7 +284,7 @@ async function obsRefreshScene() {
     obsState.volume = mulToSlider(v.inputVolumeMul);
     const m = await obs.call('GetInputMute', { inputName: OBS_AUDIO_INPUT });
     obsState.muted = !!m.inputMuted;
-  } catch (e) { /* audio input may be named differently â€” not fatal */ }
+  } catch (e) { /* audio input may be named differently — not fatal */ }
 
   try {
     const ftb = await obs.call('GetSceneItemId', {
@@ -294,7 +294,7 @@ async function obsRefreshScene() {
       sceneName: OBS_SCENE_VOICE, sceneItemId: ftb.sceneItemId,
     });
     obsState.ftb = !!en.sceneItemEnabled;
-  } catch (e) { /* no FTB source â€” not fatal */ }
+  } catch (e) { /* no FTB source — not fatal */ }
 
   obsState.lastUpdate = Date.now();
 }
@@ -327,7 +327,7 @@ async function obsPollStats() {
   } catch (e) { /* ignore */ }
 
   // Branch Output does not report through obs-websocket at all, so in branch
-  // mode filter-enabled IS the lamp â€” the same fidelity the Dhuvas and
+  // mode filter-enabled IS the lamp — the same fidelity the Dhuvas and
   // YouTube lamps have always had. Native mode gets the real thing.
   if (obsState.recMode === 'native') {
     try {
@@ -397,7 +397,12 @@ if (obs) {
     obsState.connected = false;
     obsState.lastError = (e && e.message) ? e.message : 'connection error';
   });
-  obs.on('StreamStateChanged', (e) => { obsState.streaming = !!e.outputActive; });
+  obs.on('StreamStateChanged', (e) => {
+    obsState.streaming = !!e.outputActive;
+    obsState.streamState = e.outputState || '';
+    obsState.streamStateAt = Date.now();
+    if (e.outputState) mlog('OBS stream state:', e.outputState);
+  });
   obs.on('CurrentProgramSceneChanged', (e) => { obsState.currentScene = e.sceneName; });
   obs.on('SceneItemEnableStateChanged', (e) => {
     if (e.sceneName === OBS_SCENE_PROGRAM) {
@@ -569,7 +574,7 @@ app.post('/api/obs/destination', async (req, res) => {
         streamServiceSettings: { server, key, use_auth: false },
       });
     } else if (target === 'dhuvas') {
-      // Read first, patch, write back â€” the plugin stores far more than
+      // Read first, patch, write back — the plugin stores far more than
       // these two fields and a bare set would wipe the rest.
       const cur = await obs.call('GetSourceFilter', {
         sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
@@ -607,7 +612,7 @@ app.post('/api/obs/call', async (req, res) => {
 });
 
 // ============================================================
-// MATCH AUTOMATION â€” Facebook Live via Graph API
+// MATCH AUTOMATION — Facebook Live via Graph API
 //
 // One call creates a live video on the selected pages, writes each
 // page's stream key into the right place in OBS, and starts streaming.
@@ -618,14 +623,14 @@ app.post('/api/obs/call', async (req, res) => {
 // Omit the object entirely and all three are used, so every older
 // caller behaves exactly as before. The three are genuinely independent
 // in OBS: VOICE is the main encoder output, DHUVAS and YouTube are
-// Branch Output filters which â€” under Interlock "Always ON" â€” broadcast
+// Branch Output filters which — under Interlock "Always ON" — broadcast
 // on their own the moment they are enabled. So a DHUVAS-only event is a
 // real thing: create the DHUVAS broadcast, arm its branch, and never
 // call StartStream at all. What changes per selection:
-//   voice    â†’ create the VOICE video, SetStreamServiceSettings, StartStream
-//   dhuvas   â†’ create the DHUVAS video, write the branch key, arm the branch
-//   youtube  â†’ create the bound YouTube broadcast, arm the YouTube branch
-// VOICE stays the selected scene in OBS regardless â€” the branches encode
+//   voice    → create the VOICE video, SetStreamServiceSettings, StartStream
+//   dhuvas   → create the DHUVAS video, write the branch key, arm the branch
+//   youtube  → create the bound YouTube broadcast, arm the YouTube branch
+// VOICE stays the selected scene in OBS regardless — the branches encode
 // their own source scene, and clicking DHUVAS to "match" a DHUVAS-only
 // event would swap branding on every output.
 //
@@ -644,7 +649,7 @@ app.post('/api/obs/call', async (req, res) => {
 // REHEARSAL MODE: POST /api/match/start with {"publish": false} runs
 // steps 1-3 and skips step 4 entirely. The broadcasts are created,
 // the keys land in OBS, the encoder runs and Facebook ingests the
-// feed â€” but nothing is ever flipped to LIVE_NOW, so nothing appears
+// feed — but nothing is ever flipped to LIVE_NOW, so nothing appears
 // on either page and no follower is notified. /api/match/end closes
 // the unpublished broadcasts and leaves no VOD behind. Use this to
 // exercise the whole path at any hour without going public.
@@ -667,7 +672,7 @@ const FB_PAGES = {
 
 const matchState = {
   live: false,
-  rehearsal: false,        // true when started with {publish:false} â€” never auto-publishes
+  rehearsal: false,        // true when started with {publish:false} — never auto-publishes
   youtube: null,           // { id, url, title } when a YouTube broadcast was created
   title: '',
   startedAt: 0,
@@ -678,7 +683,7 @@ const matchState = {
   // which signal proves ingest (see ingestProven()).
   dests: { voice: false, dhuvas: false, youtube: false },
   // True only when THIS event started the recording. A recording somebody
-  // armed by hand is theirs to stop â€” END LIVE must not silently kill it.
+  // armed by hand is theirs to stop — END LIVE must not silently kill it.
   record: false,
   // True from the first line of /api/match/start until it has either
   // succeeded or rolled back. A go-live takes ~6s and the button stayed
@@ -695,8 +700,8 @@ const matchState = {
 function mlog(...a) { console.log(new Date().toISOString(), '[match]', ...a); }
 
 // ---- destination selection ---------------------------------------
-// Default is all three, so every existing caller â€” the PowerShell
-// snippets, the control panel, an older cached golive.html â€” keeps
+// Default is all three, so every existing caller — the PowerShell
+// snippets, the control panel, an older cached golive.html — keeps
 // behaving exactly as before. When `destinations` IS supplied, only
 // the keys explicitly set true are used: a partial object means
 // precisely what it names, never "these plus the rest".
@@ -714,7 +719,7 @@ function pickDests(body) {
 
 // Proof that bytes are actually flowing before anything is published.
 // VOICE rides the main encoder, so GetStreamStatus is the signal. A
-// DHUVAS-only event never calls StartStream at all â€” under Interlock
+// DHUVAS-only event never calls StartStream at all — under Interlock
 // "Always ON" the branch filter IS the output, so its enabled state is
 // what has to be true. Checking the wrong one would leave a perfectly
 // healthy DHUVAS event permanently UNPUBLISHED.
@@ -737,15 +742,91 @@ async function ingestProven(dests) {
 // whose output died in the first seconds is left UNPUBLISHED (nothing
 // on the page) rather than published to a spinner. VOICE = main
 // encoder; DHUVAS = its branch filter still enabled.
+// ---- OBS truth, not OBS acceptance (29 Oct 2026) --------------------
+// On 29 Oct OBS froze at 14:27 while stopping an event (the DHUVAS branch
+// was cut off by Facebook and hung in its reconnect loop). obs-websocket
+// kept answering, so the 21:00 GO LIVE "succeeded": keys written, filters
+// enabled, StartStream accepted — and nothing left the building. Every
+// check below asks whether an output is actually RUNNING, with a timeout,
+// instead of trusting that a command did not throw.
+function obsCallT(requestType, data, ms) {
+  ms = ms || 5000;
+  return Promise.race([
+    obs.call(requestType, data),
+    new Promise((_, rej) => setTimeout(() => rej(new Error(
+      'OBS did not answer ' + requestType + ' within ' + (ms / 1000) + 's - OBS may be frozen')), ms)),
+  ]);
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Polls fn() until it returns truthy or the deadline passes. Errors count
+// as "not yet". Returns the last truthy value, or false.
+async function waitFor(fn, timeoutMs, everyMs) {
+  const until = Date.now() + timeoutMs;
+  for (;;) {
+    try { const v = await fn(); if (v) return v; } catch (_) { /* not yet */ }
+    if (Date.now() >= until) return false;
+    await sleep(everyMs || 1000);
+  }
+}
+
+// Branch Output has no status API of its own, but each running filter
+// creates a real OBS output named "<filter name> (<n>)", which
+// GetOutputList / GetOutputStatus do report. { supported:false } means this
+// obs-websocket cannot tell us, and callers fall back to filter-enabled.
+async function branchOutputStatus(filterName) {
+  let list;
+  try { list = await obsCallT('GetOutputList'); }
+  catch (e) {
+    if (/frozen/.test(e.message)) throw e;
+    return { supported: false };
+  }
+  const outs = (list.outputs || []).filter((o) => String(o.outputName || '').startsWith(filterName + ' ('));
+  const res = { supported: true, found: outs.length > 0, active: false, reconnecting: false, bytes: 0 };
+  for (const o of outs) {
+    try {
+      const s = await obsCallT('GetOutputStatus', { outputName: o.outputName });
+      if (s.outputActive) res.active = true;
+      if (s.outputReconnecting) res.reconnecting = true;
+      res.bytes += s.outputBytes || 0;
+    } catch (e) {
+      if (/frozen/.test(e.message)) throw e;
+      if (o.outputActive) res.active = true;
+    }
+  }
+  return res;
+}
+
+const BRANCH_FILTER_NAME = { dhuvas: OBS_BRANCH_FILTER, youtube: OBS_YT_FILTER };
+
+// Is this brand's feed actually leaving OBS right now?
 async function pageIngestUp(brand) {
   if (brand === 'voice') {
-    const st = await obs.call('GetStreamStatus');
-    return !!st.outputActive;
+    const st = await obsCallT('GetStreamStatus');
+    return !!st.outputActive && (st.outputBytes || 0) > 0;
   }
-  const f = await obs.call('GetSourceFilter', {
+  const f = await obsCallT('GetSourceFilter', {
     sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
   });
-  return !!f.filterEnabled;
+  if (!f.filterEnabled) return false;
+  const b = await branchOutputStatus(OBS_BRANCH_FILTER);
+  // Can't see the output (old obs-websocket, or it is named differently
+  // than "<filter> (n)") -> filter state is all we have, as before.
+  if (!b.supported || !b.found) return true;
+  return b.active && !b.reconnecting && b.bytes > 0;
+}
+
+// "Stopping Stream..." that never finishes is how the 29 Oct freeze looked
+// in the OBS window. obs-websocket reports the transition as an event.
+const OBS_STUCK_MS = Number(process.env.OBS_STUCK_MS || 20000);
+function obsStuckReason() {
+  if (obsState.streamState === 'OBS_WEBSOCKET_OUTPUT_STOPPING' &&
+      Date.now() - obsState.streamStateAt > OBS_STUCK_MS) {
+    const t = new Date(obsState.streamStateAt + 5 * 3600 * 1000).toISOString().slice(11, 16);
+    return 'OBS has been stuck on "Stopping Stream" since ' + t + ' MVT - it is frozen and will not start a stream. End OBS in Task Manager, reopen it (as administrator), then try again.';
+  }
+  return '';
 }
 
 async function fbCall(path, params, method) {
@@ -776,7 +857,7 @@ function splitStreamUrl(u) {
 }
 
 // Branch Output's Interlock is set to "Always ON", which means a filter
-// broadcasts the moment it is enabled â€” it no longer waits for StartStream.
+// broadcasts the moment it is enabled — it no longer waits for StartStream.
 // That is what makes the Monitor branch usable as a permanent preview, but
 // it also removes the safety net that used to exist by accident: an enabled
 // DHUVAS or YouTube filter is live as soon as OBS opens. So the invariant
@@ -795,8 +876,8 @@ async function setBranchEnabled(target, enabled) {
 // Recording is deliberately NOT a destination. Nothing is published, nothing
 // goes public, and the failure mode is the opposite of a broadcast's: an event
 // that records nothing has lost an archive, not leaked one. So it is armed
-// FIRST and disarmed LAST â€” the file covers the whole event, ramp-up and
-// wind-down included â€” and a recording failure never aborts a go-live.
+// FIRST and disarmed LAST — the file covers the whole event, ramp-up and
+// wind-down included — and a recording failure never aborts a go-live.
 async function setRecordEnabled(enabled) {
   if (obsState.recMode === 'branch') {
     await obs.call('SetSourceFilterEnabled', {
@@ -804,11 +885,11 @@ async function setRecordEnabled(enabled) {
     });
   } else if (obsState.recMode === 'native') {
     // StartRecord on a running recorder throws, and so does StopRecord on an
-    // idle one â€” which would turn a clean end into "ended with problems".
+    // idle one — which would turn a clean end into "ended with problems".
     if (enabled === obsState.recording) return;
     await obs.call(enabled ? 'StartRecord' : 'StopRecord');
   } else {
-    throw new Error('no recording output in OBS â€” add a "' + OBS_REC_FILTER +
+    throw new Error('no recording output in OBS — add a "' + OBS_REC_FILTER +
       '" Branch Output filter to the ' + OBS_SCENE_PROGRAM + ' scene, server and key blank');
   }
   obsState.recording = enabled;
@@ -842,7 +923,7 @@ async function setDestination(brand, server, key) {
 //
 // Facebook is fully API-driven; YouTube was not. It rode a persistent
 // stream key set in the OBS Branch Output filter, so its title was
-// whatever Studio happened to have â€” an easy thing to forget, and
+// whatever Studio happened to have — an easy thing to forget, and
 // invisible when forgotten.
 //
 // This keeps the persistent key (OBS never changes) and instead creates
@@ -850,8 +931,8 @@ async function setDestination(brand, server, key) {
 // broadcast carries the event name and caption, and `enableAutoStart`
 // makes it go live the moment the branch starts pushing.
 //
-// âš  The refresh token only lasts 7 days unless the Google OAuth consent
-// screen publishing status is "In production". Testing mode expires it â€”
+// ⚠ The refresh token only lasts 7 days unless the Google OAuth consent
+// screen publishing status is "In production". Testing mode expires it —
 // same silent-failure shape as the Facebook data-access clock.
 // ============================================================
 const YT_CLIENT_ID     = process.env.YT_CLIENT_ID || '';
@@ -892,7 +973,7 @@ async function ytCall(pathname, { method = 'GET', params = {}, body } = {}) {
   return j;
 }
 
-// The channel's reusable ingest stream â€” the one whose key is already in
+// The channel's reusable ingest stream — the one whose key is already in
 // the OBS Branch Output filter. Looked up once per event rather than
 // stored, so rotating the key in Studio doesn't silently break us.
 async function ytFindStream() {
@@ -917,7 +998,7 @@ async function ytFindStream() {
 
 // Escape hatch for when the list call is unusable: make our own reusable
 // ingest stream and pin its id in YT_STREAM_ID. The returned key then goes
-// into the OBS YouTube Branch Output filter. Deliberately NOT automatic â€”
+// into the OBS YouTube Branch Output filter. Deliberately NOT automatic —
 // creating streams silently on every failure would litter the channel.
 async function ytCreateStream(title) {
   const j = await ytCall('/liveStreams', {
@@ -1111,7 +1192,7 @@ app.get('/oauth/youtube/start', (req, res) => {
   u.searchParams.set('access_type', 'offline');
   // 'consent' forces a refresh_token every time. 'select_account' forces the
   // account chooser, which is the ONLY place Google offers Brand Account
-  // channels â€” sign in straight through and you silently authorise the
+  // channels — sign in straight through and you silently authorise the
   // personal channel instead, which is not live-enabled.
   u.searchParams.set('prompt', 'select_account consent');
   res.redirect(u.toString());
@@ -1137,7 +1218,7 @@ app.get('/oauth/youtube/callback', async (req, res) => {
       '<!doctype html><meta charset=utf-8><title>YouTube refresh token</title>' +
       '<body style="font-family:ui-monospace,monospace;background:#141413;color:#f2f0ec;padding:2rem;line-height:1.6">' +
       '<h1 style="font-family:ui-sans-serif,system-ui">Copy this into Railway as <code>YT_REFRESH_TOKEN</code></h1>' +
-      '<p style="color:#f0915e">Shown once. Treat it like a password â€” it grants ongoing access to the channel.</p>' +
+      '<p style="color:#f0915e">Shown once. Treat it like a password — it grants ongoing access to the channel.</p>' +
       '<textarea readonly rows=4 style="width:100%;font:inherit;background:#1e1d1b;color:#f2f0ec;border:1px solid #2e2d2a;padding:1rem;border-radius:6px">' +
       String(j.refresh_token).replace(/[<>&]/g, '') + '</textarea>' +
       '<p>Then redeploy and run <b>RUN PREFLIGHT</b> on /golive.</p></body>');
@@ -1151,11 +1232,11 @@ app.post('/api/match/start', async (req, res) => {
   const title = (req.body && req.body.title || '').trim();
   // Facebook shows `title` on the video itself, but the POST TEXT people
   // read in the feed comes from `description`. A title with no description
-  // produces a live post with no caption â€” which is what happened on the
+  // produces a live post with no caption — which is what happened on the
   // 15 Sep event. Fall back to the title so there is always copy.
   const description = (req.body && req.body.description || '').trim() || title;
   // Rehearsal: only an explicit false opts out of publishing. Anything
-  // else â€” absent, undefined, a stray string â€” behaves exactly as before,
+  // else — absent, undefined, a stray string — behaves exactly as before,
   // so a real match can never be silently turned into a rehearsal.
   const autoPublish = !(req.body && req.body.publish === false);
   // Recording defaults ON. Destinations default to nothing because a stray
@@ -1165,7 +1246,7 @@ app.post('/api/match/start', async (req, res) => {
   const wantRecord = !(req.body && req.body.record === false);
   const dests = pickDests(req.body);
   if (!title) return res.status(400).json({ error: 'title required' });
-  if (matchState.live) return res.status(409).json({ error: 'a match is already live â€” end it first' });
+  if (matchState.live) return res.status(409).json({ error: 'a match is already live — end it first' });
   if (matchState.starting) {
     mlog('start REFUSED: another go-live is still in progress');
     return res.status(409).json({ error: 'a go-live is already in progress - wait for it to finish' });
@@ -1181,13 +1262,13 @@ app.post('/api/match/start', async (req, res) => {
 
 async function matchStartInner(req, res, { title, description, autoPublish, wantRecord, dests }) {
   // Work with whatever pages are configured AND selected. A brand with no
-  // token is skipped entirely â€” its OBS destination is left exactly as it
+  // token is skipped entirely — its OBS destination is left exactly as it
   // is, so a manually-configured persistent stream key keeps working.
   const active = Object.entries(FB_PAGES).filter(([k, p]) => dests[k] && p.id && p.token);
   if (!active.length && !dests.youtube) {
     const why = (dests.voice || dests.dhuvas)
-      ? 'the selected Facebook page has no token â€” set FB_*_PAGE_ID and FB_*_TOKEN'
-      : 'no Facebook pages configured â€” set FB_*_PAGE_ID and FB_*_TOKEN';
+      ? 'the selected Facebook page has no token — set FB_*_PAGE_ID and FB_*_TOKEN'
+      : 'no Facebook pages configured — set FB_*_PAGE_ID and FB_*_TOKEN';
     return res.status(400).json({ error: why });
   }
   const skipped = Object.entries(FB_PAGES)
@@ -1198,8 +1279,13 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
   // even to an event that never calls StartStream: OBS streaming with no
   // event of ours running means someone started it by hand, and quietly
   // arming a branch alongside it is how you end up with two broadcasts.
+  const stuck = obsStuckReason();
+  if (stuck) {
+    mlog('start REFUSED:', stuck);
+    return res.status(409).json({ error: stuck });
+  }
   if (obsState.streaming) {
-    return res.status(409).json({ error: 'OBS is already streaming â€” stop it before starting a match' });
+    return res.status(409).json({ error: 'OBS is already streaming — stop it before starting a match' });
   }
 
   const created = {};
@@ -1207,7 +1293,7 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
   try {
     // 0. recording first, before anything touches Facebook, so the file
     //    starts ahead of the broadcast rather than after it. A recording
-    //    failure is reported and stepped over â€” never a reason to stop an
+    //    failure is reported and stepped over — never a reason to stop an
     //    event that is otherwise ready to go.
     if (wantRecord) {
       try { await setRecordEnabled(true); recArmed = true; mlog('recording armed'); }
@@ -1233,7 +1319,7 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
       mlog(brand, 'key written to OBS');
     }
 
-    // 2b. arm the branches. Dhuvas is safe either way â€” its broadcast is
+    // 2b. arm the branches. Dhuvas is safe either way — its broadcast is
     // still UNPUBLISHED at this point, so the bytes go somewhere invisible.
     // YouTube has no unpublished state and auto-starts on ingest, so it is
     // armed ONLY for a real go-live, never for a rehearsal.
@@ -1242,7 +1328,7 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
     // 2c. YouTube: create the broadcast and bind it to the persistent
     // stream BEFORE the branch starts pushing, so enableAutoStart fires
     // on OUR titled broadcast rather than whatever Studio had.
-    // A YouTube failure must never take down the Facebook event â€” it is
+    // A YouTube failure must never take down the Facebook event — it is
     // recorded and surfaced, not thrown.
     // The YouTube branch is armed ONLY after (a) our own ingest key is in the
     // OBS filter and (b) a broadcast carrying THIS event's name is bound to
@@ -1288,11 +1374,38 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
       }
     }
 
-    // 3. go. Only VOICE rides the main encoder â€” a DHUVAS-only or
+    // 3. go. Only VOICE rides the main encoder — a DHUVAS-only or
     //    YouTube-only event is already on air from the branch filter
     //    alone, and StartStream would push the main output at whatever
     //    stream key was last configured. So it is deliberately skipped.
-    if (dests.voice) { await obs.call('StartStream'); mlog('VOICE StartStream sent'); }
+    if (dests.voice) { await obsCallT('StartStream'); mlog('VOICE StartStream sent'); }
+
+    // 3b. PROVE IT. "No error" is not "on air" - see the 29 Oct note above
+    //     pageIngestUp(). Anything that has not actually started within
+    //     OBS_START_TIMEOUT_MS fails the whole go-live and rolls it back, so
+    //     the phone says so instead of showing LIVE over nothing.
+    const startMs = Number(process.env.OBS_START_TIMEOUT_MS || 20000);
+    const frozenHint = ' - OBS accepted the command but is not streaming. It is probably frozen ' +
+      '(look for "Stopping Stream..." stuck in OBS). End OBS in Task Manager, reopen it, then GO LIVE again.';
+    const mustStart = [];
+    if (dests.voice) mustStart.push('voice');
+    if (dests.dhuvas && created.dhuvas) mustStart.push('dhuvas');
+    for (const brand of mustStart) {
+      const ok = await waitFor(() => pageIngestUp(brand), startMs, 1000);
+      if (!ok) throw new Error(FB_PAGES[brand].label + ' did not start within ' + (startMs / 1000) + 's' + frozenHint);
+      mlog(brand, 'output confirmed running');
+    }
+    if (ytArmed) {
+      // YouTube failing must not take the Facebook event down with it.
+      const ok = await waitFor(async () => {
+        const b = await branchOutputStatus(OBS_YT_FILTER);
+        return !b.supported || !b.found || (b.active && b.bytes > 0);
+      }, startMs, 1000);
+      if (!ok) {
+        ytError = (ytError ? ytError + ' | ' : '') + 'YouTube output did not start within ' + (startMs / 1000) + 's - check the YouTube filter in OBS';
+        mlog('youtube output NOT running after', startMs, 'ms');
+      }
+    }
 
     matchState.live = true;
     matchState.dests = dests;
@@ -1314,31 +1427,47 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
       (matchState.lastError ? matchState.lastError + ' | ' : '') + 'recording: ' + recError;
 
     // 4. publish once OBS confirms ingest is actually running.
-    //    Skipped entirely in rehearsal mode â€” the broadcasts stay
+    //    Skipped entirely in rehearsal mode — the broadcasts stay
     //    UNPUBLISHED until /api/match/end closes them.
+    // Used to be ONE look at +10 s: a feed that took 11 s to connect stayed
+    // unpublished for the whole event. Now each page is retried every 3 s
+    // for FB_PUBLISH_WAIT_MS (default 60 s) and published the moment its
+    // feed is confirmed running. Only a page still dead at the end is left
+    // unpublished - and said out loud.
+    const eventStartedAt = matchState.startedAt;
     if (autoPublish) setTimeout(async () => {
+      const waitMs = Number(process.env.FB_PUBLISH_WAIT_MS || 60000);
+      const until = Date.now() + waitMs;
+      const lastErr = {};
+      for (;;) {
+        if (!matchState.live || matchState.startedAt !== eventStartedAt) return; // ended / replaced
+        let pending = 0;
+        for (const [brand, page] of active) {
+          const vid = matchState.videos[brand];
+          if (!vid || vid.published) continue;
+          try {
+            if (!await pageIngestUp(brand)) { pending++; lastErr[brand] = 'feed not running'; continue; }
+            await fbCall(`/${vid.id}`, { status: 'LIVE_NOW', access_token: page.token }, 'POST');
+            vid.published = true;
+            matchState.publishedAt = Date.now();
+            mlog(page.label, 'published', vid.id);
+          } catch (e) {
+            pending++; lastErr[brand] = 'publish failed: ' + e.message;
+            mlog(page.label, 'publish attempt failed:', e.message);
+          }
+        }
+        if (!pending) return;
+        if (Date.now() >= until) break;
+        await sleep(3000);
+      }
       const errs = [];
-      // Each page on its own: one page's failure must never block the
-      // other, and a page whose feed is already dead stays UNPUBLISHED
-      // rather than going out as a spinner.
       for (const [brand, page] of active) {
         const vid = matchState.videos[brand];
-        if (!vid || vid.published) continue;
-        try {
-          if (!await pageIngestUp(brand)) {
-            errs.push(page.label + ': feed not running - left unpublished');
-            mlog(page.label, 'NOT published: feed not running');
-            continue;
-          }
-          await fbCall(`/${vid.id}`, { status: 'LIVE_NOW', access_token: page.token }, 'POST');
-          vid.published = true;
-          mlog(page.label, 'published', vid.id);
-        } catch (e) {
-          errs.push(page.label + ': publish failed: ' + e.message);
-          mlog(page.label, 'publish FAILED:', e.message);
+        if (vid && !vid.published) {
+          errs.push(page.label + ': ' + (lastErr[brand] || 'not published') + ' after ' + (waitMs / 1000) + 's - left unpublished');
+          mlog(page.label, 'NOT published:', lastErr[brand]);
         }
       }
-      if (Object.values(matchState.videos).some(v => v && v.published)) matchState.publishedAt = Date.now();
       if (errs.length) matchState.lastError =
         (matchState.lastError ? matchState.lastError + ' | ' : '') + errs.join(' | ');
     }, Number(process.env.FB_PUBLISH_DELAY_MS || 10000));
@@ -1374,6 +1503,10 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
     for (const t of ['dhuvas', 'youtube']) {
       try { await setBranchEnabled(t, false); } catch (_) { /* best effort */ }
     }
+    if (dests.voice) {
+      try { const st = await obsCallT('GetStreamStatus'); if (st.outputActive) await obsCallT('StopStream'); }
+      catch (_) { /* best effort */ }
+    }
     // Only unwind a recording this call started. One that was already running
     // belongs to whoever armed it.
     if (recArmed) { try { await setRecordEnabled(false); } catch (_) {} }
@@ -1407,23 +1540,44 @@ app.post('/api/match/publish', async (req, res) => {
 app.post('/api/match/end', async (req, res) => {
   const errors = [];
 
-  // Stop the encoder first â€” ending the broadcasts while OBS is still
+  // Stop the encoder first — ending the broadcasts while OBS is still
   // pushing leaves Facebook trying to ingest a stream nobody is watching.
   if (obs && obsState.connected) {
     // Disarm the broadcast branches BEFORE StopStream. Under Always ON they
-    // do not stop with the main stream â€” leaving either enabled keeps it
+    // do not stop with the main stream — leaving either enabled keeps it
     // pushing after the event has "ended", which is the worst way to find
     // out this setting changed. Monitor is deliberately left running.
     for (const t of ['dhuvas', 'youtube']) {
       try { await setBranchEnabled(t, false); }
       catch (e) { errors.push(`branch ${t}: ${e.message}`); }
     }
+    // 29 Oct: Facebook's broadcasts were ended while the DHUVAS output was
+    // still connected. Facebook cut it off, Branch Output tried to reconnect
+    // to the dead key, and OBS froze for seven hours. So: wait until each
+    // branch output has really stopped (retrying the disarm once) BEFORE
+    // the broadcasts are ended below.
+    for (const t of ['dhuvas', 'youtube']) {
+      const name = BRANCH_FILTER_NAME[t];
+      const stopped = () => branchOutputStatus(name).then((b) => !b.supported || !b.active);
+      let ok = await waitFor(stopped, 8000, 500);
+      if (!ok) {
+        mlog('branch', t, 'still running after disarm - retrying');
+        try { await setBranchEnabled(t, false); } catch (_) {}
+        ok = await waitFor(stopped, 8000, 500);
+      }
+      if (!ok) errors.push(`branch ${t}: output still running after disarm - check OBS, restart it before the next event`);
+    }
     // Only stop the encoder if it is actually running. A DHUVAS-only or
     // YouTube-only event never started it, and StopStream on an idle OBS
-    // throws â€” which would report a clean end as "ended with problems".
-    if (obsState.streaming) {
-      try { await obs.call('StopStream'); }
-      catch (e) { errors.push('OBS: ' + e.message); }
+    // throws - which would report a clean end as "ended with problems".
+    let mainActive = obsState.streaming;
+    try { mainActive = !!(await obsCallT('GetStreamStatus')).outputActive; } catch (_) {}
+    if (mainActive) {
+      try {
+        await obsCallT('StopStream');
+        const ok = await waitFor(async () => !(await obsCallT('GetStreamStatus')).outputActive, 15000, 500);
+        if (!ok) errors.push('OBS: still "Stopping Stream" after 15s - OBS may be frozen; restart it before the next event');
+      } catch (e) { errors.push('OBS: ' + e.message); }
     }
     // Recording last, so the file runs past the final whistle rather than
     // stopping on it. Untouched if this event did not start it.
@@ -1432,7 +1586,7 @@ app.post('/api/match/end', async (req, res) => {
       catch (e) { errors.push('recording: ' + e.message); }
     }
   } else {
-    errors.push('OBS not connected â€” stop the stream manually');
+    errors.push('OBS not connected — stop the stream manually');
   }
 
   for (const [brand, page] of Object.entries(FB_PAGES)) {
@@ -1475,17 +1629,17 @@ app.post('/api/match/end', async (req, res) => {
 // ---- broadcasts we did not create ---------------------------------
 // matchState only knows the ids it made. Anything started from Live
 // Producer, from a persistent key, or by someone else on the team is
-// invisible to it â€” and after a relay restart, so is our own event.
+// invisible to it — and after a relay restart, so is our own event.
 // This scans both pages for whatever is still live.
 //
 // Ending is deliberately a SEPARATE, EXPLICIT call taking the exact ids
 // to close. Killing a colleague's broadcast by accident is a worse
 // failure than leaving one running, so nothing here ends anything on
 // its own.
-// âš  VERIFIED LIMITATION (16 Sep 2026): this edge does NOT return
+// ⚠ VERIFIED LIMITATION (16 Sep 2026): this edge does NOT return
 // UNPUBLISHED broadcasts. A rehearsal with two open unpublished videos
-// returned only older VODs. So the scan finds PUBLISHED lives â€” a Live
-// Producer stream, a persistent-key stream, a colleague's broadcast â€”
+// returned only older VODs. So the scan finds PUBLISHED lives — a Live
+// Producer stream, a persistent-key stream, a colleague's broadcast —
 // which is the case that matters, but it cannot recover an unpublished
 // broadcast orphaned by a relay restart. Only persisting matchState
 // fixes that. `broadcast_status` is not served on this edge either.
@@ -1501,7 +1655,7 @@ async function scanLiveVideos() {
       });
       for (const v of (j.data || [])) {
         // Blacklist the finished states rather than whitelisting live
-        // ones â€” the status vocabulary is not fully documented, and
+        // ones — the status vocabulary is not fully documented, and
         // missing an open broadcast is worse than listing a stale one.
         if (v.status === 'VOD' || v.status === 'PROCESSING') continue;
         const ours = Object.values(matchState.videos || {})
@@ -1580,7 +1734,7 @@ app.post('/api/live/end', async (req, res) => {
 // A page token can read "Expires: Never" and still stop working.
 // Separately from token expiry, Facebook enforces DATA ACCESS expiry:
 // roughly 90 days after the granting user last interacted with the app.
-// When it lapses the token starts failing with no prior warning â€” which,
+// When it lapses the token starts failing with no prior warning — which,
 // for an automation that fires at kickoff, is the worst possible moment
 // to find out. So the preflight reports the remaining days and goes
 // non-ok below the threshold, turning a silent failure into a visible
@@ -1605,9 +1759,30 @@ async function tokenHealth(token) {
   };
 }
 
-// Preflight â€” proves both page tokens still work, without creating
+// Preflight — proves both page tokens still work, without creating
 // anything. Token revocation is otherwise silent and you'd find out at
 // kickoff. Run this as part of the pre-match checklist.
+// Read-only: every output OBS knows about, and whether it is running. Used to
+// confirm Branch Output's naming ("Branch Output (0)", "YouTube (0)") so the
+// output-level checks above can be trusted. Names and flags only, no keys.
+app.get('/api/obs/outputs', async (req, res) => {
+  if (!obs || !obsState.connected) return res.status(503).json({ error: 'OBS not connected' });
+  try {
+    const list = await obsCallT('GetOutputList');
+    const outputs = [];
+    for (const o of (list.outputs || [])) {
+      const row = { name: o.outputName, kind: o.outputKind, active: !!o.outputActive };
+      try {
+        const st = await obsCallT('GetOutputStatus', { outputName: o.outputName });
+        row.active = !!st.outputActive; row.reconnecting = !!st.outputReconnecting; row.bytes = st.outputBytes || 0;
+      } catch (_) { /* some outputs do not report status */ }
+      outputs.push(row);
+    }
+    res.json({ streamState: obsState.streamState || '', streamStateAt: obsState.streamStateAt || 0,
+               stuck: obsStuckReason() || null, outputs });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
 app.get('/api/match/check', async (req, res) => {
   const out = {
     ok: true,
@@ -1619,8 +1794,8 @@ app.get('/api/match/check', async (req, res) => {
   for (const [brand, page] of Object.entries(FB_PAGES)) {
     if (!page.id || !page.token) {
       // Deliberately manual (e.g. a page whose token we can't get yet).
-      // Not a failure â€” but it won't be automated either.
-      out.pages[brand] = { ok: true, skipped: true, note: 'not configured â€” this page stays manual' };
+      // Not a failure — but it won't be automated either.
+      out.pages[brand] = { ok: true, skipped: true, note: 'not configured — this page stays manual' };
       continue;
     }
     configuredCount++;
@@ -1645,11 +1820,11 @@ app.get('/api/match/check', async (req, res) => {
       }
 
       if (!h.neverExpires) {
-        out.warnings.push(`${page.label}: token is NOT permanent â€” expires in ${h.expiresInDays} day(s). Re-derive it from a long-lived user token.`);
+        out.warnings.push(`${page.label}: token is NOT permanent — expires in ${h.expiresInDays} day(s). Re-derive it from a long-lived user token.`);
         out.ok = false;
       }
       if (!h.scopes.includes('pages_manage_posts')) {
-        out.warnings.push(`${page.label}: token is missing pages_manage_posts â€” live video creation will fail with (#200).`);
+        out.warnings.push(`${page.label}: token is missing pages_manage_posts — live video creation will fail with (#200).`);
         out.ok = false;
       }
       if (h.dataAccessDays !== null && h.dataAccessDays <= FB_EXPIRY_WARN_DAYS) {
@@ -1657,14 +1832,14 @@ app.get('/api/match/check', async (req, res) => {
         out.ok = false;
       }
     } catch (e) {
-      out.warnings.push(`${page.label}: could not read token health â€” ${e.message}`);
+      out.warnings.push(`${page.label}: could not read token health — ${e.message}`);
     }
   }
   if (!obsState.connected) out.ok = false;
   if (!configuredCount) { out.ok = false; out.error = 'no Facebook pages configured'; }
 
   // Interlock is "Always ON", so an armed branch outside an event is not
-  // merely untidy â€” it is broadcasting right now. Treat it as a failure.
+  // merely untidy — it is broadcasting right now. Treat it as a failure.
   out.branches = { dhuvas: obsState.branchLive, youtube: obsState.ytLive, live: matchState.live };
   // Say plainly which recorder is wired up. "Recording: on" means nothing if
   // the file turns out to be the branded output you cannot re-cut.
@@ -1674,12 +1849,12 @@ app.get('/api/match/check', async (req, res) => {
     clean: obsState.recMode === 'branch',
   };
   if (obsState.recMode === 'none') {
-    out.warnings.push('No recording output in OBS â€” add a "' + OBS_REC_FILTER +
+    out.warnings.push('No recording output in OBS — add a "' + OBS_REC_FILTER +
       '" Branch Output filter to the ' + OBS_SCENE_PROGRAM +
       ' scene (server and key blank) to archive the clean feed.');
   } else if (obsState.recMode === 'native') {
     out.warnings.push('Recording falls back to OBS\'s own recorder, which captures the BRANDED ' +
-      OBS_SCENE_VOICE + ' output â€” not the clean ' + OBS_SCENE_PROGRAM + ' feed.');
+      OBS_SCENE_VOICE + ' output — not the clean ' + OBS_SCENE_PROGRAM + ' feed.');
   }
 
   out.youtube = { configured: ytConfigured(), privacy: YT_PRIVACY };
@@ -1689,18 +1864,18 @@ app.get('/api/match/check', async (req, res) => {
     try { await ytToken(); out.youtube.token = 'ok'; }
     catch (e) {
       out.youtube.token = 'FAILED';
-      out.warnings.push('YouTube: ' + e.message + ' â€” the event name will not reach YouTube.');
+      out.warnings.push('YouTube: ' + e.message + ' — the event name will not reach YouTube.');
       out.ok = false;
     }
     // A working token is NOT enough. liveBroadcasts.bind needs a reusable
     // ingest stream to bind to, and that only exists if a persistent stream
     // key was created in YouTube Studio (Go live -> Stream). If it is absent
-    // ytFindStream() throws at GO LIVE time â€” i.e. with the crowd already
+    // ytFindStream() throws at GO LIVE time — i.e. with the crowd already
     // there. Surface it here, where it costs nothing.
     if (out.youtube.token === 'ok') {
       // WHICH channel did we actually get consent for? A Brand Account channel
       // is only used if it is picked at the consent screen; sign in without
-      // picking and you authorise the personal channel instead â€” which is not
+      // picking and you authorise the personal channel instead — which is not
       // live-enabled, and fails later with the misleading "user is not enabled
       // for live streaming". Print the channel so a mismatch is visible
       // immediately rather than inferred.
@@ -1709,10 +1884,10 @@ app.get('/api/match/check', async (req, res) => {
         const ch = (me.items || [])[0];
         out.youtube.channel = ch
           ? (ch.snippet.customUrl || ch.snippet.title) + ' [' + ch.id + ']'
-          : 'NONE â€” this Google account has no YouTube channel';
+          : 'NONE — this Google account has no YouTube channel';
         if (!ch) out.ok = false;
       } catch (e) {
-        out.youtube.channel = 'unknown â€” ' + e.message;
+        out.youtube.channel = 'unknown — ' + e.message;
       }
       try {
         const rs = await ytEnsureRelayStream();
@@ -1763,21 +1938,48 @@ app.get('/api/match/check', async (req, res) => {
   }
   out.auth = { required: authRequired(), sessionHours: AUTH_HOURS };
   if (!authRequired()) {
-    out.warnings.push('No PIN set â€” anyone who reaches this URL can start or end a broadcast. Set GOLIVE_PIN.');
+    out.warnings.push('No PIN set — anyone who reaches this URL can start or end a broadcast. Set GOLIVE_PIN.');
+  }
+  // Is OBS's output side alive, not just its websocket? (29 Oct)
+  out.obs.engine = 'ok';
+  if (obs && obsState.connected) {
+    const stuck = obsStuckReason();
+    if (stuck) { out.obs.engine = 'STUCK'; out.warnings.push(stuck); out.ok = false; }
+    else {
+      try {
+        await obsCallT('GetStreamStatus');
+        if (!matchState.live) {
+          for (const t of ['dhuvas', 'youtube']) {
+            const b = await branchOutputStatus(BRANCH_FILTER_NAME[t]);
+            if (b.supported && (b.active || b.reconnecting)) {
+              out.obs.engine = 'STUCK';
+              out.warnings.push((t === 'dhuvas' ? 'Dhuvas' : 'YouTube') + ' output is still ' +
+                (b.reconnecting ? 'RECONNECTING' : 'RUNNING') + ' with no event and its filter ' +
+                'is meant to be off - OBS is in a bad state. End OBS in Task Manager and reopen it.');
+              out.ok = false;
+            }
+          }
+        }
+      } catch (e) {
+        out.obs.engine = 'NOT RESPONDING';
+        out.warnings.push(e.message + '. End OBS in Task Manager and reopen it.');
+        out.ok = false;
+      }
+    }
   }
   if (!matchState.live) {
     if (obsState.branchLive) {
-      out.warnings.push('Dhuvas branch is ARMED with no event running â€” it is pushing to Facebook right now.');
+      out.warnings.push('Dhuvas branch is ARMED with no event running — it is pushing to Facebook right now.');
       out.ok = false;
     }
     if (obsState.ytLive) {
-      out.warnings.push('YouTube branch is ARMED with no event running â€” it is pushing to YouTube right now.');
+      out.warnings.push('YouTube branch is ARMED with no event running — it is pushing to YouTube right now.');
       out.ok = false;
     }
-    // Not a failure â€” nothing is public â€” but it is eating the disk the
+    // Not a failure — nothing is public — but it is eating the disk the
     // match is about to need, which is worth seeing before kickoff.
     if (obsState.recording) {
-      out.warnings.push('Recording is RUNNING with no event â€” it is writing to disk right now.');
+      out.warnings.push('Recording is RUNNING with no event — it is writing to disk right now.');
     }
   }
   if (!out.warnings.length) delete out.warnings;
@@ -1843,8 +2045,8 @@ app.get('/hls/:file', async (req, res) => {
 
 // ---- Reporters (persisted to Postgres when available) ----
 // Shape: { id, name, location, photo, tagVisible, pv }
-//   photo: base64 data URL or '' (optional â€” tag shows text-only without it)
-//   pv:    photo version â€” bumps whenever the photo changes, so the overlay
+//   photo: base64 data URL or '' (optional — tag shows text-only without it)
+//   pv:    photo version — bumps whenever the photo changes, so the overlay
 //          can poll light state every second and only refetch the heavy photo
 //          when pv actually changes.
 let reporters = [];
@@ -1855,14 +2057,14 @@ app.get('/api/reporters', (req, res) => {
   res.json(reporters);
 });
 
-// Full single reporter (includes the heavy photo) â€” overlay fetches this only on pv change
+// Full single reporter (includes the heavy photo) — overlay fetches this only on pv change
 app.get('/api/reporters/:id', (req, res) => {
   const r = findReporter(req.params.id);
   if (!r) return res.status(404).json({ error: 'Not found' });
   res.json(r);
 });
 
-// Lightweight tag state â€” overlay polls this every second (no photo payload)
+// Lightweight tag state — overlay polls this every second (no photo payload)
 app.get('/api/reporters/:id/tag', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const r = findReporter(req.params.id);
@@ -1871,7 +2073,7 @@ app.get('/api/reporters/:id/tag', (req, res) => {
 });
 
 // Single "active" reporter for the on-page bug overlay (tv / control views).
-// Picks the most recently toggled-on reporter. No photo payload â€” bug fetches it by id on pv change.
+// Picks the most recently toggled-on reporter. No photo payload — bug fetches it by id on pv change.
 app.get('/api/active-tag', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   const vis = reporters.filter(r => r.tagVisible);
@@ -1928,7 +2130,7 @@ app.post('/api/reporters/:id/tag', async (req, res) => {
   const r = findReporter(req.params.id);
   if (!r) return res.status(404).json({ error: 'Not found' });
   r.tagVisible = !!(req.body && req.body.visible);
-  if (r.tagVisible) r.tagAt = Date.now();   // recency â€” the page bug shows the most recent
+  if (r.tagVisible) r.tagAt = Date.now();   // recency — the page bug shows the most recent
   if (pool) {
     try { await pool.query('UPDATE reporters SET tag_visible=$2 WHERE id=$1', [r.id, r.tagVisible]); }
     catch (e) { console.error('tag toggle failed:', e.message); }
@@ -1989,7 +2191,7 @@ app.get('/api/sos/ack-poll', (req, res) => {
 
 let sosAcks = {};
 
-// === Director â†” reporter messaging (/api/msg/*) â€” in-memory by design ===
+// === Director ↔ reporter messaging (/api/msg/*) — in-memory by design ===
 const msgStore = Object.create(null);
 const msgNow = () => Date.now();
 const mkMsgId = () => msgNow().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -2049,7 +2251,7 @@ const emptySide = (color) => ({
 
 const blankScoreboard = () => ({
   visible: false,             // corner bug (top-left by default)
-  mainVisible: false,         // big centre board â€” when on, everything else hides
+  mainVisible: false,         // big centre board — when on, everything else hides
   lang: 'en',                 // 'en' (LTR, Latin) | 'dv' (RTL, Thaana)
   showCards: true,
   showFouls: false,
@@ -2096,7 +2298,7 @@ function saveScoreboard() {
   }, 400);
 }
 
-// While the clock runs nobody may touch the API for minutes at a time â€” keep a
+// While the clock runs nobody may touch the API for minutes at a time — keep a
 // warm snapshot on disk so a mid-half redeploy doesn't lose the running time.
 setInterval(() => { if (scoreboard.clock.running) saveScoreboard(); }, 20000).unref?.();
 
@@ -2107,7 +2309,7 @@ app.use('/api/score', (req, res, next) => {
 
 app.get('/api/score', (req, res) => res.json(scoreLight()));
 
-// Heavy logo payload â€” fetched only when lv changes
+// Heavy logo payload — fetched only when lv changes
 app.get('/api/score/logo/:side', (req, res) => {
   const s = scoreboard[req.params.side];
   if (!s) return res.status(404).json({ error: 'Unknown side' });
@@ -2135,7 +2337,7 @@ app.post('/api/score', (req, res) => {
   res.json(scoreLight());
 });
 
-// Relative score change â€” safer than sending an absolute value from two
+// Relative score change — safer than sending an absolute value from two
 // browsers at once, and never lets the score go negative.
 app.post('/api/score/goal', (req, res) => {
   const { side, delta = 1 } = req.body || {};
@@ -2146,7 +2348,7 @@ app.post('/api/score/goal', (req, res) => {
   res.json(scoreLight());
 });
 
-// Minute the match clock is at right now â€” used to stamp events automatically
+// Minute the match clock is at right now — used to stamp events automatically
 function currentMatchMinute() {
   const c = scoreboard.clock;
   const starts = { PRE: 0, '1H': 0, HT: 45, '2H': 45, FT: 90, ET1: 90, ET2: 105, PENS: 120 };
@@ -2223,7 +2425,7 @@ app.post('/api/score/reset', (req, res) => {
 // Separate live match from the soccer board, so a volleyball game
 // and a football game never fight over the same state.
 //
-// No clock â€” volleyball is rally scoring, so the interesting state
+// No clock — volleyball is rally scoring, so the interesting state
 // is points, sets, serve and timeouts. Because points come fast and
 // an operator WILL misclick, every mutating call pushes a snapshot
 // onto an undo stack.
@@ -2236,7 +2438,7 @@ const emptyVSide = (color) => ({
 
 const blankVolley = () => ({
   visible: false,          // corner bug
-  mainVisible: false,      // big centre board â€” when on, everything else hides
+  mainVisible: false,      // big centre board — when on, everything else hides
   lang: 'en',
   bestOf: 5,               // 3 or 5
   pointsTo: 25,            // target for a normal set
@@ -2270,7 +2472,7 @@ function volleyLight() {
 }
 
 // Snapshot before anything that changes the match, so a misclick during a
-// rally is one tap to reverse. Logos are excluded â€” they're heavy and never
+// rally is one tap to reverse. Logos are excluded — they're heavy and never
 // change as part of scoring.
 function volleyMark() {
   const light = { ...volley, home: { ...volley.home }, away: { ...volley.away } };
@@ -2855,10 +3057,10 @@ app.get('/api/voice/latest', async (req, res) => {
 });
 
 // ============================================================
-// HILEY TV â€” 24/7 PLAYOUT CONTROL  (dashboard at /hiley)
+// HILEY TV — 24/7 PLAYOUT CONTROL  (dashboard at /hiley)
 //
 // The playout PC (the Dell, 192.168.18.35) runs `hiley-watcher`.
-// Nothing inbound ever reaches that machine â€” that was a deliberate
+// Nothing inbound ever reaches that machine — that was a deliberate
 // decision when the watcher was built and it has not changed here.
 // So this is a MAILBOX, not a control channel:
 //
@@ -2877,7 +3079,7 @@ app.get('/api/voice/latest', async (req, res) => {
 //    and someone taps STOP five times, those taps must not all fire
 //    at 3am when it comes back. Stale ones are dropped on handover.
 //  * State is in memory. A Railway restart forgets it; the Dell
-//    refills it within one poll. Nothing here is authoritative â€”
+//    refills it within one poll. Nothing here is authoritative —
 //    the Dell is. Queued-but-undelivered commands are lost, which is
 //    the safe direction to lose them in.
 //  * Writes are PIN-gated by the global middleware (GOLIVE_PIN), the
@@ -2919,7 +3121,7 @@ function hileyBlank() {
       source: '', active: false, frozen: false, watchdog: 'ok', stillMs: 0,
       // watcher 2.1: the freeze detector's own numbers. diff is null until
       // it has two frames to compare. Reported so stillThreshold is tuned
-      // from observed data instead of guessed at â€” the 2.0 detector was
+      // from observed data instead of guessed at — the 2.0 detector was
       // guessed at, and it tore a live press conference off air.
       diff: null, threshold: 0, freezeMs: 0,
     },
@@ -2963,27 +3165,27 @@ function hileyAlerts(now) {
   }
   const age = now - hileyState.seenAt;
   if (age > HILEY_STALE_MS) {
-    push('crit', 'Playout PC unreachable â€” last heartbeat ' + hileyAge(age) + ' ago. Hiley may be off air and nothing here can reach it.');
+    push('crit', 'Playout PC unreachable — last heartbeat ' + hileyAge(age) + ' ago. Hiley may be off air and nothing here can reach it.');
     return a;   // everything below is stale; do not editorialise on old data
   }
 
   const o = hileyState.obs;
   if (!o.connected) push('crit', 'The watcher cannot reach OBS on the playout PC. Scene switching and the stream are both uncontrolled.');
-  else if (!o.streaming) push('crit', "Not streaming to Rumble â€” Hiley's channel is dark.");
+  else if (!o.streaming) push('crit', "Not streaming to Rumble — Hiley's channel is dark.");
 
   if (hileyState.ndi.watchdog === 'disabled') {
-    push('warn', 'NDI watchdog is disabled â€” it could not sample "' + (hileyState.ndi.source || '?') + '". Failing open, so a dead feed will NOT fall back on its own.');
+    push('warn', 'NDI watchdog is disabled — it could not sample "' + (hileyState.ndi.source || '?') + '". Failing open, so a dead feed will NOT fall back on its own.');
   } else if (hileyState.ndi.frozen) {
-    push('warn', 'NDI feed frozen for ' + hileyAge(hileyState.ndi.stillMs) + ' â€” watchdog fell back off LIVE.');
+    push('warn', 'NDI feed frozen for ' + hileyAge(hileyState.ndi.stillMs) + ' — watchdog fell back off LIVE.');
   }
 
   if (hileyState.override === 'hold') push('warn', 'Scene held manually on "' + hileyState.held + '". The relay is not driving Hiley. Tap AUTO to release.');
   else if (hileyState.override !== 'auto') push('warn', 'Manual override active: ' + hileyState.override.toUpperCase() + '. The relay is not driving Hiley. Tap AUTO to release.');
 
-  if (!hileyState.relay.reachable) push('warn', 'The watcher cannot read the relay event status â€” it is holding the current scene until it can.');
+  if (!hileyState.relay.reachable) push('warn', 'The watcher cannot read the relay event status — it is holding the current scene until it can.');
 
   if (o.streaming && o.total > 300 && o.dropped / o.total > 0.02) {
-    push('warn', 'Dropped frames ' + (100 * o.dropped / o.total).toFixed(1) + '% â€” the uplink is struggling.');
+    push('warn', 'Dropped frames ' + (100 * o.dropped / o.total).toFixed(1) + '% — the uplink is struggling.');
   }
   if (o.streaming && o.congestion > 0.4) push('warn', 'Rumble upload congestion is high.');
 
@@ -3006,7 +3208,7 @@ function hileyView(now) {
 }
 
 // ---- the Dell's heartbeat -------------------------------------------------
-// Exempt from the PIN gate (see AUTH_EXEMPT) â€” the Dell has no cookie.
+// Exempt from the PIN gate (see AUTH_EXEMPT) — the Dell has no cookie.
 app.post('/api/hiley/sync', (req, res) => {
   if (HILEY_TOKEN) {
     const got = String(req.headers['x-hiley-token'] || (req.body && req.body.token) || '');
@@ -3066,7 +3268,7 @@ app.post('/api/hiley/sync', (req, res) => {
     frozen:   hileyBool(n.frozen),
     watchdog: hileyStr(n.watchdog || 'ok', 12),
     stillMs:  hileyNum(n.stillMs),
-    // null is meaningful here â€” "not measured yet" is not the same as 0,
+    // null is meaningful here — "not measured yet" is not the same as 0,
     // which is what a genuinely frozen feed reads.
     diff:      (n.diff === null || n.diff === undefined) ? null : hileyNum(n.diff),
     threshold: hileyNum(n.threshold),
@@ -3176,7 +3378,7 @@ app.post('/api/hiley/command', (req, res) => {
   });
 });
 
-// Empty the queue â€” for when the Dell is away and the wrong things got tapped.
+// Empty the queue — for when the Dell is away and the wrong things got tapped.
 app.post('/api/hiley/flush', (req, res) => {
   const n = hileyQueue.length;
   hileyQueue = [];
@@ -3254,7 +3456,7 @@ app.get('/news-scene', (req, res) => res.sendFile(path.join(__dirname, 'public',
 app.get('/hiley', (req, res) => res.sendFile(path.join(__dirname, 'public', 'hiley.html'))); // Hiley TV 24/7 playout control
 app.get('/hiley-desk', (req, res) => res.sendFile(path.join(__dirname, 'public', 'hiley-desk.html'))); // same, desktop layout
 // Required by Meta before the app can leave Development mode. Public pages,
-// no auth â€” a reviewer has to be able to open them while logged out.
+// no auth — a reviewer has to be able to open them while logged out.
 app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, 'public', 'privacy.html')));
 app.get('/data-deletion', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data-deletion.html')));
 app.get('/terms', (req, res) => res.sendFile(path.join(__dirname, 'public', 'terms.html')));
@@ -3269,12 +3471,12 @@ app.get('/vcontrol', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 // ---- Load persisted data, then start the server ----
 async function initDB() {
   if (!pool) {
-    console.log('No DATABASE_URL â€” running in-memory (data resets on deploy)');
+    console.log('No DATABASE_URL — running in-memory (data resets on deploy)');
     return;
   }
   try {
     await pool.query('CREATE TABLE IF NOT EXISTS reporters (id text PRIMARY KEY, name text NOT NULL, created_at bigint)');
-    // Additive migrations â€” safe on existing rows, no-op if already present
+    // Additive migrations — safe on existing rows, no-op if already present
     await pool.query("ALTER TABLE reporters ADD COLUMN IF NOT EXISTS location text DEFAULT ''");
     await pool.query("ALTER TABLE reporters ADD COLUMN IF NOT EXISTS photo text DEFAULT ''");
     await pool.query("ALTER TABLE reporters ADD COLUMN IF NOT EXISTS tag_visible boolean DEFAULT false");
@@ -3299,7 +3501,7 @@ async function initDB() {
       else await pool.query('INSERT INTO tickers (id, data) VALUES ($1,$2)', [id, tickers[id]]);
     }
 
-    // Scoreboard â€” restore the match, but never come back from a deploy with a
+    // Scoreboard — restore the match, but never come back from a deploy with a
     // clock that "ran" while the service was down.
     const sr = await pool.query('SELECT data FROM scoreboard WHERE id=$1', ['match']);
     if (sr.rows.length) {
@@ -3312,7 +3514,7 @@ async function initDB() {
       await pool.query('INSERT INTO scoreboard (id, data) VALUES ($1,$2)', ['match', scoreboard]);
     }
 
-    // Volleyball â€” no clock to worry about, so this restores exactly as saved.
+    // Volleyball — no clock to worry about, so this restores exactly as saved.
     const vr = await pool.query('SELECT data FROM volleyball WHERE id=$1', ['match']);
     if (vr.rows.length) {
       volley = Object.assign(blankVolley(), vr.rows[0].data);
@@ -3321,7 +3523,7 @@ async function initDB() {
       await pool.query('INSERT INTO volleyball (id, data) VALUES ($1,$2)', ['match', volley]);
     }
 
-    console.log(`PostgreSQL connected â€” ${reporters.length} reporters loaded, data persists across deploys`);
+    console.log(`PostgreSQL connected — ${reporters.length} reporters loaded, data persists across deploys`);
   } catch (e) {
     console.error('DB init failed, falling back to in-memory:', e.message);
     pool = null;
