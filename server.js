@@ -811,10 +811,12 @@ async function pageIngestUp(brand) {
   });
   if (!f.filterEnabled) return false;
   const b = await branchOutputStatus(OBS_BRANCH_FILTER);
-  // Can't see the output (old obs-websocket, or it is named differently
-  // than "<filter> (n)") -> filter state is all we have, as before.
-  if (!b.supported || !b.found) return true;
-  return b.active && !b.reconnecting && b.bytes > 0;
+  // Old obs-websocket without GetOutputList -> filter state is all we have.
+  if (!b.supported) return true;
+  // Confirmed on the production OBS (30 Oct): a running Branch Output filter
+  // is listed as "<filter> (0)" and a disabled one is not listed at all. So
+  // "filter enabled but no output" is exactly the frozen-OBS case - not running.
+  return b.found && b.active && !b.reconnecting && b.bytes > 0;
 }
 
 // "Stopping Stream..." that never finishes is how the 29 Oct freeze looked
@@ -1399,7 +1401,7 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
       // YouTube failing must not take the Facebook event down with it.
       const ok = await waitFor(async () => {
         const b = await branchOutputStatus(OBS_YT_FILTER);
-        return !b.supported || !b.found || (b.active && b.bytes > 0);
+        return !b.supported || (b.found && b.active && b.bytes > 0);
       }, startMs, 1000);
       if (!ok) {
         ytError = (ytError ? ytError + ' | ' : '') + 'YouTube output did not start within ' + (startMs / 1000) + 's - check the YouTube filter in OBS';
