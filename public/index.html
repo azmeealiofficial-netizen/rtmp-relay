@@ -310,6 +310,7 @@
         <div class="tk-tabs">
           <button class="tk-tab act" id="tabVoice" onclick="switchTab('voice')">VOICE</button>
           <button class="tk-tab" id="tabDhuvas" onclick="switchTab('dhuvas')">DHUVAS</button>
+          <button class="tk-tab" id="tabNewscast" onclick="switchTab('newscast')">NEWSCAST</button>
         </div>
 
         <div class="tk-preview rtl" id="tkPreview">
@@ -499,7 +500,11 @@
 
       ds.innerHTML = fb('voice','VOICE') + fb('dhuvas','DHUVAS') +
         `<div class="gl-dest"><div>YOUTUBE<small>Persistent key</small></div>`+
-        `<span class="gl-pill ${obsYtLive?'on':'warn'}">${obsYtLive?'ARMED':'DISARMED'}</span></div>`;
+        `<span class="gl-pill ${obsYtLive?'on':'warn'}">${obsYtLive?'ARMED':'DISARMED'}</span></div>`+
+        // NewsCast only appears once its page token exists, so the panel does
+        // not carry a permanently idle row before it is set up.
+        ((mState.configured&&mState.configured.newscast)||(mState.videos&&mState.videos.newscast)
+          ? fb('newscast','NEWSCAST') : '');
     }
 
     async function pollMatch(){
@@ -553,6 +558,7 @@
       activeTab=tab;
       document.getElementById('tabVoice').className='tk-tab'+(tab==='voice'?' act':'');
       document.getElementById('tabDhuvas').className='tk-tab'+(tab==='dhuvas'?' act':'');
+      document.getElementById('tabNewscast').className='tk-tab'+(tab==='newscast'?' act':'');
       loadTicker(tab);
     }
 

@@ -192,6 +192,31 @@ const OBS_REC_FILTER    = process.env.OBS_REC_FILTER    || 'Record';
 const OBS_AUDIO_INPUT   = process.env.OBS_AUDIO_INPUT   || 'CAM — PSM (NDI)';
 const OBS_FTB_VOICE     = process.env.OBS_FTB_VOICE     || 'FTB — Black (VOICE)';
 const OBS_FTB_DHUVAS    = process.env.OBS_FTB_DHUVAS    || 'FTB — Black (DHUVAS)';
+// Third brand (1 Nov 2026). Same shape as DHUVAS: its own scene holding
+// [Program] + NewsCast logo/ticker/FTB, with its own Branch Output filter to
+// the NewsCast Facebook page. That filter is an extra encode on a box whose
+// load test has never been run, so NewsCast is NEVER required for an event
+// to start: if it is not set up in OBS, or its output does not come up, it
+// is dropped from the event and said out loud — VOICE and DHUVAS carry on.
+const OBS_SCENE_NEWSCAST = process.env.OBS_SCENE_NEWSCAST || 'NEWSCAST';
+const OBS_NC_FILTER      = process.env.OBS_NC_FILTER      || 'NewsCast';
+const OBS_FTB_NEWSCAST   = process.env.OBS_FTB_NEWSCAST   || 'FTB — Black (NEWSCAST)';
+
+// Every broadcast Branch Output filter, by destination. `flag` is the
+// obsState field the panels already read (branchLive / ytLive are kept
+// under their old names so live.html and index.html keep working).
+// Monitor and Record are deliberately NOT here — they are never disarmed
+// at END LIVE.
+const BRANCHES = {
+  dhuvas:   { scene: OBS_SCENE_DHUVAS,   filter: OBS_BRANCH_FILTER, flag: 'branchLive', label: 'Dhuvas' },
+  youtube:  { scene: OBS_SCENE_VOICE,    filter: OBS_YT_FILTER,     flag: 'ytLive',     label: 'YouTube' },
+  newscast: { scene: OBS_SCENE_NEWSCAST, filter: OBS_NC_FILTER,     flag: 'ncLive',     label: 'NewsCast' },
+};
+const BRANCH_IDS = Object.keys(BRANCHES);
+// obs-websocket's wording when a scene or filter does not exist. NewsCast
+// is allowed to be absent from OBS; disarming something that is not there
+// is not an error.
+const obsMissing = (e) => /No (source|filter) was found|not found/i.test((e && e.message) || '');
 
 // Only scene items whose name starts with this take part in TAKE.
 // Overlays ("OVL — ...") are left alone.
@@ -204,6 +229,8 @@ const obsState = {
   streaming: false,
   branchLive: false,       // Branch Output filter enabled (Dhuvas -> Facebook)
   ytLive: false,           // Branch Output filter enabled (VOICE -> YouTube)
+  ncLive: false,           // Branch Output filter enabled (NewsCast -> Facebook)
+  ncReady: false,          // NEWSCAST scene + filter exist in OBS at all
   recording: false,        // clean-feed recording running
   recMode: 'none',         // 'branch' (clean Program) | 'native' (branded) | 'none'
   ftb: false,
@@ -255,6 +282,14 @@ async function obsRefreshScene() {
     });
     obsState.ytLive = !!y.filterEnabled;
   } catch (e) { obsState.ytLive = false; /* no YouTube filter — not fatal */ }
+
+  try {
+    const n = await obs.call('GetSourceFilter', {
+      sourceName: OBS_SCENE_NEWSCAST, filterName: OBS_NC_FILTER,
+    });
+    obsState.ncLive = !!n.filterEnabled;
+    obsState.ncReady = true;
+  } catch (e) { obsState.ncLive = false; obsState.ncReady = false; /* not set up yet */ }
 
   // Which recorder are we actually driving? The Branch Output filter on
   // Program is preferred because it is the only one that produces the clean
@@ -418,6 +453,9 @@ if (obs) {
     if (e.sourceName === OBS_SCENE_VOICE && e.filterName === OBS_YT_FILTER) {
       obsState.ytLive = !!e.filterEnabled;
     }
+    if (e.sourceName === OBS_SCENE_NEWSCAST && e.filterName === OBS_NC_FILTER) {
+      obsState.ncLive = !!e.filterEnabled;
+    }
     if (e.sourceName === OBS_SCENE_PROGRAM && e.filterName === OBS_REC_FILTER) {
       obsState.recording = !!e.filterEnabled;
     }
@@ -489,7 +527,8 @@ app.post('/api/obs/ftb', async (req, res) => {
   if (!obsGuard(res)) return;
   try {
     const on = (req.body && typeof req.body.on === 'boolean') ? req.body.on : !obsState.ftb;
-    for (const [scene, src] of [[OBS_SCENE_VOICE, OBS_FTB_VOICE], [OBS_SCENE_DHUVAS, OBS_FTB_DHUVAS]]) {
+    for (const [scene, src] of [[OBS_SCENE_VOICE, OBS_FTB_VOICE], [OBS_SCENE_DHUVAS, OBS_FTB_DHUVAS],
+                                [OBS_SCENE_NEWSCAST, OBS_FTB_NEWSCAST]]) {
       try {
         const { sceneItemId } = await obs.call('GetSceneItemId', { sceneName: scene, sourceName: src });
         await obs.call('SetSceneItemEnabled', { sceneName: scene, sceneItemId, sceneItemEnabled: on });
@@ -531,16 +570,12 @@ app.post('/api/obs/branch', async (req, res) => {
   if (!obsGuard(res)) return;
   try {
     const target = (req.body && req.body.target) || 'dhuvas';
-    const isYT = target === 'youtube';
-    const scene = isYT ? OBS_SCENE_VOICE : OBS_SCENE_DHUVAS;
-    const filter = isYT ? OBS_YT_FILTER : OBS_BRANCH_FILTER;
-    const currently = isYT ? obsState.ytLive : obsState.branchLive;
+    const b = BRANCHES[target];
+    if (!b) return res.status(400).json({ error: 'target must be one of ' + BRANCH_IDS.join(', ') });
+    const currently = obsState[b.flag];
     const enabled = (req.body && typeof req.body.enabled === 'boolean') ? req.body.enabled : !currently;
 
-    await obs.call('SetSourceFilterEnabled', {
-      sourceName: scene, filterName: filter, filterEnabled: enabled,
-    });
-    if (isYT) obsState.ytLive = enabled; else obsState.branchLive = enabled;
+    await setBranchEnabled(target, enabled);
     res.json({ ok: true, target, enabled });
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
@@ -584,17 +619,10 @@ app.post('/api/obs/destination', async (req, res) => {
         sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
         filterSettings: settings, overlay: true,
       });
-    } else if (target === 'youtube') {
-      const cur = await obs.call('GetSourceFilter', {
-        sourceName: OBS_SCENE_VOICE, filterName: OBS_YT_FILTER,
-      });
-      await obs.call('SetSourceFilterSettings', {
-        sourceName: OBS_SCENE_VOICE, filterName: OBS_YT_FILTER,
-        filterSettings: Object.assign({}, cur.filterSettings, { server, key }),
-        overlay: true,
-      });
+    } else if (target === 'youtube' || target === 'newscast') {
+      await setDestination(target, server, key);
     } else {
-      return res.status(400).json({ error: "target must be 'voice', 'dhuvas' or 'youtube'" });
+      return res.status(400).json({ error: "target must be 'voice', 'dhuvas', 'youtube' or 'newscast'" });
     }
     res.json({ ok: true });
   } catch (e) { res.status(502).json({ error: e.message }); }
@@ -668,6 +696,11 @@ const FB_PAGES = {
     id: process.env.FB_DHUVAS_PAGE_ID || '',
     token: process.env.FB_DHUVAS_TOKEN || '',
   },
+  newscast: {
+    label: 'NewsCast',
+    id: process.env.FB_NEWSCAST_PAGE_ID || '',
+    token: process.env.FB_NEWSCAST_TOKEN || '',
+  },
 };
 
 const matchState = {
@@ -677,11 +710,11 @@ const matchState = {
   title: '',
   startedAt: 0,
   publishedAt: 0,
-  videos: { voice: null, dhuvas: null },   // { id, permalink, published }
+  videos: { voice: null, dhuvas: null, newscast: null },   // { id, permalink, published }
   // Which destinations THIS event selected. Not cosmetic: /api/match/end
   // must close only what was opened, and the publish timer has to know
   // which signal proves ingest (see ingestProven()).
-  dests: { voice: false, dhuvas: false, youtube: false },
+  dests: { voice: false, dhuvas: false, youtube: false, newscast: false },
   // True only when THIS event started the recording. A recording somebody
   // armed by hand is theirs to stop — END LIVE must not silently kill it.
   record: false,
@@ -707,13 +740,16 @@ function mlog(...a) { console.log(new Date().toISOString(), '[match]', ...a); }
 // precisely what it names, never "these plus the rest".
 function pickDests(body) {
   const want = body && body.destinations;
+  // NewsCast is NOT in the no-object default: older callers never asked for
+  // it, and an extra encode should only ever run because somebody chose it.
   if (!want || typeof want !== 'object') {
-    return { voice: true, dhuvas: true, youtube: true };
+    return { voice: true, dhuvas: true, youtube: true, newscast: false };
   }
   return {
     voice: want.voice === true,
     dhuvas: want.dhuvas === true,
     youtube: want.youtube === true,
+    newscast: want.newscast === true,
   };
 }
 
@@ -728,9 +764,10 @@ async function ingestProven(dests) {
     const st = await obs.call('GetStreamStatus');
     return !!st.outputActive;
   }
-  if (dests.dhuvas) {
+  for (const t of ['dhuvas', 'newscast']) {
+    if (!dests[t]) continue;
     const f = await obs.call('GetSourceFilter', {
-      sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
+      sourceName: BRANCHES[t].scene, filterName: BRANCHES[t].filter,
     });
     return !!f.filterEnabled;
   }
@@ -798,7 +835,7 @@ async function branchOutputStatus(filterName) {
   return res;
 }
 
-const BRANCH_FILTER_NAME = { dhuvas: OBS_BRANCH_FILTER, youtube: OBS_YT_FILTER };
+const BRANCH_FILTER_NAME = Object.fromEntries(BRANCH_IDS.map((t) => [t, BRANCHES[t].filter]));
 
 // Is this brand's feed actually leaving OBS right now?
 async function pageIngestUp(brand) {
@@ -806,11 +843,12 @@ async function pageIngestUp(brand) {
     const st = await obsCallT('GetStreamStatus');
     return !!st.outputActive && (st.outputBytes || 0) > 0;
   }
+  const br = BRANCHES[brand];
   const f = await obsCallT('GetSourceFilter', {
-    sourceName: OBS_SCENE_DHUVAS, filterName: OBS_BRANCH_FILTER,
+    sourceName: br.scene, filterName: br.filter,
   });
   if (!f.filterEnabled) return false;
-  const b = await branchOutputStatus(OBS_BRANCH_FILTER);
+  const b = await branchOutputStatus(br.filter);
   // Old obs-websocket without GetOutputList -> filter state is all we have.
   if (!b.supported) return true;
   // Confirmed on the production OBS (30 Oct): a running Branch Output filter
@@ -866,13 +904,23 @@ function splitStreamUrl(u) {
 // between events is Monitor ON, DHUVAS and YouTube OFF, and these two
 // functions are what maintain it. Never leave them enabled by hand.
 async function setBranchEnabled(target, enabled) {
-  const isYT = target === 'youtube';
-  await obs.call('SetSourceFilterEnabled', {
-    sourceName: isYT ? OBS_SCENE_VOICE : OBS_SCENE_DHUVAS,
-    filterName: isYT ? OBS_YT_FILTER : OBS_BRANCH_FILTER,
-    filterEnabled: enabled,
-  });
-  if (isYT) obsState.ytLive = enabled; else obsState.branchLive = enabled;
+  const b = BRANCHES[target];
+  if (!b) throw new Error('unknown branch ' + target);
+  try {
+    await obs.call('SetSourceFilterEnabled', {
+      sourceName: b.scene, filterName: b.filter, filterEnabled: enabled,
+    });
+  } catch (e) {
+    // A filter that does not exist cannot be broadcasting, so disarming it
+    // has succeeded. This is what lets every END LIVE disarm NewsCast before
+    // the NEWSCAST scene has been built in OBS, without reporting a problem.
+    if (!enabled && obsMissing(e)) { obsState[b.flag] = false; return; }
+    if (enabled && obsMissing(e)) {
+      throw new Error(b.label + ': no "' + b.filter + '" Branch Output filter on the ' + b.scene + ' scene in OBS');
+    }
+    throw e;
+  }
+  obsState[b.flag] = enabled;
 }
 
 // Recording is deliberately NOT a destination. Nothing is published, nothing
@@ -905,8 +953,10 @@ async function setDestination(brand, server, key) {
     });
     return;
   }
-  const sourceName = brand === 'youtube' ? OBS_SCENE_VOICE : OBS_SCENE_DHUVAS;
-  const filterName = brand === 'youtube' ? OBS_YT_FILTER : OBS_BRANCH_FILTER;
+  const br = BRANCHES[brand];
+  if (!br) throw new Error('unknown destination ' + brand);
+  const sourceName = br.scene;
+  const filterName = br.filter;
   const cur = await obs.call('GetSourceFilter', { sourceName, filterName });
   // Writing identical settings still makes the plugin log "Settings change
   // detected, Attempting restart" — harmless while disarmed, fatal while
@@ -1253,7 +1303,7 @@ app.post('/api/match/start', async (req, res) => {
     mlog('start REFUSED: another go-live is still in progress');
     return res.status(409).json({ error: 'a go-live is already in progress - wait for it to finish' });
   }
-  if (!dests.voice && !dests.dhuvas && !dests.youtube) {
+  if (!dests.voice && !dests.dhuvas && !dests.youtube && !dests.newscast) {
     return res.status(400).json({ error: 'pick at least one destination' });
   }
   matchState.starting = true;
@@ -1263,6 +1313,35 @@ app.post('/api/match/start', async (req, res) => {
 });
 
 async function matchStartInner(req, res, { title, description, autoPublish, wantRecord, dests }) {
+  // NewsCast is optional by design (see OBS_SCENE_NEWSCAST). Anything that
+  // stops it going out drops it from THIS event with a reason, before a
+  // single broadcast is created — never a reason to refuse VOICE/DHUVAS.
+  let ncError = '';
+  if (dests.newscast) {
+    const p = FB_PAGES.newscast;
+    if (!(p.id && p.token)) {
+      ncError = 'no page token on the server (set FB_NEWSCAST_PAGE_ID and FB_NEWSCAST_TOKEN)';
+    } else {
+      try {
+        await obsCallT('GetSourceFilter', { sourceName: OBS_SCENE_NEWSCAST, filterName: OBS_NC_FILTER });
+        obsState.ncReady = true;
+      } catch (e) {
+        if (/frozen/.test(e.message)) throw e;
+        obsState.ncReady = false;
+        ncError = 'not set up in OBS — needs a "' + OBS_NC_FILTER + '" Branch Output filter on a ' +
+          OBS_SCENE_NEWSCAST + ' scene';
+      }
+    }
+    if (ncError) {
+      dests.newscast = false;
+      mlog('newscast SKIPPED:', ncError);
+      if (!dests.voice && !dests.dhuvas && !dests.youtube) {
+        return res.status(400).json({ error: 'NewsCast: ' + ncError });
+      }
+      ncError += ' — NewsCast DROPPED from this event';
+    }
+  }
+
   // Work with whatever pages are configured AND selected. A brand with no
   // token is skipped entirely — its OBS destination is left exactly as it
   // is, so a manually-configured persistent stream key keeps working.
@@ -1326,6 +1405,13 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
     // YouTube has no unpublished state and auto-starts on ingest, so it is
     // armed ONLY for a real go-live, never for a rehearsal.
     if (dests.dhuvas && created.dhuvas) await setBranchEnabled('dhuvas', true);
+    // NewsCast the same way — still UNPUBLISHED, so safe in a rehearsal too.
+    // A failure to arm drops NewsCast instead of failing the go-live.
+    let ncArmed = false;
+    if (dests.newscast && created.newscast) {
+      try { await setBranchEnabled('newscast', true); ncArmed = true; mlog('newscast branch armed'); }
+      catch (e) { ncError = 'could not arm the branch: ' + e.message; mlog('newscast arm FAILED:', e.message); }
+    }
 
     // 2c. YouTube: create the broadcast and bind it to the persistent
     // stream BEFORE the branch starts pushing, so enableAutoStart fires
@@ -1397,6 +1483,25 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
       if (!ok) throw new Error(FB_PAGES[brand].label + ' did not start within ' + (startMs / 1000) + 's' + frozenHint);
       mlog(brand, 'output confirmed running');
     }
+    // NewsCast: proven like DHUVAS, but a NewsCast that does not come up is
+    // DROPPED rather than rolling back the whole event — unless it is the
+    // only thing this event was going to put out.
+    if (dests.newscast && created.newscast) {
+      const ok = ncArmed && await waitFor(() => pageIngestUp('newscast'), startMs, 1000);
+      if (ok) mlog('newscast output confirmed running');
+      else {
+        if (!ncError) ncError = 'output did not start within ' + (startMs / 1000) +
+          's — the extra encode may be too much for this PC, check the NewsCast filter in OBS';
+        if (!dests.voice && !dests.dhuvas && !dests.youtube) throw new Error('NewsCast: ' + ncError);
+        try { await setBranchEnabled('newscast', false); } catch (_) {}
+        try { await fbCall(`/${created.newscast.id}`, { end_live_video: true, access_token: FB_PAGES.newscast.token }, 'POST'); }
+        catch (_) { /* best effort — it was never published */ }
+        delete created.newscast;
+        dests.newscast = false;
+        ncError += ' — NewsCast DROPPED from this event';
+        mlog('newscast DROPPED:', ncError);
+      }
+    }
     if (ytArmed) {
       // YouTube failing must not take the Facebook event down with it.
       const ok = await waitFor(async () => {
@@ -1416,7 +1521,7 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
     matchState.startedAt = Date.now();
     matchState.publishedAt = 0;
     matchState.lastError = '';
-    matchState.videos = { voice: null, dhuvas: null };
+    matchState.videos = { voice: null, dhuvas: null, newscast: null };
     for (const [brand, c] of Object.entries(created)) {
       matchState.videos[brand] = { id: c.id, published: false };
     }
@@ -1425,6 +1530,8 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
     matchState.youtubeSwept = ytSwept;
     matchState.record = recArmed;
     if (ytError) matchState.lastError = 'YouTube: ' + ytError;
+    if (ncError) matchState.lastError =
+      (matchState.lastError ? matchState.lastError + ' | ' : '') + 'NewsCast: ' + ncError;
     if (recError) matchState.lastError =
       (matchState.lastError ? matchState.lastError + ' | ' : '') + 'recording: ' + recError;
 
@@ -1497,12 +1604,13 @@ async function matchStartInner(req, res, { title, description, autoPublish, want
 
     res.json({ ok: true, title, rehearsal: matchState.rehearsal, videos: matchState.videos,
                dests, skipped, youtube: ytBroadcast, youtubeError: ytError || undefined,
+               newscastError: ncError || undefined,
                recording: recArmed, recordMode: obsState.recMode,
                recordError: recError || undefined });
   } catch (e) {
     // Disarm first: under Always ON a branch we managed to enable before the
     // failure would keep broadcasting to a broadcast we are about to kill.
-    for (const t of ['dhuvas', 'youtube']) {
+    for (const t of BRANCH_IDS) {
       try { await setBranchEnabled(t, false); } catch (_) { /* best effort */ }
     }
     if (dests.voice) {
@@ -1549,7 +1657,7 @@ app.post('/api/match/end', async (req, res) => {
     // do not stop with the main stream — leaving either enabled keeps it
     // pushing after the event has "ended", which is the worst way to find
     // out this setting changed. Monitor is deliberately left running.
-    for (const t of ['dhuvas', 'youtube']) {
+    for (const t of BRANCH_IDS) {
       try { await setBranchEnabled(t, false); }
       catch (e) { errors.push(`branch ${t}: ${e.message}`); }
     }
@@ -1558,7 +1666,7 @@ app.post('/api/match/end', async (req, res) => {
     // to the dead key, and OBS froze for seven hours. So: wait until each
     // branch output has really stopped (retrying the disarm once) BEFORE
     // the broadcasts are ended below.
-    for (const t of ['dhuvas', 'youtube']) {
+    for (const t of BRANCH_IDS) {
       const name = BRANCH_FILTER_NAME[t];
       const stopped = () => branchOutputStatus(name).then((b) => !b.supported || !b.active);
       let ok = await waitFor(stopped, 8000, 500);
@@ -1618,8 +1726,8 @@ app.post('/api/match/end', async (req, res) => {
 
   matchState.live = false;
   matchState.rehearsal = false;
-  matchState.videos = { voice: null, dhuvas: null };
-  matchState.dests = { voice: false, dhuvas: false, youtube: false };
+  matchState.videos = { voice: null, dhuvas: null, newscast: null };
+  matchState.dests = { voice: false, dhuvas: false, youtube: false, newscast: false };
   matchState.record = false;
   matchState.youtube = null;
   matchState.lastError = errors.join(' | ');
@@ -1842,7 +1950,15 @@ app.get('/api/match/check', async (req, res) => {
 
   // Interlock is "Always ON", so an armed branch outside an event is not
   // merely untidy — it is broadcasting right now. Treat it as a failure.
-  out.branches = { dhuvas: obsState.branchLive, youtube: obsState.ytLive, live: matchState.live };
+  out.branches = { dhuvas: obsState.branchLive, youtube: obsState.ytLive, newscast: obsState.ncLive,
+                   live: matchState.live };
+  // NewsCast configured on Facebook but not built in OBS: not a failure —
+  // GO LIVE drops it — but worth knowing before you tick it.
+  out.newscast = { obsReady: obsState.ncReady, scene: OBS_SCENE_NEWSCAST, filter: OBS_NC_FILTER };
+  if (FB_PAGES.newscast.id && FB_PAGES.newscast.token && obsState.connected && !obsState.ncReady) {
+    out.warnings.push('NewsCast: no "' + OBS_NC_FILTER + '" Branch Output filter on a ' + OBS_SCENE_NEWSCAST +
+      ' scene in OBS — NewsCast will be DROPPED if you pick it.');
+  }
   // Say plainly which recorder is wired up. "Recording: on" means nothing if
   // the file turns out to be the branded output you cannot re-cut.
   out.recording = {
@@ -1951,11 +2067,11 @@ app.get('/api/match/check', async (req, res) => {
       try {
         await obsCallT('GetStreamStatus');
         if (!matchState.live) {
-          for (const t of ['dhuvas', 'youtube']) {
+          for (const t of BRANCH_IDS) {
             const b = await branchOutputStatus(BRANCH_FILTER_NAME[t]);
             if (b.supported && (b.active || b.reconnecting)) {
               out.obs.engine = 'STUCK';
-              out.warnings.push((t === 'dhuvas' ? 'Dhuvas' : 'YouTube') + ' output is still ' +
+              out.warnings.push(BRANCHES[t].label + ' output is still ' +
                 (b.reconnecting ? 'RECONNECTING' : 'RUNNING') + ' with no event and its filter ' +
                 'is meant to be off - OBS is in a bad state. End OBS in Task Manager and reopen it.');
               out.ok = false;
@@ -1976,6 +2092,10 @@ app.get('/api/match/check', async (req, res) => {
     }
     if (obsState.ytLive) {
       out.warnings.push('YouTube branch is ARMED with no event running — it is pushing to YouTube right now.');
+      out.ok = false;
+    }
+    if (obsState.ncLive) {
+      out.warnings.push('NewsCast branch is ARMED with no event running — it is pushing to Facebook right now.');
       out.ok = false;
     }
     // Not a failure — nothing is public — but it is eating the disk the
@@ -2007,7 +2127,9 @@ app.get('/api/match/status', (req, res) => {
     configured: {
       voice: !!(FB_PAGES.voice.id && FB_PAGES.voice.token),
       dhuvas: !!(FB_PAGES.dhuvas.id && FB_PAGES.dhuvas.token),
+      newscast: !!(FB_PAGES.newscast.id && FB_PAGES.newscast.token),
     },
+    newscastReady: obsState.ncReady,
     apiVersion: FB_API_VERSION,
   });
 });
@@ -2704,6 +2826,15 @@ let tickers = {
     labelColor: '#ef4444'
   },
   dhuvas: {
+    visible: false,
+    label: 'Þ„Þ°ÞƒÞ­Þ†Þ¨Þ‚Þ°ÞŽ',
+    text: '',
+    mode: 'scroll',
+    speed: 15,
+    direction: 'rtl',
+    labelColor: '#ef4444'
+  },
+  newscast: {
     visible: false,
     label: 'Þ„Þ°ÞƒÞ­Þ†Þ¨Þ‚Þ°ÞŽ',
     text: '',
@@ -3497,7 +3628,7 @@ async function initDB() {
       pv: Number(r.pv) || 0
     }));
 
-    for (const id of ['voice', 'dhuvas']) {
+    for (const id of ['voice', 'dhuvas', 'newscast']) {
       const tr = await pool.query('SELECT data FROM tickers WHERE id=$1', [id]);
       if (tr.rows.length) tickers[id] = tr.rows[0].data;
       else await pool.query('INSERT INTO tickers (id, data) VALUES ($1,$2)', [id, tickers[id]]);
