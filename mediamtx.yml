@@ -1,0 +1,81 @@
+###############################################################################
+# MediaMTX — SRT sidecar for the relay
+#
+# Runs in the same container as nginx-rtmp. nginx stays the main RTMP server
+# (port 1935, HLS for /golive and feed detection). MediaMTX only adds SRT:
+#
+#   READ  (low latency into OBS) — every RTMP feed nginx receives is pushed here
+#         by `push rtmp://127.0.0.1:1936/live;` in nginx.conf, so any key can be
+#         pulled over SRT:
+#           srt://192.168.18.50:8890?streamid=read:live/<key>&latency=200000
+#
+#   PUBLISH (SRT encoders: LiveU via LRT, Larix, Pakistan-style feeds)
+#           srt://<host>:8890?streamid=publish:srt/<key>
+#         is forwarded into nginx as rtmp live/<key>, so it gets HLS, shows up
+#         in the panel like any RTMP feed, and comes back here as live/<key>.
+#         => OBS always reads live/<key>, whatever protocol the encoder used.
+#
+# Optional SRT publish passphrase (10–79 chars) — set it in Coolify, never here
+# (this repo is public):
+#   MTX_PATHDEFAULTS_SRTPUBLISHPASSPHRASE=...
+###############################################################################
+
+logLevel: info
+logDestinations: [stdout]
+
+readTimeout: 10s
+writeTimeout: 10s
+
+# Who may do what.
+#  - anyone: publish only under srt/, read anything
+#  - localhost (nginx push): publish anything
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+        path: ~^srt/
+      - action: read
+        path:
+  - user: any
+    pass:
+    ips: ["127.0.0.1", "::1"]
+    permissions:
+      - action: publish
+        path:
+      - action: api
+      - action: metrics
+
+# Control API, localhost only — lets server.js list SRT paths later if wanted
+api: true
+apiAddress: 127.0.0.1:9997
+
+# Protocols: SRT out to the world, RTMP only on loopback for nginx's push.
+# HLS stays on nginx; the rest are off to keep the footprint small.
+rtsp: false
+hls: false
+webrtc: false
+moq: false
+
+rtmp: true
+rtmpAddress: 127.0.0.1:1936
+rtmpEncryption: "no"
+
+srt: true
+srtAddress: :8890
+
+pathDefaults:
+  # A new publisher on a busy key replaces the old one (encoder reconnects
+  # after a modem drop shouldn't be refused).
+  overridePublisher: true
+
+paths:
+  # Native SRT publishers -> into nginx as live/<key>
+  "~^srt/(.+)$":
+    forward:
+      - dest: rtmp://127.0.0.1:1935/live#$G1
+
+  # Fed by nginx's push; read these over SRT
+  "~^live/(.+)$": {}
