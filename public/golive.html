@@ -720,21 +720,30 @@ async function preflight(){
 // rtmp://.../live/program, and 404s otherwise. So probe the manifest rather
 // than letting hls.js retry-storm against a feed that isn't there yet,
 // and tear the player down when the feed stops so the poster returns.
-let hls=null, psmUp=false;
+let hls=null, psmUp=false, psmSrc=null;
+
+// Two sources for the same PROGRAM feed:
+//  LL  — Low-Latency HLS from MediaMTX via the relay (~2-4 s). Preferred.
+//  HLS — classic nginx HLS (~10-15 s). Fallback if MediaMTX has nothing.
+const PSM_LL='/llhls/live/program/index.m3u8', PSM_HLS='/hls/program.m3u8';
 
 function psmStop(){
   if(hls){ try{hls.destroy();}catch(_){ } hls=null; }
-  psmUp=false;
+  psmUp=false; psmSrc=null;
   document.getElementById('preview').classList.remove('on');
   document.getElementById('psmBadge').textContent='PROGRAM';
 }
 
-function psmStart(){
+function psmStart(src){
   const v=document.getElementById('psmVid');
+  const ll=(src===PSM_LL);
   if(window.Hls&&Hls.isSupported()){
-    hls=new Hls({liveSyncDuration:6,liveMaxLatencyDuration:20,maxBufferLength:12,
-                 manifestLoadingMaxRetry:4,levelLoadingMaxRetry:4,fragLoadingMaxRetry:4});
-    hls.loadSource('/hls/program.m3u8');
+    hls=new Hls(ll
+      ? {lowLatencyMode:true,maxLiveSyncPlaybackRate:1.2,backBufferLength:10,maxBufferLength:8,
+         manifestLoadingMaxRetry:4,levelLoadingMaxRetry:4,fragLoadingMaxRetry:4}
+      : {liveSyncDuration:6,liveMaxLatencyDuration:20,maxBufferLength:12,
+         manifestLoadingMaxRetry:4,levelLoadingMaxRetry:4,fragLoadingMaxRetry:4});
+    hls.loadSource(src);
     hls.attachMedia(v);
     hls.on(Hls.Events.MANIFEST_PARSED,()=>v.play().catch(()=>{}));
     hls.on(Hls.Events.ERROR,(e,d)=>{
@@ -744,24 +753,33 @@ function psmStart(){
       psmStop();
     });
   }else{
-    // Safari plays HLS natively and has no Hls.isSupported() path.
-    v.src='/hls/program.m3u8'; v.play().catch(()=>{});
+    // Safari plays HLS (and LL-HLS) natively and has no Hls.isSupported() path.
+    v.src=src; v.play().catch(()=>{});
   }
-  psmUp=true;
+  psmUp=true; psmSrc=src;
   document.getElementById('preview').classList.add('on');
-  document.getElementById('psmBadge').textContent='● ON AIR';
+  document.getElementById('psmBadge').textContent=ll?'● ON AIR · LL':'● ON AIR';
+}
+
+// The relay serves a manifest only while something is publishing to
+// live/program, and 404s otherwise. A 200 is not enough — a proxy error page
+// or SPA fallback also returns 200. Only a real manifest starts with #EXTM3U.
+async function psmProbe(url){
+  try{
+    const r=await fetch(url,{cache:'no-store'});
+    return r.ok && (await r.text()).trimStart().startsWith('#EXTM3U');
+  }catch(_){ return false; }
 }
 
 async function psmPoll(){
-  let live=false;
-  try{
-    const r=await fetch('/hls/program.m3u8',{cache:'no-store'});
-    // A 200 is not enough — a proxy error page or SPA fallback also
-    // returns 200. Only a real manifest starts with #EXTM3U.
-    if(r.ok) live=(await r.text()).trimStart().startsWith('#EXTM3U');
-  }catch(_){ live=false; }
-  if(live&&!psmUp) psmStart();
-  else if(!live&&psmUp){ psmStop(); document.getElementById('psmOff').textContent='PROGRAM — feed stopped'; }
+  if(psmUp){
+    if(!(await psmProbe(psmSrc))){
+      psmStop(); document.getElementById('psmOff').textContent='PROGRAM — feed stopped';
+    }
+    return;
+  }
+  if(await psmProbe(PSM_LL)) psmStart(PSM_LL);
+  else if(await psmProbe(PSM_HLS)) psmStart(PSM_HLS);
 }
 
 function toggleMute(){

@@ -9,6 +9,9 @@
 #         pulled over SRT:
 #           srt://192.168.18.50:8890?streamid=read:live/<key>&latency=200000
 #
+#   LL-HLS (browsers can't play SRT) — /golive preview:
+#           https://mix.vxd.news/llhls/live/program/index.m3u8
+#
 #   PUBLISH (SRT encoders: LiveU via LRT, Larix, Pakistan-style feeds)
 #           srt://<host>:8890?streamid=publish:srt/<key>
 #         is forwarded into nginx as rtmp live/<key>, so it gets HLS, shows up
@@ -53,11 +56,23 @@ api: true
 apiAddress: 127.0.0.1:9997
 
 # Protocols: SRT out to the world, RTMP only on loopback for nginx's push.
-# HLS stays on nginx; the rest are off to keep the footprint small.
 rtsp: false
-hls: false
 webrtc: false
 moq: false
+
+# Low-Latency HLS for the /golive phone preview (~2-4 s instead of 10-15 s).
+# Loopback only — server.js proxies it as /llhls/<path>/index.m3u8 so it goes
+# out through the same Cloudflare tunnel as the rest of mix.vxd.news.
+# (nginx's classic HLS on :8888 is untouched; the panel and feed detection
+# still use it.)
+hls: true
+hlsAddress: 127.0.0.1:8887
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+# Keep the muxer running so the first phone doesn't wait for one to spin up
+hlsAlwaysRemux: true
 
 rtmp: true
 rtmpAddress: 127.0.0.1:1936

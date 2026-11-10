@@ -2167,6 +2167,35 @@ app.get('/hls/:file', async (req, res) => {
   }
 });
 
+// Low-Latency HLS from MediaMTX (loopback :8887), for the /golive preview.
+//   /llhls/live/program/index.m3u8  ->  http://127.0.0.1:8887/live/program/index.m3u8
+// The query string MUST be passed through: LL-HLS players send _HLS_msn /
+// _HLS_part and MediaMTX holds the playlist request until that part exists
+// (blocking reload) — that is where the low latency comes from.
+app.get(/^\/llhls\/((?:live|srt)\/[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+)$/, async (req, res) => {
+  const file = req.params[0];
+  const qs = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+  const ac = new AbortController();
+  res.on('close', () => ac.abort()); // phone went away mid blocking-request
+  const timer = setTimeout(() => ac.abort(), 20000);
+  try {
+    const up = await fetch(`http://127.0.0.1:8887/${file}${qs}`, { signal: ac.signal });
+    const buf = Buffer.from(await up.arrayBuffer());
+    const ext = file.split('.').pop();
+    res.status(up.status);
+    res.set('Content-Type', ext === 'm3u8' ? 'application/vnd.apple.mpegurl'
+                          : ext === 'mp4'  ? 'video/mp4'
+                          : (up.headers.get('content-type') || 'application/octet-stream'));
+    res.set('Cache-Control', ext === 'm3u8' ? 'no-cache, no-store' : 'public, max-age=60');
+    res.set('Access-Control-Allow-Origin', '*');
+    res.send(buf);
+  } catch (e) {
+    if (!res.headersSent && !res.writableEnded) res.status(502).send('Relay cannot reach MediaMTX HLS: ' + e.message);
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
 // ---- Reporters (persisted to Postgres when available) ----
 // Shape: { id, name, location, photo, tagVisible, pv }
 //   photo: base64 data URL or '' (optional — tag shows text-only without it)
